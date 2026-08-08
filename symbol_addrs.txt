@@ -5,3 +5,26 @@ read_pad_input = 0x8002E778;
 SetVideoMode = 0x80045440;
 SpuVoiceKeyOn = 0x8004A130;
 g_gpu_device = 0x8007736C;
+
+// splat disassembly-boundary fix: these addresses are only ever referenced
+// indirectly (their address is taken via lui/addiu and stored/passed as a
+// function pointer -- e.g. into a state-handler dispatch table -- never
+// called with a direct `jal`), so spimdisasm's automatic function-boundary
+// detector (TRUST_JAL_FUNCTIONS) never marks them as trustable function
+// starts and instead merges them into the preceding function under an
+// `alabel`, even though each one has its own complete prologue/epilogue.
+// Declaring them explicitly as `type:func` restores the correct boundary.
+// D_8005497C / D_80052820 keep their pre-existing auto-generated names
+// (already referenced by name in already-matched source files) -- only the
+// type changes from data to func, so existing __asm__ transcriptions that
+// reference them by name keep resolving correctly.
+D_8005497C = 0x8005497C; // type:func
+D_80052820 = 0x80052820; // type:func
+func_80053390 = 0x80053390; // type:func
+func_800535A0 = 0x800535A0; // type:func
+func_800535C8 = 0x800535C8; // type:func
+func_800535F0 = 0x800535F0; // type:func
+func_800536B0 = 0x800536B0; // type:func
+func_800536D8 = 0x800536D8; // type:func
+func_80053700 = 0x80053700; // type:func
+func_8005373C = 0x8005373C; // type:func

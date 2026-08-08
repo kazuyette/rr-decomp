@@ -16,22 +16,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Pre-built toolchain (old GCC 2.7.2 PSX target + binutils-mipsel + python)
+    # from docker/toolchain.Dockerfile, published by .github/workflows/docker.yaml.
+    # Avoids rebuilding GCC from source on every push.
+    container:
+      image: ghcr.io/${{ github.repository }}-toolchain:latest
+      credentials:
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install MIPS binutils
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binutils-mipsel-linux-gnu
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Build target objects
-        run: make all
+      - name: Build target + base objects
+        run: make all PSX_GCC_DIR=/opt/psx-gcc
 
       - name: Download objdiff-cli
         run: |

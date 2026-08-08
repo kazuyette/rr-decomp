@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  # This build (Nov 1994, Japan) has no SYSTEM.CNF / product serial on the
+  # disc, so there's no official catalog number to key off. We use the
+  # executable's own name as the version identifier instead.
+  VERSION: PSX.EXE
+  OBJDIFF_VERSION: v3.8.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install MIPS binutils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-mipsel-linux-gnu
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build target objects
+        run: make all
+
+      - name: Download objdiff-cli
+        run: |
+          curl -sL -o objdiff-cli \
+            "https://github.com/encounter/objdiff/releases/download/${OBJDIFF_VERSION}/objdiff-cli-linux-x86_64"
+          chmod +x objdiff-cli
+
+      - name: Generate objdiff report
+        run: ./objdiff-cli report generate -o build/report.json
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.VERSION }}_report
+          path: build/report.json
+          if-no-files-found: error

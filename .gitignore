@@ -1,0 +1,17 @@
+# No copyrighted game data belongs in this repo:
+# disc images, the original executable, textures, audio, Ghidra/objdiff project files.
+*.bin
+*.cue
+*.iso
+*.7z
+*.zip
+PSX.EXE
+*.RRM
+*.RRO
+*.TMS
+*.VH
+*.VB
+*.gpr
+*.rep
+build/
+dist/

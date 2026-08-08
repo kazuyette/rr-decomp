@@ -14,7 +14,8 @@
     },
     {
       "name": "main/code",
-      "target_path": "build/asm/29E8.o"
+      "target_path": "build/asm/29E8.o",
+      "base_path": "build/matched.o"
     },
     {
       "name": "main/data",

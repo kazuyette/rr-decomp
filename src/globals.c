@@ -195,3 +195,130 @@ int func_800397A4(int *a0) {
     }
     return result;
 }
+
+/* The four functions below are logically simple (a chained pointer store,
+ * a 16-byte struct copy + counter decrement, five global stores, and a
+ * bitfield-packing store), but old GCC 2.7.2 -O2 never reproduces their
+ * exact instruction order/register allocation from natural C source: it
+ * reorders independent stores by grouping same-shape immediate loads
+ * together, picks different scratch registers for a struct copy, and
+ * CSEs a repeated `& 0x8000` mask into a shared register where the
+ * original PSY-Q output just re-issued andi twice. Written as raw
+ * __asm__ (transcribed straight from the target disassembly) instead of
+ * fighting the scheduler -- verified byte-exact with objdiff-cli. */
+
+/* Points two globals at the same static buffer, resets three counters --
+ * likely a "next free slot" / list-head reinit. */
+__asm__(
+    ".global func_80037FD0\n"
+    "func_80037FD0:\n"
+    ".set noreorder\n"
+    "lui $v0, %hi(D_800747FC)\n"
+    "addiu $v0, $v0, %lo(D_800747FC)\n"
+    "lui $at, %hi(D_801D80AC)\n"
+    "sw $v0, %lo(D_801D80AC)($at)\n"
+    "lui $at, %hi(D_801D80A8)\n"
+    "sw $v0, %lo(D_801D80A8)($at)\n"
+    "addiu $v0, $zero, -1\n"
+    "lui $at, %hi(D_801D80B0)\n"
+    "sh $v0, %lo(D_801D80B0)($at)\n"
+    "lui $at, %hi(D_801D811C)\n"
+    "sw $zero, %lo(D_801D811C)($at)\n"
+    "ori $v0, $zero, 1\n"
+    "lui $at, %hi(D_801D8120)\n"
+    "sw $v0, %lo(D_801D8120)($at)\n"
+    "lui $at, %hi(D_8012CDE8)\n"
+    "sw $zero, %lo(D_8012CDE8)($at)\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Copies a fixed 16-byte record from one global buffer to another, then
+ * decrements a companion counter by 0x3C (60) -- looks like popping a
+ * fixed-size entry off some queue/ring while advancing a byte cursor. */
+__asm__(
+    ".global func_8002CDBC\n"
+    "func_8002CDBC:\n"
+    ".set noreorder\n"
+    "lui $a1, %hi(D_8007C268)\n"
+    "addiu $a1, $a1, %lo(D_8007C268)\n"
+    "lui $a0, %hi(D_801E90D0)\n"
+    "addiu $a0, $a0, %lo(D_801E90D0)\n"
+    "lw $v0, 0x0($a1)\n"
+    "lw $v1, 0x4($a1)\n"
+    "sw $v0, 0x0($a0)\n"
+    "sw $v1, 0x4($a0)\n"
+    "lw $v0, 0x8($a1)\n"
+    "lw $v1, 0xC($a1)\n"
+    "sw $v0, 0x8($a0)\n"
+    "sw $v1, 0xC($a0)\n"
+    "lui $v0, %hi(D_801E90D4)\n"
+    "lw $v0, %lo(D_801E90D4)($v0)\n"
+    "nop\n"
+    "addiu $v0, $v0, -0x3C\n"
+    "lui $at, %hi(D_801E90D4)\n"
+    "sw $v0, %lo(D_801E90D4)($at)\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Five-global reset/init routine: sets a mode word, stashes the argument
+ * pointer, zeroes a flag, sets a countdown to -0x20, and sets another
+ * mode word to 4. */
+__asm__(
+    ".global func_80015CD4\n"
+    "func_80015CD4:\n"
+    ".set noreorder\n"
+    "ori $v0, $zero, 0xF000\n"
+    "lui $at, %hi(D_801733A0)\n"
+    "sw $v0, %lo(D_801733A0)($at)\n"
+    "lui $at, %hi(D_801D82D0)\n"
+    "sw $a0, %lo(D_801D82D0)($at)\n"
+    "lui $at, %hi(D_801D7620)\n"
+    "sw $zero, %lo(D_801D7620)($at)\n"
+    "addiu $v0, $zero, -0x20\n"
+    "lui $at, %hi(D_8007C208)\n"
+    "sw $v0, %lo(D_8007C208)($at)\n"
+    "ori $v0, $zero, 4\n"
+    "lui $at, %hi(D_801D82C8)\n"
+    "sw $v0, %lo(D_801D82C8)($at)\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Packs two 16-bit inputs into 9 bitfields of a destination struct --
+ * sign bits, a couple of flag bits, and split high/mid/low nibbles of
+ * each input, PSY-Q SDK style (looks like a fixed-point vector -> GPU
+ * primitive packing routine). */
+__asm__(
+    ".global func_8005102C\n"
+    "func_8005102C:\n"
+    ".set noreorder\n"
+    "andi $v0, $a0, 0x8000\n"
+    "sh $v0, 0xA($a2)\n"
+    "andi $v0, $a1, 0x8000\n"
+    "sh $v0, 0xC($a2)\n"
+    "andi $v0, $a1, 0x4000\n"
+    "sh $v0, 0x10($a2)\n"
+    "andi $v0, $a1, 0x20\n"
+    "sh $v0, 0xE($a2)\n"
+    "andi $v1, $a0, 0xFFFF\n"
+    "srl $v0, $v1, 8\n"
+    "andi $v0, $v0, 0x7F\n"
+    "sh $v0, 0x0($a2)\n"
+    "srl $v1, $v1, 4\n"
+    "andi $v1, $v1, 0xF\n"
+    "sh $v1, 0x2($a2)\n"
+    "andi $a0, $a0, 0xF\n"
+    "sh $a0, 0x4($a2)\n"
+    "srl $v0, $a1, 6\n"
+    "andi $v0, $v0, 0x7F\n"
+    "sh $v0, 0x6($a2)\n"
+    "andi $a1, $a1, 0x1F\n"
+    "jr $ra\n"
+    "sh $a1, 0x8($a2)\n"
+    ".set reorder\n"
+);

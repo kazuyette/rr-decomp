@@ -1,0 +1,63 @@
+name: PSX.EXE
+sha1: 31ec5d3616a0fdb456da27a984fc5b92259ff1f6
+options:
+  basename: psx.exe
+  target_path: PSX.EXE
+  elf_path: build/psx.exe.elf
+  base_path: .
+  platform: psx
+  compiler: PSYQ
+
+  # asm_path: asm
+  # src_path: src
+  # build_path: build
+  # create_asm_dependencies: True
+
+  ld_script_path: psx.exe.ld
+  ld_dependencies: True
+
+  find_file_boundaries: False
+  gp_value: 0x80077128
+  # ld_gp_expression: main_SCOMMON_START + 0x7FF0
+
+  o_as_suffix: True
+  use_legacy_include_asm: False
+
+  section_order: [".rodata", ".text", ".data", ".bss"]
+  # auto_link_sections: [".data", ".rodata", ".bss"]
+
+  symbol_addrs_path:
+    - symbol_addrs.txt
+  reloc_addrs_path:
+    - reloc_addrs.txt
+
+  # undefined_funcs_auto_path: undefined_funcs_auto.txt
+  # undefined_syms_auto_path: undefined_syms_auto.txt
+
+  extensions_path: tools/splat_ext
+
+  subalign: 2
+
+  string_encoding: ASCII
+  data_string_encoding: ASCII
+  rodata_string_guesser_level: 2
+  data_string_guesser_level: 2
+
+  # Uncomment this line if you need to use the maspsx reorder workaround hack
+  # https://github.com/mkst/maspsx?tab=readme-ov-file#include_asm-reordering-workaround-hack
+  # include_asm_macro_style: maspsx_hack
+segments:
+  - name: header
+    type: header
+    start: 0x0
+
+  - name: main
+    type: code
+    start: 0x800
+    vram: 0x80010000
+    # bss_size: Please fill out this value when you figure out the bss size
+    subsegments:
+      - [0x800, rodata, 800]
+      - [0x29E8, asm, 29E8] # estimated
+      - [0x49A30, data, 49A30] # estimated
+  - [0x68000]

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
+  "custom_make": "make",
+  "build_target": false,
+  "build_base": true,
+  "units": [
+    {
+      "name": "header",
+      "target_path": "build/asm/header.o"
+    },
+    {
+      "name": "main/rodata",
+      "target_path": "build/asm/data/800.rodata.o"
+    },
+    {
+      "name": "main/code",
+      "target_path": "build/asm/29E8.o"
+    },
+    {
+      "name": "main/data",
+      "target_path": "build/asm/data/49A30.data.o"
+    }
+  ]
+}

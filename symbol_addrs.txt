@@ -1,0 +1,7 @@
+_start = 0x8003FA9C;
+main = 0x80012360;
+VSync = 0x80048D60;
+read_pad_input = 0x8002E778;
+SetVideoMode = 0x80045440;
+SpuVoiceKeyOn = 0x8004A130;
+g_gpu_device = 0x8007736C;

@@ -98,3 +98,46 @@ void func_80039D88(signed char a0, signed char a1, signed char a2, signed char a
     D_801D35C2 = a2;
     D_801D35C3 = a3;
 }
+
+/* Toggles a flag bit (0x2) in a byte field at offset 7 of some struct,
+ * based on the boolean argument. */
+void func_80047AF8(unsigned char *a0, int a1) {
+    if (a1) {
+        a0[7] |= 2;
+    } else {
+        a0[7] &= 0xFD;
+    }
+}
+
+/* Fixed-size (8-byte) memcpy, guarded by a null-destination check. */
+void func_80052410(char *a0, char *a1) {
+    int v1;
+    if (a0 == 0) return;
+    v1 = 7;
+    do {
+        *a0++ = *a1++;
+    } while (v1-- != 0);
+}
+
+/* Minimal circular distance between two values on a 0x1000-unit wraparound
+ * scale (the game's standard angle/position wrap unit) -- same body used
+ * at two call sites (func_80019C6C and func_80038264). */
+int func_80019C6C(int a0, int a1) {
+    int v1 = a0 & 0xFFF;
+    int b  = a1 & 0xFFF;
+    int d = (v1 < b) ? (b - v1) : (v1 - b);
+    if (d >= 0x801) {
+        d = 0x1000 - d;
+    }
+    return d;
+}
+
+int func_80038264(int a0, int a1) {
+    int v1 = a0 & 0xFFF;
+    int b  = a1 & 0xFFF;
+    int d = (v1 < b) ? (b - v1) : (v1 - b);
+    if (d >= 0x801) {
+        d = 0x1000 - d;
+    }
+    return d;
+}

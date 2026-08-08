@@ -56,7 +56,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        binutils-mipsel-linux-gnu python3 python3-pip make \
+        binutils-mipsel-linux-gnu python3 python3-pip make ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=gcc-build /opt/psx-gcc /opt/psx-gcc

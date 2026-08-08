@@ -95,3 +95,65 @@ __asm__(
     "nop\n"
     ".set reorder\n"
 );
+
+/* Three near-identical 5-word matrix loaders: reads a 5-word (20-byte)
+ * struct from memory and writes it straight into a bank of 5 consecutive
+ * GTE control registers (0-4, 8-12, 16-20 respectively) -- these are the
+ * three rotation-matrix row/column banks (RT, plus two more, PSY-Q style
+ * SetRotMatrix-ish helpers), byte-exact register-for-register copies. */
+__asm__(
+    ".global func_80043470\n"
+    "func_80043470:\n"
+    ".set noreorder\n"
+    "lw $t0, 0x0($a0)\n"
+    "lw $t1, 0x4($a0)\n"
+    "lw $t2, 0x8($a0)\n"
+    "lw $t3, 0xC($a0)\n"
+    "lw $t4, 0x10($a0)\n"
+    "ctc2 $t0, $0\n"
+    "ctc2 $t1, $1\n"
+    "ctc2 $t2, $2\n"
+    "ctc2 $t3, $3\n"
+    "ctc2 $t4, $4\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+__asm__(
+    ".global func_800434A0\n"
+    "func_800434A0:\n"
+    ".set noreorder\n"
+    "lw $t0, 0x0($a0)\n"
+    "lw $t1, 0x4($a0)\n"
+    "lw $t2, 0x8($a0)\n"
+    "lw $t3, 0xC($a0)\n"
+    "lw $t4, 0x10($a0)\n"
+    "ctc2 $t0, $8\n"
+    "ctc2 $t1, $9\n"
+    "ctc2 $t2, $10\n"
+    "ctc2 $t3, $11\n"
+    "ctc2 $t4, $12\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+__asm__(
+    ".global func_800434D0\n"
+    "func_800434D0:\n"
+    ".set noreorder\n"
+    "lw $t0, 0x0($a0)\n"
+    "lw $t1, 0x4($a0)\n"
+    "lw $t2, 0x8($a0)\n"
+    "lw $t3, 0xC($a0)\n"
+    "lw $t4, 0x10($a0)\n"
+    "ctc2 $t0, $16\n"
+    "ctc2 $t1, $17\n"
+    "ctc2 $t2, $18\n"
+    "ctc2 $t3, $19\n"
+    "ctc2 $t4, $20\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);

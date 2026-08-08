@@ -18,6 +18,10 @@ extern signed char D_801D35C0;
 extern signed char D_801D35C1;
 extern signed char D_801D35C2;
 extern signed char D_801D35C3;
+extern short D_800775F8;
+extern int D_8012CDA8;
+extern int D_8007C268;
+extern int D_8007C270;
 
 extern void func_80032A54(void);
 
@@ -140,4 +144,54 @@ int func_80038264(int a0, int a1) {
         d = 0x1000 - d;
     }
     return d;
+}
+
+/* Four small "set object state to preset N" setters -- same two-field shape
+ * (a type/kind byte at offset 3, a companion byte at offset 7), each with
+ * its own pair of constants. Likely an enum-indexed table if disassembled
+ * further, but each is its own tiny function here. */
+void func_80047B98(unsigned char *a0) {
+    a0[3] = 5;
+    a0[7] = 0x28;
+}
+
+void func_80047BAC(unsigned char *a0) {
+    a0[3] = 9;
+    a0[7] = 0x2C;
+}
+
+void func_80047BC0(unsigned char *a0) {
+    a0[3] = 8;
+    a0[7] = 0x38;
+}
+
+void func_80047BD4(unsigned char *a0) {
+    a0[3] = 0xC;
+    a0[7] = 0x3C;
+}
+
+/* Sets a fixed mode/state value (2) into a module-level short. */
+void func_8004A4B8(void) {
+    D_800775F8 = 2;
+}
+
+/* Selects between two fixed states depending on whether the argument is 1. */
+void func_80059014(int a0) {
+    if (a0 == 1) {
+        D_8012CDA8 = 0;
+    } else {
+        D_8012CDA8 = 1;
+    }
+}
+
+/* Range check: true if a0[1] and a0[3] both fall within +-0x40 of two
+ * separate reference globals (likely a camera/culling-box style test). */
+int func_800397A4(int *a0) {
+    int result = 0;
+    if (D_8007C268 - 0x40 < a0[1] && a0[1] < D_8007C268 + 0x40) {
+        if (D_8007C270 - 0x40 < a0[3]) {
+            result = a0[3] < D_8007C270 + 0x40;
+        }
+    }
+    return result;
 }

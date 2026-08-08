@@ -77,3 +77,21 @@ __asm__(
     "nop\n"
     ".set reorder\n"
 );
+
+/* Sets GTE control registers 13/14/15 (RT/IR rotation-matrix related
+ * fixed-point components), each shifted up from an integer argument. Same
+ * shape as func_8003FC9C above, one more register. */
+__asm__(
+    ".global func_8003FBE8\n"
+    "func_8003FBE8:\n"
+    ".set noreorder\n"
+    "sll $a0, $a0, 4\n"
+    "sll $a1, $a1, 4\n"
+    "sll $a2, $a2, 4\n"
+    "ctc2 $a0, $13\n"
+    "ctc2 $a1, $14\n"
+    "ctc2 $a2, $15\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);

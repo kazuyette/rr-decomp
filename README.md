@@ -13,7 +13,7 @@ See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.m
 ## Goals
 
 - Full source-level decompilation of `PSX.EXE`, matched via [objdiff](https://github.com/encounter/objdiff)
-- Progress tracked on [decomp.dev](https://decomp.dev) once CI produces reports
+- Progress tracked on [decomp.dev](https://decomp.dev/kazuyette/rr-decomp) — registered, but hidden from the public project list until at least one function actually matches (currently 0%, see [`BUILD_NOTES.md`](BUILD_NOTES.md))
 - Document the custom asset formats (`MAP.RRM`, `OBJ.RRO`, `TEX*.TMS`, `IDX.HED`)
 
 ## Notable findings so far
@@ -34,3 +34,5 @@ make report           # requires objdiff-cli: https://github.com/encounter/objdi
 CI runs the same steps on every push and uploads a progress report ([`.github/workflows/build.yaml`](.github/workflows/build.yaml)). A from-scratch C reimplementation (with matching, function by function, tracked via [objdiff](https://github.com/encounter/objdiff)) is the next phase — `objdiff.json` and the linker script (`psx.exe.ld`) are already in place for it.
 
 Vendored third-party tool: [`tools/maspsx`](tools/maspsx) (MIT, © Mark Street) — post-processes GNU-as assembly to match PSY-Q's original ASPSX.EXE output byte-for-byte.
+
+See [`BUILD_NOTES.md`](BUILD_NOTES.md) for the detailed pipeline writeup and what's needed to get the first real (C, matching) function in.

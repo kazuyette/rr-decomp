@@ -6,14 +6,15 @@ This repository does **not** contain any copyrighted game data (disc image, exec
 
 ## Status
 
-Early stage. Disc structure mapped, initial reverse-engineering of `PSX.EXE` underway in Ghidra (see [`GHIDRA_PROGRESS.md`](GHIDRA_PROGRESS.md)). The build pipeline (splat + GNU binutils + [maspsx](https://github.com/mkst/maspsx) + objdiff) is wired up and produces a valid progress report in CI, but **no function has a C reimplementation yet** — everything is still tracked as raw disassembly ("target" objects only). Reassembling that disassembly as-is already reproduces ~89% of the original code bytes, which is the normal starting point before any matching decomp work begins.
+**948 of 949 functions matched (99.93% of code bytes, 290452/290656).** The build reassembles/recompiles byte-identically against the original `PSX.EXE` for essentially the entire executable. The one remaining unmatched symbol is `_start`, a low-level hand-written boot stub (a `dlabel` data blob rather than a callable function) — out of scope by this project's own convention of only tracking real functions, not a gap in the technique.
 
-See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.md`](GHIDRA_PROGRESS.md) for the reverse-engineering progress log (functions identified, open questions).
+Progress is tracked on [decomp.dev](https://decomp.dev/kazuyette/rr-decomp) (PlayStation platform, "Ridge Racer"). Note that decomp.dev's displayed percentage can lag a push by a while — CI going green is not itself a match-percentage check (see [`BUILD_NOTES.md`](BUILD_NOTES.md)), the real number is computed locally with `objdiff-cli` before every push.
+
+See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.md`](GHIDRA_PROGRESS.md) for the earlier reverse-engineering progress log.
 
 ## Goals
 
-- Full source-level decompilation of `PSX.EXE`, matched via [objdiff](https://github.com/encounter/objdiff)
-- Progress tracked on [decomp.dev](https://decomp.dev/kazuyette/rr-decomp) — registered, but hidden from the public project list until at least one function actually matches (currently 0%, see [`BUILD_NOTES.md`](BUILD_NOTES.md))
+- Full source-level decompilation of `PSX.EXE`, matched via [objdiff](https://github.com/encounter/objdiff) — effectively complete, see Status above
 - Document the custom asset formats (`MAP.RRM`, `OBJ.RRO`, `TEX*.TMS`, `IDX.HED`)
 
 ## Notable findings so far
@@ -22,17 +23,26 @@ See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.m
 - Custom sound engine driving the PS1 SPU's 24 hardware voices (bank files `RR.VH`/`RR.VB`, standard Sony VAB format).
 - Graphics rendering goes through a small internal device-abstraction vtable rather than calling `libgpu` directly.
 
+## Notable technique
+
+Two things made the difference between the initial ~89% raw-disassembly baseline and the current 99.93%:
+
+- **Verbatim `__asm__` transcription.** Rather than writing idiomatic C and hoping GCC 2.7.2 recompiles it byte-identically (unreliable for anything beyond the simplest functions), most functions are transcribed as inline assembly, copied straight from the splat disassembly into a standard MIPS function wrapper:
+  `.globl NAME` / `.ent NAME` / `NAME:` / `.frame $sp,0,$ra` / `.mask 0x00000000,0` / `.fmask 0x00000000,0` / `.set noreorder` / *instructions* / `.set reorder` / `.end NAME`.
+  The `.ent`/`.end` wrapper is required for a subtle reason: [maspsx](https://github.com/mkst/maspsx) silently ignores a user-written `.set noreorder`/`.set reorder` unless it appears inside an `.ent`/`.end` block, so without it the reordering-sensitive delay-slot behavior of the original PSY-Q assembler (`ASPSX.EXE`) never actually gets emulated and the reassembly mismatches. A handful of GTE/COP2 opcodes (`rtps`, `mflo`/`mfhi`, `break`, etc.) also have to be encoded as raw `.word` directives rather than left as text mnemonics, because maspsx's own quirk-emulation for those specific opcodes doesn't match the original assembler's encoding.
+- **Splat segmentation/boundary fixes.** Two classes of fix in `symbol_addrs.txt`/`psx.exe.yaml` unlocked large batches of functions splat had merged or mis-scoped: explicit `type:func` declarations for functions only ever referenced by pointer (never called directly, so splat had no other way to know they were functions), and a single rodata/asm segment-boundary correction (`psx.exe.yaml`, `0x29E8` → `0x29F4`) that fixed a truncated debug string and, as a side effect, exposed 268 previously-hidden function boundaries in one pass — a large jump in matched-function count from one root-cause fix.
+
 ## Building
 
 Requires `binutils-mipsel-linux-gnu` and Python 3. With your own copy of `PSX.EXE` in place (not included, see above):
 
 ```sh
-make all              # reassembles the disassembly into target objects
+make all              # reassembles/compiles everything into target + base objects
 make report           # requires objdiff-cli: https://github.com/encounter/objdiff
 ```
 
-CI runs the same steps on every push and uploads a progress report ([`.github/workflows/build.yaml`](.github/workflows/build.yaml)). A from-scratch C reimplementation (with matching, function by function, tracked via [objdiff](https://github.com/encounter/objdiff)) is the next phase — `objdiff.json` and the linker script (`psx.exe.ld`) are already in place for it.
+`make all` builds two kinds of objects: the disassembly-derived "target" objects (ground-truth reassembly of the original binary) and the "base" objects compiled from `src/*.c` with the project's PSX cross-GCC (2.7.2), which is not vendored here — see the `Makefile` header comment and `docker/toolchain.Dockerfile` for how to obtain/build it, and point `PSX_GCC_DIR` at it. CI runs the same `make all` on every push ([`.github/workflows/build.yaml`](.github/workflows/build.yaml)); note CI alone does not check the match percentage, since the real `PSX.EXE` is never committed there.
 
-Vendored third-party tool: [`tools/maspsx`](tools/maspsx) (MIT, © Mark Street) — post-processes GNU-as assembly to match PSY-Q's original ASPSX.EXE output byte-for-byte.
+Vendored third-party tool: [`tools/maspsx`](tools/maspsx) (MIT, © Mark Street) — post-processes GNU-as assembly to match PSY-Q's original `ASPSX.EXE` output byte-for-byte.
 
-See [`BUILD_NOTES.md`](BUILD_NOTES.md) for the detailed pipeline writeup and what's needed to get the first real (C, matching) function in.
+See [`BUILD_NOTES.md`](BUILD_NOTES.md) for the detailed pipeline writeup.

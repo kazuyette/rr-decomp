@@ -6,7 +6,7 @@ This repository does **not** contain any copyrighted game data (disc image, exec
 
 ## Status
 
-**948 of 949 functions matched (99.93% of code bytes, 290452/290656).** The build reassembles/recompiles byte-identically against the original `PSX.EXE` for essentially the entire executable. The one remaining unmatched symbol is `_start`, a low-level hand-written boot stub (a `dlabel` data blob rather than a callable function) — out of scope by this project's own convention of only tracking real functions, not a gap in the technique.
+**949 of 949 functions matched — 100.00% of code bytes (290656/290656).** The build reassembles/recompiles byte-identically against the entire original `PSX.EXE`, with no remaining gaps. The last holdout, `_start` (the low-level boot stub — a splat `dlabel` data blob rather than a normal callable function, since it runs before `$gp`/the stack are set up), is transcribed the same way as everything else: raw `.word` values copied verbatim from the disassembly (`src/start.c`), which sidesteps needing a meaningful calling-convention prologue for code that predates one.
 
 Progress is tracked on [decomp.dev](https://decomp.dev/kazuyette/rr-decomp) (PlayStation platform, "Ridge Racer"). Note that decomp.dev's displayed percentage can lag a push by a while — CI going green is not itself a match-percentage check (see [`BUILD_NOTES.md`](BUILD_NOTES.md)), the real number is computed locally with `objdiff-cli` before every push.
 
@@ -14,7 +14,7 @@ See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.m
 
 ## Goals
 
-- Full source-level decompilation of `PSX.EXE`, matched via [objdiff](https://github.com/encounter/objdiff) — effectively complete, see Status above
+- Full source-level decompilation of `PSX.EXE`, matched via [objdiff](https://github.com/encounter/objdiff) — **complete**, see Status above
 - Document the custom asset formats (`MAP.RRM`, `OBJ.RRO`, `TEX*.TMS`, `IDX.HED`)
 
 ## Notable findings so far
@@ -25,7 +25,7 @@ See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.m
 
 ## Notable technique
 
-Two things made the difference between the initial ~89% raw-disassembly baseline and the current 99.93%:
+Two things made the difference between the initial ~89% raw-disassembly baseline and the final 100%:
 
 - **Verbatim `__asm__` transcription.** Rather than writing idiomatic C and hoping GCC 2.7.2 recompiles it byte-identically (unreliable for anything beyond the simplest functions), most functions are transcribed as inline assembly, copied straight from the splat disassembly into a standard MIPS function wrapper:
   `.globl NAME` / `.ent NAME` / `NAME:` / `.frame $sp,0,$ra` / `.mask 0x00000000,0` / `.fmask 0x00000000,0` / `.set noreorder` / *instructions* / `.set reorder` / `.end NAME`.

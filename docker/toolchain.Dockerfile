@@ -74,7 +74,8 @@ RUN sed -i -- 's/include <varargs.h>/include <stdarg.h>/g' *.c \
     && patch -u -p1 gcc.c -i ../patches-src/patches/gcc-2.5.7.c.patch \
     && patch -u -p1 g++.c -i ../patches-src/patches/g++-2.5.7.c.patch \
     && patch -u -p1 config/mips/mips.h -i ../patches-src/patches/mips-2.5.7.h.patch \
-    && patch -su -p1 < ../patches-src/patches/psx-2.5.7.patch
+    && patch -su -p1 < ../patches-src/patches/psx-2.5.7.patch \
+    && touch insn-config.h
 
 RUN ./configure \
         --target=mips-sony-psx \
@@ -83,7 +84,7 @@ RUN ./configure \
         --with-gnu-as \
         --host=i386-pc-linux \
         --build=i386-pc-linux \
-    && make --jobs "$(nproc)" cpp cc1 xgcc cc1plus g++ CFLAGS="-std=gnu89 -m32 -static -Dbsd4_4 -Dmips -march=i686 -DHAVE_STRERROR" || true
+    && make --jobs "$(nproc)" cpp cc1 xgcc cc1plus g++ CFLAGS="-std=gnu89 -m32 -static -Dbsd4_4 -Dmips -march=i686 -DHAVE_STRERROR"
 RUN mkdir -p /opt/psx-gcc257 \
     && mv xgcc /opt/psx-gcc257/gcc \
     && cp cpp cc1 /opt/psx-gcc257/ \

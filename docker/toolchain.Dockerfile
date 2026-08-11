@@ -69,6 +69,7 @@ RUN wget http://www.nic.funet.fi/index/gnu/funet/historical-funet-gnu-area-from-
 WORKDIR /work/gcc-2.5.7
 RUN sed -i -- 's/include <varargs.h>/include <stdarg.h>/g' *.c \
     && patch -u -p1 obstack.h -i ../patches-src/patches/obstack-2.5.7.h.patch \
+    && patch -u -p1 sdbout.c -i ../patches-src/patches/sdbout-2.6.0.c.patch \
     && patch -u -p1 gvarargs.h -i ../patches-src/patches/gvarargs-2.5.7.h.patch \
     && patch -u -p1 cccp.c -i ../patches-src/patches/cccp-2.5.7.c.patch \
     && patch -u -p1 gcc.c -i ../patches-src/patches/gcc-2.5.7.c.patch \

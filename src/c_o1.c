@@ -167,3 +167,103 @@ void func_8005160C(short a0)
     int *p = (int *)D_801E90E8[a0];
     p[36] |= 4;
 }
+
+
+/* ------- round 68 additions (same O1/ASPSX-2.2x combo, now with the
+ * tools/aspsx_epilogue_swap.py step: framed functions' `addu $sp / j`
+ * epilogues get the stack restore swapped into the jump delay slot,
+ * which is what the real ASPSX reorderer did and maspsx does not) --- */
+
+extern unsigned int *D_80077394;
+extern unsigned int *D_80077390;
+extern short D_80079A1A[];
+extern short D_80079A1C[];
+extern int D_80076C0C[];
+extern int D_80076C80[];
+extern int D_8007746C;
+extern int D_801D7F58;
+
+/* Write the tagged word through the D_80077394 port, read the reply
+ * payload back through D_80077390. */
+int func_80047154(unsigned int a0)
+{
+    *D_80077394 = a0 | 0x10000000;
+    return *D_80077390 & 0xFFFFFF;
+}
+
+/* Bounded reads into the 8-byte-stride D_80079A18 record table (the
+ * +2/+4 fields via their own symbols); -1 when out of range. The
+ * `int i = a0` promotion is what keeps the sign-extension in the
+ * argument register like retail. */
+int func_8004B898(short a0)
+{
+    int i = a0;
+    if (i < 0x22) {
+        return *(short *)((unsigned char *)D_80079A1A + (i << 3));
+    }
+    return -1;
+}
+
+int func_8004B8CC(short a0)
+{
+    int i = a0;
+    if (i < 0x22) {
+        return *(short *)((unsigned char *)D_80079A1C + (i << 3));
+    }
+    return -1;
+}
+
+/* Bounded table getters falling back to the shared default slot; the
+ * inverted `>=` test is what produces retail's beqz layout. */
+int func_80051BFC(unsigned int a0)
+{
+    a0 &= 0xFF;
+    if (a0 >= 0x1C) {
+        return (int)&D_8007746C;
+    }
+    return D_80076C0C[a0];
+}
+
+int func_80051C34(unsigned int a0)
+{
+    a0 &= 0xFF;
+    if (a0 >= 0x7) {
+        return (int)&D_8007746C;
+    }
+    return D_80076C80[a0];
+}
+
+/* Byte fill (memset shape); the bare sp,-8 frame is cc1's own doing
+ * for this loop form, matched as-is. */
+void func_80047864(unsigned char *a0, unsigned char a1, int a2)
+{
+    while (a2--) {
+        *a0++ = a1;
+    }
+}
+
+/* Count the non-empty slots of the 6-entry, 0x38-stride table at
+ * D_801D7F58 (statement order inside the do-loop matters: decrement,
+ * advance, then accumulate -- that is retail's emission order). */
+int func_80039CD0(void)
+{
+    unsigned char *p = (unsigned char *)&D_801D7F58;
+    int n = 0;
+    int i = 5;
+    do {
+        int v = *(int *)p;
+        i--;
+        p += 0x38;
+        n += v != 0;
+    } while (i >= 0);
+    return n;
+}
+
+/* Reads the D_80173440 flag through a frame the original allocated
+ * for a since-compiled-out local (24 bytes of dead stack, faithfully
+ * reproduced by the unused buffer). */
+int func_8003A198(void)
+{
+    unsigned char buf[24];
+    return D_80173440;
+}

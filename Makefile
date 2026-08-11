@@ -73,6 +73,17 @@ $(BUILD_DIR)/asm/29E8.o: $(ASM_DIR)/29E8.s | dirs
 $(BUILD_DIR)/src/%.s: $(SRC_DIR)/%.c | dirs
 	$(GCC) $(GCC_FLAGS) -S $< -o $@
 
+# Round 67: c_o1.c holds real-C conversions that byte-match under the
+# ORIGINAL compiler settings (-O1 -mmips-as: assembler macro forms +
+# no scheduling, expanded ASPSX-style by maspsx). Only this file uses
+# them; everything already matched keeps the historical flags above.
+$(BUILD_DIR)/src/c_o1.s: GCC_FLAGS := -O1 -mrnames -mmips-as -fno-builtin -fsigned-char -gcoff
+
+# ...and assembled in ASPSX-2.2x emulation, whose $at macro expansion
+# (lui/addiu %lo/addu/op 0($at)) is the retail addressing shape.
+$(BUILD_DIR)/src/c_o1.o: $(BUILD_DIR)/src/c_o1.s
+	$(MASPSX) --aspsx-version 2.21 --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<
+
 $(BUILD_DIR)/src/%.o: $(BUILD_DIR)/src/%.s
 	$(MASPSX) --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<
 

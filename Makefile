@@ -27,6 +27,10 @@ MASPSX      := $(PYTHON) tools/maspsx/maspsx.py
 
 PSX_GCC_DIR ?= /opt/psx-gcc
 GCC         := $(PSX_GCC_DIR)/gcc -B$(PSX_GCC_DIR)/
+# Round 69: second compiler for the GCC 2.5.7-era unit (src/c_257.c);
+# built alongside 2.7.2 in docker/toolchain.Dockerfile.
+PSX_GCC257_DIR ?= /opt/psx-gcc257
+GCC257      := $(PSX_GCC257_DIR)/gcc -B$(PSX_GCC257_DIR)/
 GCC_FLAGS   := -O2 -mrnames -fno-builtin -fsigned-char -gcoff
 
 AS_FLAGS    := -EL -march=r3000 -mtune=r3000 -mabi=32 -I$(INC_DIR)
@@ -84,7 +88,12 @@ $(BUILD_DIR)/src/c_o1.s: GCC_FLAGS := -O1 -mrnames -mmips-as -fno-builtin -fsign
 $(BUILD_DIR)/src/c_o1_ndb.s: GCC_FLAGS := -O1 -mrnames -mmips-as -fno-delayed-branch -fno-builtin -fsigned-char -gcoff
 $(BUILD_DIR)/src/c_o2.s: GCC_FLAGS := -O2 -mrnames -mmips-as -fno-builtin -fsigned-char -gcoff
 
-$(BUILD_DIR)/src/c_o1.o $(BUILD_DIR)/src/c_o1_ndb.o $(BUILD_DIR)/src/c_o2.o: \
+# c_257.c compiles with GCC 2.5.7 (no -mrnames: 2.5.7 would emit
+# symbolic register names that modern gas rejects).
+$(BUILD_DIR)/src/c_257.s: $(SRC_DIR)/c_257.c | dirs
+	$(GCC257) -O2 -mmips-as -fno-builtin -fsigned-char -gcoff -S $< -o $@
+
+$(BUILD_DIR)/src/c_o1.o $(BUILD_DIR)/src/c_o1_ndb.o $(BUILD_DIR)/src/c_o2.o $(BUILD_DIR)/src/c_257.o: \
 $(BUILD_DIR)/src/%.o: $(BUILD_DIR)/src/%.s
 	$(PYTHON) tools/aspsx_epilogue_swap.py $< $<.swap
 	$(MASPSX) --aspsx-version 2.21 --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<.swap

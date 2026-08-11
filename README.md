@@ -1,12 +1,15 @@
 # rr-decomp
 
-Decompilation project for **Ridge Racer** (PlayStation 1, Namco, 1994 — Japan release, `RIDGERACER` volume, build dated Nov. 1994).
+Matching-reconstruction and (in-progress) decompilation project for **Ridge Racer** (PlayStation 1, Namco, 1994 — Japan release, `RIDGERACER` volume, build dated Nov. 1994).
 
 This repository does **not** contain any copyrighted game data (disc image, executable, textures, audio). You need your own legally-owned copy of the game to build/verify against. The committed `asm/*.s` files are a disassembly listing (mnemonics + symbol names), not the binary itself — the same practice used by every other project on [decomp.dev](https://decomp.dev).
 
 ## Status
 
-**949 of 949 functions matched — 100.00% of code bytes (290656/290656).** The build reassembles/recompiles byte-identically against the entire original `PSX.EXE`, with no remaining gaps. The last holdout, `_start` (the low-level boot stub — a splat `dlabel` data blob rather than a normal callable function, since it runs before `$gp`/the stack are set up), is transcribed the same way as everything else: raw `.word` values copied verbatim from the disassembly (`src/start.c`), which sidesteps needing a meaningful calling-convention prologue for code that predates one.
+Two different numbers describe this repo, and they should not be conflated:
+
+- **Byte-matching: complete.** The build reassembles/recompiles byte-identically against the entire original `PSX.EXE` — 949/949 functions, 290656/290656 code bytes, verified with `objdiff-cli` locally before every push. The last holdout, `_start` (the low-level boot stub — a splat `dlabel` data blob rather than a normal callable function, since it runs before `$gp`/the stack are set up), is transcribed as raw `.word` values copied verbatim from the disassembly (`src/start.c`).
+- **Source-level decompilation: in progress — 63 of 949 functions are real C.** The remaining functions are **verbatim `__asm__` transcriptions**: the original MIPS instructions copied from the disassembly into compilable wrappers (see "Notable technique" below). In decomp-community terms this makes the repo a *fully matched reconstruction with a small decompiled core*, not a completed decompilation — for an `__asm__` block, byte-matching is by construction, not a recovered-source proof. Early press coverage that described this project as "100% decompiled" overstated it; the 100% figure measures byte-matching only. Conversion of `__asm__` functions to portable, byte-verified real C continues through the companion project [rr-pc-port](https://github.com/kazuyette/rr-pc-port) (each converted function is checked byte-exact with the same objdiff pipeline before landing back here).
 
 Progress is tracked on [decomp.dev](https://decomp.dev/kazuyette/rr-decomp) (PlayStation platform, "Ridge Racer"). Note that decomp.dev's displayed percentage can lag a push by a while — CI going green is not itself a match-percentage check (see [`BUILD_NOTES.md`](BUILD_NOTES.md)), the real number is computed locally with `objdiff-cli` before every push.
 
@@ -14,8 +17,13 @@ See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.m
 
 ## Goals
 
-- Full source-level decompilation of `PSX.EXE`, matched via [objdiff](https://github.com/encounter/objdiff) — **complete**, see Status above
+- Byte-matched reconstruction of `PSX.EXE` via [objdiff](https://github.com/encounter/objdiff) — **complete** (949/949 functions, see Status)
+- Source-level decompilation to real C — **in progress** (63/949; each conversion re-verified byte-exact)
 - Document the custom asset formats (`MAP.RRM`, `OBJ.RRO`, `TEX*.TMS`, `IDX.HED`)
+
+## Transparency
+
+This project is heavily AI-assisted: the splat/maspsx/objdiff tooling, the transcription batches and the C conversions are driven by Anthropic's Claude under human direction and review. Nothing about the numbers above requires trust — with your own legally-owned copy of the game, `make all` plus `objdiff-cli report generate` reproduces the match report locally.
 
 ## Notable findings so far
 

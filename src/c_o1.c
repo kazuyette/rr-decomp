@@ -14,10 +14,10 @@
  * Every function here was verified byte-exact (objdiff 100.0) against
  * the retail PSX.EXE before its __asm__ transcription was retired.
  *
- * Bonus finding, same round: func_80047AB8 (still __asm__ in
- * more_asm86.c) byte-matches ONLY under GCC 2.5.7 at -O2 -- its
- * scheduled mask/load interleaving is 2.5.7's scheduler, not
- * 2.7.2's. And three functions (func_8004D388 / func_8004D3A4 /
+ * Bonus finding, same round: func_80047AB8 byte-matches ONLY under
+ * GCC 2.5.7 at -O2 -- its scheduled mask/load interleaving is
+ * 2.5.7's scheduler, not 2.7.2's (landed in c_257.c once the
+ * toolchain grew a second compiler, round 69). And three functions (func_8004D388 / func_8004D3A4 /
  * func_80043204, all in Sony-library regions of the EXE) match NO
  * available GCC at any flag set: their branch-preserving 0/-1
  * select into the argument register and $t0-$t2 block-copy with a

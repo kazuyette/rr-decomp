@@ -31,3 +31,23 @@ void func_8004703C(unsigned int a0)
     *D_80077394 = a0;
     D_800786C0[a0 >> 24] = a0 & 0xFFFFFF;
 }
+
+
+/* round 80 -- same D_801E90E8[a0] + a1*168-stride object family as
+ * func_8005160C/func_8005188C (c_o1.c), but this particular unit only
+ * byte-matches under GCC 2.5.7, not 2.7.2 -O1/-O2 -- the flag-family
+    * rediscovery technique from round 78 applied to a fresh candidate.
+    * Clears the "active" byte at +0x2B and clears bit 3 of the flags
+    * word at +0x90; each field access re-indexes D_801E90E8[a0] from
+ * scratch (matches retail's redundant reload). */
+extern int D_801E90E8[];
+
+void func_8004E890(short a0, short a1)
+{
+       int v1;
+    unsigned char *p;
+    v1 = a1 * 20;
+    p = (unsigned char *)D_801E90E8[a0];
+    p[(v1 + a1) * 8 + 0x2B] = 1;
+    *(unsigned int *)((unsigned char *)D_801E90E8[a0] + (v1 + a1) * 8 + 0x90) &= ~8;
+}

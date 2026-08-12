@@ -404,3 +404,42 @@ void func_8003776C(void)
     } while (a0 < 2);
     D_801D9058 = -1;
 }
+
+/* ------- round 75 addition (same O1/ASPSX-2.2x combo) --- */
+/* two independent countdown-zeroing loops over D_800797A0 (7 words) and
+ * D_800797D0 (11 words), plus two dependent-global clears up front.
+ * D_8007744C's store is placed AFTER computing v1/a0 for the first loop
+ * in the C source, but its POINTER LOAD happens first -- naming the
+ * loaded pointer explicitly (`p = D_8007744C;`) lets the compiler emit
+ * the lui/lw early while deferring the actual `sw` until after the loop
+ * setup, matching retail's "load container pointer before the store
+ * that uses the other indexed variable" ordering (same recipe as the
+ * D_801E90E8[a0]+stride family). */
+extern short *D_80077444;
+extern int *D_8007744C;
+extern int D_800797A0[];
+extern int D_800797D0[];
+void func_80049580(void)
+{
+    int v1;
+    int *a0;
+    int *v0;
+    int *p;
+    *D_80077444 = 0;
+    p = D_8007744C;
+    v1 = 6;
+    a0 = D_800797A0;
+    *p = 0;
+    do {
+        *a0 = 0;
+        v1--;
+        a0--;
+    } while (v1 >= 0);
+    v1 = 10;
+    v0 = D_800797D0;
+    do {
+        *v0 = 0;
+        v1--;
+        v0--;
+    } while (v1 >= 0);
+}

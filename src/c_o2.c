@@ -64,3 +64,28 @@ void *func_80048128(unsigned short *a0, int a1, int a2, int a3, int a4)
     r[3] = w;
     return r;
 }
+
+
+/* round 78 -- "wrong flag family" discovery: this function stubbornly
+ * resisted every -O1 register-swap/delay-slot workaround (return value
+ * kept landing in $v1 instead of $v0). Turned out it was never -O1 at
+     * retail -- the exact same natural, idiomatic C matches instantly under
+ * -O2. Table-index bounds check + halfword lookup, invalid index (>=
+     * 0x22) returns -1. */
+extern unsigned short D_80079A1E[];
+
+int func_8004B85C(short a0_param, short *a1)
+{
+    int a0;
+int v0;
+unsigned short v1;
+a0 = a0_param;
+if (a0 < 0x22) {
+v0 = a0 << 3;
+v1 = *(unsigned short *)((char *)D_80079A1E + v0);
+v0 = a0;
+*a1 = v1;
+return v0;
+}
+return -1;
+}

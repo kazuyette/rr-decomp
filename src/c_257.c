@@ -51,3 +51,25 @@ void func_8004E890(short a0, short a1)
     p[(v1 + a1) * 8 + 0x2B] = 1;
     *(unsigned int *)((unsigned char *)D_801E90E8[a0] + (v1 + a1) * 8 + 0x90) &= ~8;
 }
+
+/* round 81 -- GPU FIFO push loop (same D_80077390 hardware-port pattern
+ * as func_8004703C above): copies a1 words from a0[] one at a time
+ * through the fixed *D_80077390 destination. GCC 2.5.7 -O2 fills the
+ * post-load hazard slot with the pointer increment instead of a nop;
+ * marking the destination volatile through the store was needed to
+ * stop the store itself from being hoisted into the branch delay
+ * slot ahead of the loop counter decrement. */
+extern int *D_80077390;
+
+int func_80047094(int *a0, int a1)
+{
+       int v;
+    volatile int *dst;
+    while (a1--) {
+        v = *a0;
+        dst = D_80077390;
+        a0++;
+        *dst = v;
+    }
+    return 0;
+}

@@ -326,3 +326,50 @@ void func_8004DC18(void)
         v1 += 3;
     } while (v1 < 0x1770);
 }
+
+/* ------- round 73 addition (same O1/ASPSX-2.2x combo) --- */
+
+extern short D_801D7778[];
+extern short D_800742D8[];
+extern short D_80074298[];
+
+/* Interleaved 8-halfword copy: two source tables indexed by a0*16 and
+ * a1*16 (16-byte-stride records) are copied in lockstep into the two
+ * halves of the 8-halfword scratch buffer D_801D7778 (dst0) / +0x10
+ * (dst1). The base-address loads for src0/src1 have to happen as
+ * their OWN statements (named `base0`/`base1`) BEFORE combining with
+ * the `*16` index -- same "load the dependency before finishing the
+ * scaled add" shape as func_8004A8D0/func_8005188C -- and the loop
+ * counter increment has to be written INLINE right after advancing
+ * src0 (not left as the for-loop's own post-body increment), which
+ * is what reproduces retail's exact interleaving of the two stores'
+ * pointer bookkeeping. */
+void func_8002E6A8(int a0, int a1)
+{
+    int i;
+    short *dst0;
+    short *dst1;
+    char *base1;
+    char *base0;
+    short *src1;
+    short *src0;
+    short v0;
+    i = 0;
+    dst0 = D_801D7778;
+    dst1 = (short *)((char *)dst0 + 0x10);
+    base1 = (char *)D_800742D8;
+    src1 = (short *)(base1 + a1 * 16);
+    base0 = (char *)D_80074298;
+    src0 = (short *)(base0 + a0 * 16);
+    while (i < 8) {
+        v0 = *src0;
+        *dst0 = v0;
+        v0 = *src1;
+        src0++;
+        i++;
+        src1++;
+        dst0++;
+        *dst1 = v0;
+        dst1++;
+    }
+}

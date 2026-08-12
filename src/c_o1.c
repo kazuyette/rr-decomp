@@ -267,3 +267,26 @@ int func_8003A198(void)
     unsigned char buf[24];
     return D_80173440;
 }
+
+/* ------- round 70 addition (same O1/ASPSX-2.2x combo) --- */
+
+extern unsigned char D_800797EF[];
+extern unsigned char D_800797DC[];
+extern void *D_8007745C;
+
+/* Clear the (a0&0xFF)-th 24-byte-stride "reserved" slot: its status
+ * byte in D_800797EF, its halfword tag in D_800797DC, and the two
+ * halfword fields at +0x194/+0x196 of the object *D_8007745C points
+ * at. The D_8007745C load has to happen BEFORE the D_800797DC store
+ * in source order -- that's what puts it in $v1 like retail instead
+ * of getting re-loaded after. */
+void func_8004A8D0(int a0)
+{
+    int idx = (a0 & 0xFF) * 24;
+    unsigned char *p;
+    D_800797EF[idx] = 0;
+    p = (unsigned char *)D_8007745C;
+    *(unsigned short *)(D_800797DC + idx) = 0;
+    *(unsigned short *)(p + 0x194) = 0;
+    *(unsigned short *)(p + 0x196) = 0;
+}

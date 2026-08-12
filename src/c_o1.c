@@ -290,3 +290,23 @@ void func_8004A8D0(int a0)
     *(unsigned short *)(p + 0x194) = 0;
     *(unsigned short *)(p + 0x196) = 0;
 }
+
+/* ------- round 71 addition (same O1/ASPSX-2.2x combo) --- */
+
+/* Same D_801E90E8[a0] + a1*168-stride object family as func_8005160C /
+ * func_8005163C: clear the "active" byte at +0x2B and clear bit 0x100
+ * of the flags word at +0x90. The two field accesses each re-index
+ * D_801E90E8[a0] from scratch (matches retail's redundant reload); the
+ * FIRST access needs the base pointer named as a local (loaded before
+ * the stride's `+a1` finishes, landing in $v0 like retail) while the
+ * second is a fresh inline expression -- mixing the two forms is what
+ * reproduces the exact instruction order. */
+void func_8005188C(short a0, short a1)
+{
+    int v1;
+    int *p;
+    v1 = a1 * 20;
+    p = (int *)D_801E90E8[a0];
+    *(unsigned char *)((unsigned char *)p + (v1 + a1) * 8 + 0x2B) = 0;
+    *(unsigned int *)((unsigned char *)D_801E90E8[a0] + (v1 + a1) * 8 + 0x90) &= ~0x100;
+}

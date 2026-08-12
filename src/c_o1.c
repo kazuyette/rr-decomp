@@ -373,3 +373,34 @@ void func_8002E6A8(int a0, int a1)
         dst1++;
     }
 }
+
+/* ------- round 74 addition (same O1/ASPSX-2.2x combo) --- */
+/* nested double do-while: outer 2 iterations (a0 = 0, 1), inner 256
+ * iterations counting down (v1: 0xFF -> 0), filling a 0x100-byte block
+ * of D_801D7C10 with the current a0 value. Same "delay loop" family as
+ * func_8004DC18 (round 72): do-while with a separate zero-init statement
+ * reproduces retail's post-loop compensating decrement in the delay
+ * slot, and it nests cleanly for the outer counter too. */
+extern unsigned char D_801D7C10[];
+extern int D_801D9058;
+void func_8003776C(void)
+{
+    int a0;
+    int v1;
+    unsigned char *v0;
+    unsigned char *a1;
+    a0 = 0;
+    a1 = D_801D7C10;
+    do {
+        v1 = 0xFF;
+        v0 = a1 + 0xFF;
+        do {
+            *v0 = a0;
+            v1--;
+            v0--;
+        } while (v1 >= 0);
+        a0++;
+        a1 += 0x100;
+    } while (a0 < 2);
+    D_801D9058 = -1;
+}

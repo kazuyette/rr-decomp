@@ -310,3 +310,19 @@ void func_8005188C(short a0, short a1)
     *(unsigned char *)((unsigned char *)p + (v1 + a1) * 8 + 0x2B) = 0;
     *(unsigned int *)((unsigned char *)D_801E90E8[a0] + (v1 + a1) * 8 + 0x90) &= ~0x100;
 }
+
+/* ------- round 72 addition (same O1/ASPSX-2.2x combo) --- */
+
+/* Pure delay/timing loop: counts up by 3 from 0 to 0x1770 (6000) in a
+ * do-while (the do-while shape is what materializes the "overshoot
+ * subtract 3 back off" instruction retail has after the loop exits --
+ * a plain while/for form folds the init to a single `li` and drops
+ * the trailing correction instead). No side effects; the count itself
+ * is dead once the loop exits, so this is a CPU-cycle spin-wait. */
+void func_8004DC18(void)
+{
+    int v1 = 0;
+    do {
+        v1 += 3;
+    } while (v1 < 0x1770);
+}

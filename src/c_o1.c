@@ -443,3 +443,20 @@ void func_80049580(void)
         v0--;
     } while (v1 >= 0);
 }
+
+
+/* round 81 -- 92-byte struct copy from a fixed global template
+ * (D_80078248) into the caller-provided buffer, returned unchanged.
+    * A plain word-copy loop never reached the register pressure retail
+ * shows (8 scratch registers live at once, including a forced reuse
+ * of $a0); writing it as a whole-struct assignment let cc1 -O1
+    * generate the same 4-word-unrolled loop + 3-word remainder retail
+ * has, first try. */
+   typedef struct { int w[23]; } S_80045D04;
+extern S_80045D04 D_80078248;
+
+void *func_80045D04(void *a0)
+{
+       *(S_80045D04 *)a0 = D_80078248;
+    return a0;
+}

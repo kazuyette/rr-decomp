@@ -16,7 +16,7 @@ Source : image BIN/CUE, 13 pistes (1 piste data MODE2/2352 + 12 pistes audio CDD
 |---|---|---|
 | PSX.EXE | 425 984 o | Executable principal |
 | IDX.HED | 2 048 o | Table d'index (format maison, non documente) |
-| MAP.RRM | 271 548 o | Donnees de circuit/collision |
+| MAP.RRM | 271 548 o | Donnees de circuit (geometrie de route + UV/texture par quad) - **format documente**, voir [MAP_RRM_FORMAT.md](MAP_RRM_FORMAT.md) |
 | OBJ.RRO | 445 348 o | Modeles 3D des objets |
 | RR.VH | 32 288 o | En-tetes sons (VAB header, format Sony standard) |
 | RR.VB | 491 056 o | Donnees sons (VAB body) |
@@ -36,3 +36,4 @@ Source : image BIN/CUE, 13 pistes (1 piste data MODE2/2352 + 12 pistes audio CDD
 - Documenter le format IDX.HED (probablement un index de secteurs pointant vers des assets streames depuis le CD)
 - Convertir RR.VH/RR.VB (VAB Sony standard, outils existants dans l'ecosysteme PS1 homebrew)
 - Reverse le format TEXx.TMS pour visualiser les textures
+- MAP.RRM : format documente (voir [MAP_RRM_FORMAT.md](MAP_RRM_FORMAT.md)) - reste ouvert : semantique exacte du champ `flags` (octets 38-39 de chaque enregistrement) et l'existence ou non d'une transformation par section (translation/rotation) stockee dans un autre fichier

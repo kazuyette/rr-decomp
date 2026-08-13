@@ -19,7 +19,7 @@ See [`DISC_NOTES.md`](DISC_NOTES.md) for the disc layout and [`GHIDRA_PROGRESS.m
 
 - Byte-matched reconstruction of `PSX.EXE` via [objdiff](https://github.com/encounter/objdiff) — **complete** (949/949 functions, see Status)
 - Source-level decompilation to real C — **in progress** (106/949; each conversion re-verified byte-exact)
-- Document the custom asset formats (`MAP.RRM`, `OBJ.RRO`, `TEX*.TMS`, `IDX.HED`)
+- Document the custom asset formats (`MAP.RRM`, `OBJ.RRO`, `TEX*.TMS`, `IDX.HED`) — **`MAP.RRM` documented** (see [`MAP_RRM_FORMAT.md`](MAP_RRM_FORMAT.md)), the rest in progress
 
 ## Transparency
 

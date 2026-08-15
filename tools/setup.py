@@ -71,13 +71,14 @@ def ensure_splat():
     # is Ubuntu 22.04 and ships an older one, which rejects the flag
     # outright. Try with it, fall back without.
     def pip_install(args):
-        base = [sys.executable, "-m", "pip", "install", "--quiet"]
+        base = [sys.executable, "-m", "pip", "install"]
         r = subprocess.run(base + ["--break-system-packages"] + args,
                            capture_output=True, text=True)
         if r.returncode != 0 and "break-system-packages" in r.stderr:
             r = subprocess.run(base + args, capture_output=True, text=True)
-        if r.returncode != 0:
-            print(r.stdout[-2000:] or r.stderr[-2000:])
+        out = (r.stdout + r.stderr).strip()
+        if out:
+            print(out[-3000:])
         return r.returncode == 0
 
     if not pip_install(["--no-deps", REQS[0]]):
@@ -87,8 +88,14 @@ def ensure_splat():
     try:
         import splat  # noqa: F401
         return True
-    except ImportError:
-        print("splat still will not import after installation.")
+    except Exception as exc:
+        # Print the real reason. Swallowing it cost a round trip once
+        # already: pip reported success, the import still failed, and the
+        # message that would have said why was caught and thrown away.
+        print(f"splat still will not import: {type(exc).__name__}: {exc}")
+        print(f"python {sys.version.split()[0]} at {sys.executable}")
+        for p in sys.path:
+            print(f"  path {p}")
         return False
 
 

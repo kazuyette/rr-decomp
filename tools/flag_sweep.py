@@ -42,10 +42,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from verify import disassemble  # noqa: E402
+from units import TARGETS  # noqa: E402
 
 BUILD = "build"
 SWEEP = os.path.join(BUILD, "sweep")
-TARGET = os.path.join(BUILD, "asm", "29E8.o")
 INC_DIR = "include"
 INC_STAGE = "/tmp/rr-include"
 
@@ -108,25 +108,28 @@ def main():
     if not files:
         files = sorted(f"src/{f}" for f in os.listdir("src")
                        if f.startswith("cand_"))
-    if not os.path.exists(TARGET):
-        print("build/asm/29E8.o missing -- run `make all` first")
-        return 1
-    # A stale target is worse than a missing one: the sweep still produces
-    # a plausible-looking sweep.json, and apply_sweep then acts on it. If
-    # `make all` failed, build/ can easily be left over from an earlier run.
-    listing = os.path.join("asm", "29E8.s")
-    if (os.path.exists(listing)
-            and os.path.getmtime(listing) > os.path.getmtime(TARGET)):
-        print(f"{TARGET} is older than {listing} -- the build did not "
-              f"complete. Fix the build before sweeping.")
-        return 1
+    for obj in TARGETS:
+        if not os.path.exists(obj):
+            print(f"{obj} missing -- run `make all` first")
+            return 1
+        # A stale target is worse than a missing one: the sweep still
+        # produces a plausible-looking sweep.json, and apply_sweep then
+        # acts on it. If `make all` failed, build/ is easily left over.
+        listing = os.path.join("asm", os.path.basename(obj)[:-2] + ".s")
+        if (os.path.exists(listing)
+                and os.path.getmtime(listing) > os.path.getmtime(obj)):
+            print(f"{obj} is older than {listing} -- the build did not "
+                  f"complete. Fix the build before sweeping.")
+            return 1
 
     os.makedirs(SWEEP, exist_ok=True)
     os.makedirs(INC_STAGE, exist_ok=True)
     for h in os.listdir(INC_DIR):
         run(["cp", "-f", os.path.join(INC_DIR, h), INC_STAGE])
 
-    target = disassemble(TARGET)
+    target = {}
+    for obj in TARGETS:
+        target.update(disassemble(obj))
     wins = {}
     for src in files:
         line = [os.path.basename(src).ljust(28)]

@@ -19,13 +19,13 @@ import re
 import subprocess
 import sys
 
-GENERATED = "src/29E8.c"
-SEGMENT = "asm/nonmatchings/29E8"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from units import GENERATED, unit_for  # noqa: E402
 # Every hand-written unit: a conversion can have landed in any of them, and
 # tools/apply_sweep.py creates new ones (src/x_<pipeline>_NN.c) as it goes,
 # so this is discovered rather than listed.
 UNITS = sorted("src/" + f for f in os.listdir("src")
-               if f.endswith(".c") and f != "29E8.c")
+               if f.endswith(".c") and "src/" + f not in GENERATED)
 # never touch these: known, documented exceptions
 KEEP = {"_start"}
 
@@ -66,7 +66,7 @@ def regenerate_missing_listings(names):
     was reverted after a clean setup.
     """
     missing = [n for n in names
-               if not os.path.exists(os.path.join(SEGMENT, n + ".s"))]
+               if not os.path.exists(os.path.join(unit_for(n)[1], n + ".s"))]
     if not missing:
         return
     print(f"{len(missing)} restored function(s) have no listing "
@@ -90,7 +90,7 @@ def main():
         return 0
     print(f"{len(names)} function(s) failing verification:")
 
-    gen = open(GENERATED).read()
+    texts = {g: open(g).read() for g in GENERATED}
     moved = []
     for name in names:
         for unit in UNITS:
@@ -107,15 +107,18 @@ def main():
             commented = note + " * " + body.replace("\n", "\n * ") + "\n */"
             if not dry:
                 open(unit, "w").write(text[:span[0]] + commented + text[span[1]:])
-            if f'INCLUDE_ASM("{SEGMENT}", {name});' not in gen:
-                gen += f'\nINCLUDE_ASM("{SEGMENT}", {name});\n'
+            gen_path, segment = unit_for(name)
+            asm_line = 'INCLUDE_ASM("%s", %s);' % (segment, name)
+            if asm_line not in texts[gen_path]:
+                texts[gen_path] += "\n" + asm_line + "\n"
             moved.append((name, unit))
             break
         else:
             print(f"  ?    {name}: no definition found in the hand-written units")
 
     if not dry:
-        open(GENERATED, "w").write(gen)
+        for path, text in texts.items():
+            open(path, "w").write(text)
         regenerate_missing_listings([n for n, _ in moved])
     for name, unit in moved:
         print(f"  <--  {name}  (commented out in {unit})")

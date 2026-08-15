@@ -62,5 +62,11 @@ segments:
     subsegments:
       - [0x800, rodata, 800]
       - [0x29F4, c, 29E8] # estimated (was 0x29E8; fixed to not truncate debug format string in preceding rodata)
+      # 0x30294 = VRAM 0x8003FA94. Not a guess: no function at or above
+      # that address calls any function below it, and it is the lowest
+      # address for which that holds. A PSY-Q library object cannot call
+      # into game code, so the seam is where the linker placed the
+      # libraries and the runtime -- _start sits 8 bytes above it.
+      - [0x30294, c, psyq]
       - [0x49A30, data, 49A30] # estimated
   - [0x68000]

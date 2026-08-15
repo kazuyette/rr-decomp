@@ -29,8 +29,12 @@ import re
 import subprocess
 import sys
 
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from units import TARGETS  # noqa: E402
+
 OBJDUMP = "mipsel-linux-gnu-objdump"
-TARGET = "build/asm/29E8.o"
 BASE = "build/matched.o"
 
 HEADER = re.compile(r"^[0-9a-f]+ <([^>]+)>:")
@@ -82,7 +86,10 @@ def disassemble(path):
 def main():
     verbose = "--verbose" in sys.argv
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    target, base = disassemble(TARGET), disassemble(BASE)
+    target = {}
+    for obj in TARGETS:
+        target.update(disassemble(obj))
+    base = disassemble(BASE)
     wanted = args or sorted(set(target) & set(base))
 
     ok = bad = missing = 0

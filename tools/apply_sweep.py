@@ -28,9 +28,10 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from units import GENERATED, unit_for  # noqa: E402
+
 SWEEP = "build/sweep.json"
-GENERATED = "src/29E8.c"
-SEGMENT = "asm/nonmatchings/29E8"
 INC_STAGE = "/tmp/rr-include"
 GCC_DIR = os.environ.get("PSX_GCC_DIR", "/opt/psx-gcc")
 GCC257_DIR = os.environ.get("PSX_GCC257_DIR", "/opt/psx-gcc257")
@@ -191,7 +192,7 @@ def regenerate_missing_listings(names):
     was reverted after a clean setup.
     """
     missing = [n for n in names
-               if not os.path.exists(os.path.join(SEGMENT, n + ".s"))]
+               if not os.path.exists(os.path.join(unit_for(n)[1], n + ".s"))]
     if not missing:
         return
     print(f"{len(missing)} restored function(s) have no listing "
@@ -325,12 +326,16 @@ def main():
             written.append(path)
             pending, idx = rest, idx + 1
 
-    gen = open(GENERATED).read()
+    # A restored function goes back to the unit that owns its address,
+    # not to whichever unit this tool happened to start from.
+    texts = {g: open(g).read() for g in GENERATED}
     for name in losers:
-        line = f'INCLUDE_ASM("{SEGMENT}", {name});'
-        if line not in gen:
-            gen += "\n" + line + "\n"
-    open(GENERATED, "w").write(gen)
+        gen_path, segment = unit_for(name)
+        line = 'INCLUDE_ASM("%s", %s);' % (segment, name)
+        if line not in texts[gen_path]:
+            texts[gen_path] += "\n" + line + "\n"
+    for path, text in texts.items():
+        open(path, "w").write(text)
     for p in batch:
         os.remove(p)
     regenerate_missing_listings(losers)

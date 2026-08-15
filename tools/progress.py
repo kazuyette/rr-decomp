@@ -24,20 +24,22 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from verify import disassemble  # noqa: E402
+from units import TARGETS  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INCLUDE_ASM_RE = re.compile(r'^\s*INCLUDE_ASM\("([^"]+)",\s*(\w+)\);', re.M)
 INSN_RE = re.compile(r'/\* \w+ [0-9A-Fa-f]{8} [0-9A-Fa-f]{8} \*/')
 
 
-TARGET = os.path.join(ROOT, "build", "asm", "29E8.o")
-
-
 def asm_sizes():
-    """Instruction count per function, from the reassembled target."""
-    if not os.path.exists(TARGET):
-        return {}
-    return {name: len(ins) for name, ins in disassemble(TARGET).items()}
+    """Instruction count per function, from the reassembled targets."""
+    out = {}
+    for obj in TARGETS:
+        path = os.path.join(ROOT, obj)
+        if not os.path.exists(path):
+            return {}
+        out.update({n: len(ins) for n, ins in disassemble(path).items()})
+    return out
 
 
 def c_definitions(text):
@@ -81,7 +83,7 @@ def main():
     c_funcs &= set(sizes)
     total = len(asm_refs) + len(c_funcs)
     if not total:
-        print(f"nothing to report -- {TARGET} is missing, run `make all` first")
+        print("nothing to report -- build/asm/*.o missing, run `make all` first")
         return 1
 
     c_insns = sum(sizes.get(n, 0) for n in c_funcs)

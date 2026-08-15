@@ -54,7 +54,7 @@ DATA_OBJS := \
 # The main code blob: disassembled machine code, routed through maspsx so
 # that -G0/$at/li-expansion behaviour matches what PSY-Q's ASPSX.EXE would
 # have produced (needed for a byte-exact reassembly).
-CODE_OBJS := $(BUILD_DIR)/asm/29E8.o
+CODE_OBJS := $(BUILD_DIR)/asm/29E8.o $(BUILD_DIR)/asm/psyq.o
 
 TARGET_OBJS := $(DATA_OBJS) $(CODE_OBJS)
 
@@ -85,7 +85,7 @@ $(BUILD_DIR)/asm/data/800.rodata.o: $(ASM_DIR)/data/800.rodata.s | dirs
 $(BUILD_DIR)/asm/data/49A30.data.o: $(ASM_DIR)/data/49A30.data.s | dirs
 	$(AS) $(AS_FLAGS) -G0 -o $@ $<
 
-$(BUILD_DIR)/asm/29E8.o: $(ASM_DIR)/29E8.s | dirs
+$(BUILD_DIR)/asm/29E8.o $(BUILD_DIR)/asm/psyq.o: $(BUILD_DIR)/asm/%.o: $(ASM_DIR)/%.s | dirs
 	$(MASPSX) --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<
 
 $(BUILD_DIR)/src/%.s: $(SRC_DIR)/%.c | dirs

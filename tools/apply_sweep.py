@@ -108,15 +108,32 @@ def harvest(paths):
 
 
 def render(path, pipeline, names, bodies, decls):
+    """Write the file; return {func: (first_line, last_line)}."""
     used = [decls[k] for k in sorted(decls) if k not in set(names)
             and any(re.search(r"\b" + re.escape(k) + r"\b", bodies[n])
                     for n in names)]
-    open(path, "w").write(HEADER % (os.path.basename(path), pipeline)
-                          + "\n".join(used) + "\n\n"
-                          + "\n\n".join(bodies[n] for n in names) + "\n")
+    head = HEADER % (os.path.basename(path), pipeline) + "\n".join(used) + "\n\n"
+    text, spans, line = head, {}, head.count("\n") + 1
+    for i, n in enumerate(names):
+        body = bodies[n]
+        spans[n] = (line, line + body.count("\n"))
+        text += body + ("\n\n" if i + 1 < len(names) else "\n")
+        line += body.count("\n") + 2
+    open(path, "w").write(text)
+    return spans
 
 
-def compiles(path, pipeline):
+def compiles(path, pipeline, spans):
+    """[] if the file builds; otherwise the functions to blame.
+
+    Two error shapes have to be handled. GCC 2.7.2 prefixes a diagnostic
+    inside a function body with "In function 'name':", which names the
+    culprit outright. A parse error at top level -- which is what GCC
+    2.5.7 reports for a construct it cannot handle at all -- carries only
+    a line number, so the line is mapped back through the spans returned
+    by render(). Missing the second shape silently reports the file as
+    clean, which is how a file that does not build got written.
+    """
     cc_dir, flags = CC_FLAGS[pipeline]
     r = subprocess.run([os.path.join(cc_dir, "gcc"), "-B" + cc_dir + "/"] + flags
                        + ["-I" + INC_STAGE, "-S", path, "-o", "/dev/null"],
@@ -124,7 +141,17 @@ def compiles(path, pipeline):
                        env=dict(os.environ, LC_ALL="C"))
     if r.returncode == 0:
         return []
-    return list(dict.fromkeys(re.findall(r"In function .(\w+).:", r.stderr)))
+    bad = list(re.findall(r"In function .(\w+).:", r.stderr))
+    for lineno in re.findall(re.escape(path) + r":(\d+)", r.stderr):
+        lineno = int(lineno)
+        for name, (a, b) in spans.items():
+            if a <= lineno <= b:
+                bad.append(name)
+                break
+    if not bad:
+        print(f"    {path}: unattributable error, dropping the file")
+        print("    " + (r.stderr.strip().splitlines() or [""])[0][:120])
+    return list(dict.fromkeys(bad))
 
 
 def main():
@@ -161,17 +188,28 @@ def main():
             path = f"src/x_{TAG[pipeline]}_{idx:02d}.c"
             cur, rest = list(pending), []
             while cur:
-                render(path, pipeline, cur, bodies, decls)
-                bad = [b for b in compiles(path, pipeline) if b in cur]
+                spans = render(path, pipeline, cur, bodies, decls)
+                bad = [b for b in compiles(path, pipeline, spans) if b in cur]
                 if not bad:
                     break
                 for b in bad:
                     cur.remove(b)
                     rest.append(b)
             if not cur:
-                print(f"  ! {pipeline}: {len(rest)} function(s) would not "
-                      f"compile alone, left to INCLUDE_ASM")
-                losers += rest
+                # Every grouping failed. Fall back to one function per file:
+                # a function that will not compile even alone is genuinely
+                # unusable and goes back to INCLUDE_ASM, but it should not
+                # take the rest of the pipeline down with it.
+                solo = rest
+                rest = []
+                for name in solo:
+                    spans = render(path, pipeline, [name], bodies, decls)
+                    if compiles(path, pipeline, spans):
+                        losers.append(name)
+                        continue
+                    written.append(path)
+                    idx += 1
+                    path = f"src/x_{TAG[pipeline]}_{idx:02d}.c"
                 if os.path.exists(path):
                     os.remove(path)
                 break

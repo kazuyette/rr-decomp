@@ -534,48 +534,10 @@ void func_80047B20(unsigned char *p, int on) {
 }
 
 /* Appends one packet to another, refusing past a 0x20-word packet. */
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * int func_80047D24(unsigned char *a0, unsigned char *a1) {
- *     int len = a0[3] + a1[3] + 1;
- * 
- *     if (len < 0x21) {
- *         a0[3] = len;
- *         *(int *)a1 = 0;
- *         return 0;
- *     }
- *     return -1;
- * }
- */
-
 /* Splices a primitive into a list: the 24-bit next-pointer field moves
  * across while each tag keeps its own length byte. */
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * void func_80047A7C(unsigned int *a0, unsigned int a1, unsigned int *a2) {
- *     *a2 = (*a2 & 0xFF000000) | (*a0 & 0x00FFFFFF);
- *     *a0 = (*a0 & 0xFF000000) | (a1 & 0x00FFFFFF);
- * }
- */
-
 /* Builds an 0xE5 GPU command (drawing offset). The field widths depend on
  * D_80077378, which looks like a "wide framebuffer" flag. */
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * int func_800465A0(int a0, int a1) {
- *     int x, y;
- * 
- *     if (D_80077378 != 0) {
- *         x = a0 & 0xFFF;
- *         y = (a1 & 0xFFF) << 12;
- *     } else {
- *         x = a0 & 0x7FF;
- *         y = (a1 & 0x7FF) << 11;
- *     }
- *     return y | (x | 0xE5000000);
- * }
- */
-
 /* Builds an 0xE6 GPU command (mask bit setting). */
 void func_80046154(unsigned char *p, int a1, int a2) {
     p[3] = 2;
@@ -584,42 +546,7 @@ void func_80046154(unsigned char *p, int a1, int a2) {
 }
 
 /* Zeroes the first word of a1 entries of a 0x20-byte table, from index a0. */
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * void func_8005486C(int a0, unsigned int a1) {
- *     unsigned int i;
- * 
- *     for (i = 0; i < a1; i++) {
- *         *(int *)(D_801734A0 + ((a0 + i) << 5)) = 0;
- *     }
- * }
- */
-
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * int func_8004D238(short a0, short a1, short a2) {
- *     short *p;
- * 
- *     if ((unsigned short)a0 >= 0x18) {
- *         return -1;
- *     }
- *     p = (short *)(D_8007745C + (a0 << 4));
- *     p[0] = a1;
- *     p[1] = a2;
- *     return 0;
- * }
- */
-
 /* Sets bit 2 of a flag word inside a 168-byte record. */
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * void func_8005163C(short a0, short a1) {
- *     char *p = D_801E90E8[a0] + a1 * 168;
- * 
- *     *(int *)(p + 0x90) |= 4;
- * }
- */
-
 /* Shortest signed angle from a0 to a1, on the 0x1000-per-turn circle. */
 int func_80019CA8(int a0, int a1) {
     int diff;
@@ -636,17 +563,101 @@ int func_80019CA8(int a0, int a1) {
     return swapped ? diff : -diff;
 }
 
-/* Did not match; reverted to INCLUDE_ASM.
- * Kept here as a starting point for the next attempt.
- * void func_8001B284(int *car) {
- *     int t = D_801D7800 - 0x1D4C;
- * 
- *     if (t < 0) {
- *         t = -t;
- *     } else {
- *         car[44] = car[44] / 2;
- *         t = t * 6;
- *     }
- *     D_8012CFF0 = t + 0x3E8;
- * }
- */
+/* ------------------------------------------------------------------ */
+/* Second attempt at the seven that did not match first time round.     */
+/*                                                                      */
+/* The lesson from that round: what failed was not the logic but the    */
+/* order. GCC 2.7.2 at -O2 does not reorder freely enough to turn       */
+/* naturally-written C into the retail schedule, so these are written   */
+/* to mirror the instruction order of the disassembly -- conditions in  */
+/* the direction the branch tests, values computed into locals in the   */
+/* order the registers are filled, delay-slot assignments hoisted above */
+/* the branch they belong to.                                           */
+/* ------------------------------------------------------------------ */
+
+/* bgez tests >= 0, so the C tests the same way round; the multiply is
+ * decomposed the way the delay slot forces (t*2 before the branch). */
+void func_8001B284(int *car) {
+    int t = D_801D7800 - 0x1D4C;
+
+    if (t >= 0) {
+        int lat = car[44];
+        t = t * 6;
+        car[44] = lat / 2;
+    } else {
+        t = -t;
+    }
+    D_8012CFF0 = t + 0x3E8;
+}
+
+/* The 0xFFF mask sits in the branch's delay slot, so it is the value on
+ * the fall-through path and the else branch overwrites it. */
+int func_800465A0(int a0, int a1) {
+    int x = a0 & 0xFFF;
+    int y;
+
+    if (D_80077378 != 0) {
+        y = (a1 & 0xFFF) << 12;
+    } else {
+        y = (a1 & 0x7FF) << 11;
+        x = a0 & 0x7FF;
+    }
+    return y | (x | 0xE5000000);
+}
+
+void func_80047A7C(unsigned int *a0, unsigned int a1, unsigned int *a2) {
+    unsigned int t;
+
+    t = *a2 & 0xFF000000;
+    *a2 = t | (*a0 & 0x00FFFFFF);
+    t = *a0 & 0xFF000000;
+    *a0 = t | (a1 & 0x00FFFFFF);
+}
+
+/* addu then addiu: the +1 is its own instruction, so its own statement. */
+int func_80047D24(unsigned char *a0, unsigned char *a1) {
+    int len = a0[3] + a1[3];
+
+    len = len + 1;
+    if (len < 0x21) {
+        a0[3] = len;
+        *(int *)a1 = 0;
+        return 0;
+    }
+    return -1;
+}
+
+/* The index is masked to 16 bits for the bounds test but shifted with sra
+ * for the address, so both spellings appear literally. */
+int func_8004D238(int a0, short a1, short a2) {
+    short *p;
+
+    if ((a0 & 0xFFFF) < 0x18) {
+        p = (short *)(D_8007745C + ((a0 << 16) >> 12));
+        p[0] = a1;
+        p[1] = a2;
+        return 0;
+    }
+    return -1;
+}
+
+void func_8005163C(short a0, short a1) {
+    char *p = D_801E90E8[a0] + a1 * 168;
+
+    *(int *)(p + 0x90) |= 4;
+}
+
+/* Test at the bottom, early-out at the top -- beqz guards the loop and the
+ * back-edge is bnez. Index written (i + a0), which is the operand order of
+ * the addu. */
+void func_8005486C(int a0, unsigned int a1) {
+    unsigned int i = 0;
+
+    if (a1 == 0) {
+        return;
+    }
+    do {
+        *(int *)(D_801734A0 + ((i + a0) << 5)) = 0;
+        i++;
+    } while (i < a1);
+}

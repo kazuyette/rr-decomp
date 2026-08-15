@@ -30,6 +30,17 @@ extern int D_80076E04;
 extern short D_80077460;
 extern short D_80077462;
 extern short D_80079B74;
+extern int   D_80077578;
+extern int   D_800776A8;
+extern int   D_800776B0;
+extern int   D_800776B8;
+extern int   D_801D7800;
+extern int   D_8012CFF0;
+extern int  *D_80173148;
+extern unsigned short *D_8007758C;
+extern char *D_801734A0;
+extern char *D_8007745C;
+extern char *D_801E90E8[];
 
 extern void func_80032A54(void);
 
@@ -473,4 +484,148 @@ int func_80055800(void) {
 
 int func_80055808(void) {
     return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Third batch. Larger and more speculative than the first two: these   */
+/* have real control flow, so the C spelling is a judgement call in a   */
+/* way the plain accessors were not. tools/revert_failed.py exists so   */
+/* that a wrong guess costs one line rather than an evening.            */
+/* ------------------------------------------------------------------ */
+
+int func_80059040(void) {
+    return D_8012CDA8 == 0;
+}
+
+int func_8002D11C(void) {
+    return *D_80173148;
+}
+
+/* getTPage-shaped: page number in the high bits, x offset in the low six. */
+int func_80047920(int a0, int a1) {
+    return ((a1 << 6) | ((a0 >> 4) & 0x3F)) & 0xFFFF;
+}
+
+unsigned short func_80057638(int a0) {
+    return D_8007758C[a0];
+}
+
+void func_8005495C(int a0, int a1, int a2) {
+    D_800776A8 = a0;
+    D_800776B0 = a1;
+    D_800776B8 = a2;
+}
+
+int func_800554EC(unsigned int a0) {
+    if (a0 < 0x20) {
+        D_80077578 = a0;
+        return 0;
+    }
+    return 1;
+}
+
+/* Sets or clears the semi-transparency bit of a primitive's code byte. */
+void func_80047B20(unsigned char *p, int on) {
+    if (on) {
+        p[7] |= 1;
+    } else {
+        p[7] &= 0xFE;
+    }
+}
+
+/* Appends one packet to another, refusing past a 0x20-word packet. */
+int func_80047D24(unsigned char *a0, unsigned char *a1) {
+    int len = a0[3] + a1[3] + 1;
+
+    if (len < 0x21) {
+        a0[3] = len;
+        *(int *)a1 = 0;
+        return 0;
+    }
+    return -1;
+}
+
+/* Splices a primitive into a list: the 24-bit next-pointer field moves
+ * across while each tag keeps its own length byte. */
+void func_80047A7C(unsigned int *a0, unsigned int a1, unsigned int *a2) {
+    *a2 = (*a2 & 0xFF000000) | (*a0 & 0x00FFFFFF);
+    *a0 = (*a0 & 0xFF000000) | (a1 & 0x00FFFFFF);
+}
+
+/* Builds an 0xE5 GPU command (drawing offset). The field widths depend on
+ * D_80077378, which looks like a "wide framebuffer" flag. */
+int func_800465A0(int a0, int a1) {
+    int x, y;
+
+    if (D_80077378 != 0) {
+        x = a0 & 0xFFF;
+        y = (a1 & 0xFFF) << 12;
+    } else {
+        x = a0 & 0x7FF;
+        y = (a1 & 0x7FF) << 11;
+    }
+    return y | (x | 0xE5000000);
+}
+
+/* Builds an 0xE6 GPU command (mask bit setting). */
+void func_80046154(unsigned char *p, int a1, int a2) {
+    p[3] = 2;
+    *(unsigned int *)(p + 4) = (a1 ? 0xE6000002 : 0xE6000000) | (a2 != 0);
+    *(unsigned int *)(p + 8) = 0;
+}
+
+/* Zeroes the first word of a1 entries of a 0x20-byte table, from index a0. */
+void func_8005486C(int a0, unsigned int a1) {
+    unsigned int i;
+
+    for (i = 0; i < a1; i++) {
+        *(int *)(D_801734A0 + ((a0 + i) << 5)) = 0;
+    }
+}
+
+int func_8004D238(short a0, short a1, short a2) {
+    short *p;
+
+    if ((unsigned short)a0 >= 0x18) {
+        return -1;
+    }
+    p = (short *)(D_8007745C + (a0 << 4));
+    p[0] = a1;
+    p[1] = a2;
+    return 0;
+}
+
+/* Sets bit 2 of a flag word inside a 168-byte record. */
+void func_8005163C(short a0, short a1) {
+    char *p = D_801E90E8[a0] + a1 * 168;
+
+    *(int *)(p + 0x90) |= 4;
+}
+
+/* Shortest signed angle from a0 to a1, on the 0x1000-per-turn circle. */
+int func_80019CA8(int a0, int a1) {
+    int diff;
+    int swapped;
+
+    a0 &= 0xFFF;
+    a1 &= 0xFFF;
+    swapped = a0 < a1;
+    diff = swapped ? a1 - a0 : a0 - a1;
+    if (diff > 0x800) {
+        diff = 0x1000 - diff;
+        swapped = !swapped;
+    }
+    return swapped ? diff : -diff;
+}
+
+void func_8001B284(int *car) {
+    int t = D_801D7800 - 0x1D4C;
+
+    if (t < 0) {
+        t = -t;
+    } else {
+        car[44] = car[44] / 2;
+        t = t * 6;
+    }
+    D_8012CFF0 = t + 0x3E8;
 }

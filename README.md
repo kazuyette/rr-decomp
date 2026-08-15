@@ -7,6 +7,24 @@ No copyrighted game data is committed here. You need your own legally-owned copy
 to build or verify. The `asm/` listings are disassembly (mnemonics + symbol names), not the
 binary — the same practice as every project on [decomp.dev](https://decomp.dev).
 
+## The disassembly is not in this repository
+
+`asm/` is generated, never committed. A disassembly is the game's own code
+and data in another notation; committing it would put copyrighted material
+here exactly as committing `PSX.EXE` would. What is tracked is everything
+needed to reproduce it from a copy you own:
+
+```sh
+cp /path/to/PSX.EXE .          # SLPS-00001, sha1 31ec5d36...
+make setup                     # runs splat, writes asm/
+make all
+```
+
+`make setup --clean` (or `python3 tools/setup.py --clean`) removes `asm/`
+first, which is required after renaming a symbol: splat never overwrites a
+file that already exists, so a rename otherwise appears to do nothing.
+
+
 ## Status
 
 Run `python3 tools/progress.py`. As of the restructuring commit:

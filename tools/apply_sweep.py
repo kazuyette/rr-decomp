@@ -9,7 +9,7 @@ applies that answer to the tree:
     src/x_P_NN.c, which the Makefile compiles with exactly P;
   * every function that matched under none is deleted from the batch file
     and its INCLUDE_ASM line restored in src/29E8.c;
-  * the batch files (src/b5_*.c, src/batch4.c) are removed once emptied.
+  * the candidate files (src/cand_*.c) are removed once emptied.
 
 The NN split exists for one reason: two functions can disagree about the
 type of a global they share, or about a callee's signature, and then they
@@ -183,7 +183,7 @@ def main():
     dry = "--dry-run" in sys.argv
     wins = json.load(open(SWEEP))
     batch = sorted("src/" + f for f in os.listdir("src")
-                   if f.startswith("b5_") or f == "batch4.c")
+                   if f.startswith("cand_"))
     if not batch:
         print("no batch files left to file")
         return 0
@@ -213,7 +213,28 @@ def main():
         subprocess.run(["cp", "-f", os.path.join("include", h), INC_STAGE])
 
     written = []
-    for pipeline, names in chosen.items():
+
+    # Fast path. A candidate file holding exactly one function needs no
+    # regrouping at all: renaming it is enough, and it keeps the function
+    # in the translation unit it was measured in. That matters -- GCC
+    # 2.7.2 allocates registers across the whole unit, so a function moved
+    # in beside others can stop matching, which is how batch 5 lost nine.
+    solo = {}
+    for path in batch:
+        found = [n for n in bodies if f"src/cand_{n}.c" == path]
+        if len(found) == 1 and found[0] in wins:
+            solo[found[0]] = path
+    for name, path in solo.items():
+        pipeline = wins[name][0]
+        dest = f"src/x_{TAG[pipeline]}_{name}.c"
+        os.rename(path, dest)
+        written.append(dest)
+        batch.remove(path)
+        chosen[pipeline].remove(name)
+        if not chosen[pipeline]:
+            del chosen[pipeline]
+
+    for pipeline, names in list(chosen.items()):
         pending, idx = list(names), 0
         while pending:
             path = f"src/x_{TAG[pipeline]}_{idx:02d}.c"

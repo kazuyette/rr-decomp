@@ -30,8 +30,8 @@ reproduces the delay-slot move the real ASPSX reorderer performed. Those
 two travel together: neither is meaningful without the other.
 
 Usage:
-  python3 tools/flag_sweep.py                  # every src/b5_*.c and batch4.c
-  python3 tools/flag_sweep.py src/b5_00.c ...  # named files only
+  python3 tools/flag_sweep.py                  # every src/cand_*.c
+  python3 tools/flag_sweep.py src/cand_x.c ... # named files only
 
 Writes build/sweep.json:  {"func_8004xxxx": ["o1", "o2"], ...}
 """
@@ -107,7 +107,7 @@ def main():
     files = [a for a in sys.argv[1:] if a.endswith(".c")]
     if not files:
         files = sorted(f"src/{f}" for f in os.listdir("src")
-                       if f.startswith("b5_") or f == "batch4.c")
+                       if f.startswith("cand_"))
     if not os.path.exists(TARGET):
         print("build/asm/29E8.o missing -- run `make all` first")
         return 1
@@ -120,7 +120,7 @@ def main():
     target = disassemble(TARGET)
     wins = {}
     for src in files:
-        line = [os.path.basename(src).ljust(12)]
+        line = [os.path.basename(src).ljust(28)]
         for pipeline in PIPELINES:
             o, err = build_one(src, pipeline)
             if o is None:

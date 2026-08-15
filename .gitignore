@@ -15,3 +15,10 @@ PSX.EXE
 *.rep
 build/
 dist/
+
+# The disassembly is the game's own code and data, only in another
+# notation -- committing it would put copyrighted material in this repo
+# no less than committing PSX.EXE would. It is regenerated from your own
+# copy of the executable by `make setup`, which is why psx.exe.yaml,
+# symbol_addrs.txt and reloc_addrs.txt are tracked and asm/ is not.
+asm/

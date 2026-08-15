@@ -63,7 +63,14 @@ TARGET_OBJS := $(DATA_OBJS) $(CODE_OBJS)
 SRC_FILES := $(wildcard $(SRC_DIR)/*.c)
 BASE_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/src/%.o,$(SRC_FILES))
 
-.PHONY: all dirs report clean
+.PHONY: all dirs report clean setup
+
+# Regenerate asm/ from your own PSX.EXE. Required once after cloning, and
+# again after any change to psx.exe.yaml or symbol_addrs.txt. splat never
+# overwrites a file that exists, so renaming a symbol means deleting the
+# listings that mention it before re-running this.
+setup:
+	$(PYTHON) tools/setup.py
 all: $(TARGET_OBJS) $(BUILD_DIR)/matched.o
 
 dirs:

@@ -47,28 +47,54 @@ WINDOW = 30                 # calls longer than this are not local evidence
 
 
 def load():
-    """{func: (address, callees)} for every function with a listing."""
+    """{func: (address, callees, rodata refs)} for every function.
+
+    Read from asm/<unit>.s, the whole unit disassembled, not from
+    asm/nonmatchings/. splat writes a per-function listing only for
+    functions still on INCLUDE_ASM, so reading those makes every function
+    already converted to C vanish from the analysis -- 214 of them here,
+    including their call edges, their rodata anchors and their pipeline.
+    The evidence would then be missing for exactly the functions we have
+    the most information about.
+
+    This is the same mistake progress.py made, from the same assumption:
+    that a listing exists for every function. It does, but only in the
+    full unit dump.
+    """
     out = {}
-    for path in glob.glob(os.path.join("asm", "nonmatchings", "*", "*.s")):
-        text = open(path).read()
-        first = re.search(r"/\*\s*\w+\s+([0-9A-F]{8})", text)
-        if not first:
+    for path in glob.glob(os.path.join("asm", "*.s")):
+        if os.path.basename(path) in ("header.s",):
             continue
-        name = os.path.basename(path)[:-2]
-        refs = set()
-        for sym in re.findall(r"%(?:hi|lo)\((\w+)\)", text):
-            m = re.match(r"(?:D_|jtbl_|_)?([0-9A-F]{8})$", sym)
-            if m and RO_LO <= int(m.group(1), 16) < RO_HI:
-                refs.add(int(m.group(1), 16))
-        out[name] = (int(first.group(1), 16),
-                     set(re.findall(r"\bjal\s+(\w+)", text)), refs)
-    return out
+        name = None
+        for line in open(path):
+            g = re.match(r"^glabel (\w+)", line)
+            if g:
+                name = g.group(1)
+                out.setdefault(name, [None, set(), set()])
+                continue
+            if name is None:
+                continue
+            m = re.match(r"\s*/\*\s*\w+\s+([0-9A-F]{8})\s+[0-9A-F]{8}\s*\*/\s*(\S+)(.*)",
+                         line)
+            if not m:
+                continue
+            if out[name][0] is None:
+                out[name][0] = int(m.group(1), 16)
+            if m.group(2) == "jal":
+                callee = m.group(3).strip().split()[0] if m.group(3).strip() else ""
+                if callee:
+                    out[name][1].add(callee)
+            for sym in re.findall(r"%(?:hi|lo)\((\w+)\)", m.group(3)):
+                v = re.match(r"(?:D_|jtbl_|_)?([0-9A-F]{8})$", sym)
+                if v and RO_LO <= int(v.group(1), 16) < RO_HI:
+                    out[name][2].add(int(v.group(1), 16))
+    return {n: tuple(v) for n, v in out.items() if v[0] is not None}
 
 
 def main():
     funcs = load()
     if not funcs:
-        print("no listings -- run `make setup` first")
+        print("no asm/<unit>.s -- run `make setup` first")
         return 1
     game = sorted((a, n, calls, refs) for n, (a, calls, refs) in funcs.items()
                   if a < GAME_HI)
@@ -119,9 +145,10 @@ def main():
                            "support": s} for b, s in seams], indent=1))
         return 0
 
+    source = ("from pipelines.json" if os.path.exists("pipelines.json")
+              else "pipelines.json absent -- run tools/flag_sweep.py src/x_*.c")
     print(f"{len(game)} game functions, "
-          f"{len(unique)} with a discriminating pipeline "
-          f"({'pipelines.json missing' if not unique else 'from pipelines.json'})")
+          f"{len(unique)} with a discriminating pipeline ({source})")
     print(f"\n{len(seams)} candidate boundaries "
           f"(support = how many of the three signals agree):\n")
     for b, s in seams:

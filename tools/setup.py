@@ -11,8 +11,10 @@ Run this once after cloning, with PSX.EXE (SLPS-00001, sha1
 31ec5d3616a0fdb456da27a984fc5b92259ff1f6) in the repository root, and
 again whenever psx.exe.yaml or symbol_addrs.txt changes.
 
-splat never overwrites an existing file, so a symbol rename only takes
-effect after the listings mentioning it are deleted; --clean does that.
+asm/ is deleted and rebuilt on every run. splat does not overwrite parts
+of what it writes, so anything left from a previous state could otherwise
+survive into a run meant to replace it -- which is how a symbol rename
+used to appear to do nothing.
 """
 import hashlib
 import re
@@ -124,7 +126,14 @@ def main():
     if not ensure_splat():
         return 1
 
-    if "--clean" in sys.argv and os.path.isdir("asm"):
+    # Always start from nothing. splat will not overwrite some of what it
+    # writes, so an asm/ left over from an earlier state can survive into
+    # a run that should have replaced it -- and a run interrupted partway
+    # leaves a truncated listing that looks perfectly valid to the
+    # assembler. asm/29E8.s is the target every conversion is measured
+    # against; it must be a function of PSX.EXE alone, never of whatever
+    # happened to be on disk. Regenerating it costs seconds.
+    if os.path.isdir("asm"):
         shutil.rmtree("asm")
 
     # Two passes, because the tree needs two different things out of the

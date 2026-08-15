@@ -196,7 +196,15 @@ def regenerate_missing_listings(names):
         return
     print(f"{len(missing)} restored function(s) have no listing "
           f"(e.g. {missing[0]}); re-running tools/setup.py.")
-    subprocess.run([sys.executable, "tools/setup.py"])
+    r = subprocess.run([sys.executable, "tools/setup.py"])
+    if r.returncode != 0:
+        # Not a warning. A half-written asm/29E8.s still assembles, so the
+        # build stays green and every number afterwards is quietly wrong
+        # -- the target shrinks, and functions that were converted look
+        # like they never existed.
+        print("\ntools/setup.py FAILED. asm/ may be incomplete; do not "
+              "trust verify.py or progress.py until `make setup` succeeds.")
+        sys.exit(r.returncode)
 
 
 def main():

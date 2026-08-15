@@ -1600,16 +1600,43 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8003F164);
 
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80032A24);
-
-
-
-
-
-
-
-
-
-
-
-
-
+INCLUDE_ASM("asm/nonmatchings/29E8", car_simulate);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80012EF0);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80013338);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_800177B8);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_800181C8);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001AE90);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001B374);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001D2C8);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001D6C8);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001F23C);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001FBC0);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80021BE0);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80022A58);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002B974);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002BB50);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002BBA0);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002C404);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002C500);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002CC44);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002CE0C);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002D240);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002F1A4);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8002F400);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80031044);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80031FD0);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80032150);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_800324F4);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80032F50);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80034050);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8003446C);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80035638);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80036D30);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_800373BC);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80037478);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80038018);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_800382A0);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80038B80);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8003BB88);
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8003D9B0);
+INCLUDE_ASM("asm/nonmatchings/29E8", snd_play_se);

@@ -534,38 +534,47 @@ void func_80047B20(unsigned char *p, int on) {
 }
 
 /* Appends one packet to another, refusing past a 0x20-word packet. */
-int func_80047D24(unsigned char *a0, unsigned char *a1) {
-    int len = a0[3] + a1[3] + 1;
-
-    if (len < 0x21) {
-        a0[3] = len;
-        *(int *)a1 = 0;
-        return 0;
-    }
-    return -1;
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * int func_80047D24(unsigned char *a0, unsigned char *a1) {
+ *     int len = a0[3] + a1[3] + 1;
+ * 
+ *     if (len < 0x21) {
+ *         a0[3] = len;
+ *         *(int *)a1 = 0;
+ *         return 0;
+ *     }
+ *     return -1;
+ * }
+ */
 
 /* Splices a primitive into a list: the 24-bit next-pointer field moves
  * across while each tag keeps its own length byte. */
-void func_80047A7C(unsigned int *a0, unsigned int a1, unsigned int *a2) {
-    *a2 = (*a2 & 0xFF000000) | (*a0 & 0x00FFFFFF);
-    *a0 = (*a0 & 0xFF000000) | (a1 & 0x00FFFFFF);
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_80047A7C(unsigned int *a0, unsigned int a1, unsigned int *a2) {
+ *     *a2 = (*a2 & 0xFF000000) | (*a0 & 0x00FFFFFF);
+ *     *a0 = (*a0 & 0xFF000000) | (a1 & 0x00FFFFFF);
+ * }
+ */
 
 /* Builds an 0xE5 GPU command (drawing offset). The field widths depend on
  * D_80077378, which looks like a "wide framebuffer" flag. */
-int func_800465A0(int a0, int a1) {
-    int x, y;
-
-    if (D_80077378 != 0) {
-        x = a0 & 0xFFF;
-        y = (a1 & 0xFFF) << 12;
-    } else {
-        x = a0 & 0x7FF;
-        y = (a1 & 0x7FF) << 11;
-    }
-    return y | (x | 0xE5000000);
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * int func_800465A0(int a0, int a1) {
+ *     int x, y;
+ * 
+ *     if (D_80077378 != 0) {
+ *         x = a0 & 0xFFF;
+ *         y = (a1 & 0xFFF) << 12;
+ *     } else {
+ *         x = a0 & 0x7FF;
+ *         y = (a1 & 0x7FF) << 11;
+ *     }
+ *     return y | (x | 0xE5000000);
+ * }
+ */
 
 /* Builds an 0xE6 GPU command (mask bit setting). */
 void func_80046154(unsigned char *p, int a1, int a2) {
@@ -575,32 +584,41 @@ void func_80046154(unsigned char *p, int a1, int a2) {
 }
 
 /* Zeroes the first word of a1 entries of a 0x20-byte table, from index a0. */
-void func_8005486C(int a0, unsigned int a1) {
-    unsigned int i;
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_8005486C(int a0, unsigned int a1) {
+ *     unsigned int i;
+ * 
+ *     for (i = 0; i < a1; i++) {
+ *         *(int *)(D_801734A0 + ((a0 + i) << 5)) = 0;
+ *     }
+ * }
+ */
 
-    for (i = 0; i < a1; i++) {
-        *(int *)(D_801734A0 + ((a0 + i) << 5)) = 0;
-    }
-}
-
-int func_8004D238(short a0, short a1, short a2) {
-    short *p;
-
-    if ((unsigned short)a0 >= 0x18) {
-        return -1;
-    }
-    p = (short *)(D_8007745C + (a0 << 4));
-    p[0] = a1;
-    p[1] = a2;
-    return 0;
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * int func_8004D238(short a0, short a1, short a2) {
+ *     short *p;
+ * 
+ *     if ((unsigned short)a0 >= 0x18) {
+ *         return -1;
+ *     }
+ *     p = (short *)(D_8007745C + (a0 << 4));
+ *     p[0] = a1;
+ *     p[1] = a2;
+ *     return 0;
+ * }
+ */
 
 /* Sets bit 2 of a flag word inside a 168-byte record. */
-void func_8005163C(short a0, short a1) {
-    char *p = D_801E90E8[a0] + a1 * 168;
-
-    *(int *)(p + 0x90) |= 4;
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_8005163C(short a0, short a1) {
+ *     char *p = D_801E90E8[a0] + a1 * 168;
+ * 
+ *     *(int *)(p + 0x90) |= 4;
+ * }
+ */
 
 /* Shortest signed angle from a0 to a1, on the 0x1000-per-turn circle. */
 int func_80019CA8(int a0, int a1) {
@@ -618,14 +636,17 @@ int func_80019CA8(int a0, int a1) {
     return swapped ? diff : -diff;
 }
 
-void func_8001B284(int *car) {
-    int t = D_801D7800 - 0x1D4C;
-
-    if (t < 0) {
-        t = -t;
-    } else {
-        car[44] = car[44] / 2;
-        t = t * 6;
-    }
-    D_8012CFF0 = t + 0x3E8;
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_8001B284(int *car) {
+ *     int t = D_801D7800 - 0x1D4C;
+ * 
+ *     if (t < 0) {
+ *         t = -t;
+ *     } else {
+ *         car[44] = car[44] / 2;
+ *         t = t * 6;
+ *     }
+ *     D_8012CFF0 = t + 0x3E8;
+ * }
+ */

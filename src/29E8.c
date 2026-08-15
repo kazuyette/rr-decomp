@@ -1698,3 +1698,17 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80059170);
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800591F8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80059228);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8001B284);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_800465A0);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80047A7C);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_80047D24);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D238);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8005163C);
+
+INCLUDE_ASM("asm/nonmatchings/29E8", func_8005486C);

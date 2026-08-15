@@ -29,7 +29,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80012C14);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80012E44);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80012EF0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80012FE4);
 
@@ -90,7 +89,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80016368);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800163E4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800177B8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", track_side_of_segment);
 
@@ -130,7 +128,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", car_simulate);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001AA60);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8001AE90);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001B0CC);
 
@@ -192,7 +189,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8001F0FC);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001F23C);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8001FBC0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001FC58);
 
@@ -230,7 +226,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8002128C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800217F4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80021BE0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80021CB4);
 
@@ -403,17 +398,14 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8002B66C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8002B6F4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8002B974);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8002BA20);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8002BAE0);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8002BB50);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8002BBA0);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8002C404);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8002C500);
 
@@ -492,7 +484,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80030EF4);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80030F30);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80031044);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800310C8);
 
@@ -524,7 +515,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80031E48);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80031EC4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80031FD0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800320E0);
 
@@ -586,16 +576,13 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80036D30);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80037238);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800373BC);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80037478);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8003757C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800376EC);
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800377B4);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80037850);
 
@@ -619,7 +606,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800382A0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80038968);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80038B80);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80038BB4);
 
@@ -673,7 +659,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A678);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A748);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", snd_play_se);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A9D8);
 
@@ -881,7 +866,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80040690);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80040770);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80040868);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800408CC);
 
@@ -985,7 +969,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800437AC);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80043984);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800439D8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80043B08);
 
@@ -1058,7 +1041,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80044A68);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80044BBC);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", rsin);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", rsin_quadrant);
 
@@ -1117,11 +1099,8 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004617C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", SetDrawEnv);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80046430);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80046480);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80046510);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800465DC);
 
@@ -1140,7 +1119,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80046D98);
 
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800470D0);
 
 
 
@@ -1150,13 +1128,11 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80047210);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80047354);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80047508);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80047604);
 
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004788C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80047938);
 
@@ -1164,7 +1140,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800479C8);
 
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", AddPrim);
 
 
 
@@ -1345,7 +1320,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004BE7C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004BF4C);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004C0B8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004C0E0);
 
@@ -1379,9 +1353,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D278);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D328);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D388);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D3A4);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D3C0);
 
@@ -1408,7 +1380,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D8C4);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D9B4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004DB58);
 
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004DC34);
@@ -1505,7 +1476,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80051E94);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80051EF0);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80051F6C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80051F8C);
 
@@ -1612,7 +1582,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80054730);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800547A0);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800548A8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", D_8005497C);
 
@@ -1683,7 +1652,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80058E58);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80058EB8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80058F64);
 
 
 

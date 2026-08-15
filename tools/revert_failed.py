@@ -22,7 +22,7 @@ GENERATED = "src/29E8.c"
 SEGMENT = "asm/nonmatchings/29E8"
 # hand-written units a conversion might have landed in
 UNITS = ["src/globals.c", "src/c_o1.c", "src/c_o1_ndb.c", "src/c_o2.c",
-         "src/c_257.c", "src/gte.c"]
+         "src/c_257.c", "src/gte.c", "src/batch4.c"]
 # never touch these: known, documented exceptions
 KEEP = {"_start"}
 

@@ -111,6 +111,12 @@ def harvest(paths):
             s = line.strip()
             if not s.endswith(";") or s.startswith(("#", "/*", "*")):
                 continue
+            # A typedef is not a declaration to carry over: the generated
+            # files include m2c_macros.h, which already defines s8..u32, and
+            # re-emitting `typedef int s32;` next to it is a redefinition
+            # error that belongs to no function.
+            if s.startswith("typedef"):
+                continue
             nm = re.findall(r"\b(\w+)\s*[\(;\[]", s)
             if nm:
                 decls.setdefault(nm[0], s)
@@ -182,6 +188,12 @@ def main():
         print("no batch files left to file")
         return 0
     bodies, decls = harvest(batch)
+
+    # A previous run leaves src/x_*.c behind. They are regenerated from
+    # scratch here, and keeping the old ones would define every surviving
+    # function twice.
+    for stale in sorted(f for f in os.listdir("src") if f.startswith("x_")):
+        os.remove(os.path.join("src", stale))
 
     chosen = {}
     for name, pipelines in wins.items():

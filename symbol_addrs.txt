@@ -28,3 +28,77 @@ func_800536B0 = 0x800536B0; // type:func
 func_800536D8 = 0x800536D8; // type:func
 func_80053700 = 0x80053700; // type:func
 func_8005373C = 0x8005373C; // type:func
+
+// ---------------------------------------------------------------
+// Ghidra analysis session, Aug 2026. Names derived by reading each
+// consumer function, not by heuristic. See TRACK_SPINE_FORMAT.md.
+// ---------------------------------------------------------------
+// called by main right after SetMem(2)
+game_init = 0x800121F4; // type:func
+// OT is 0x2C0 entries
+ClearOTagR = 0x80045AEC; // type:func
+PutDrawEnv = 0x80045C44; // type:func
+PutDispEnv = 0x80045D64; // type:func
+DrawOTag = 0x80045BEC; // type:func
+// 131 call sites
+AddPrim = 0x80047A40; // type:func
+SetDrawEnv = 0x800461D0; // type:func
+// even function, angle masked with 0xFFF, 4096 = full turn
+rcos = 0x80044E2C; // type:func
+// odd function
+rsin = 0x80044D0C; // type:func
+// quarter-wave helper
+rsin_quadrant = 0x80044D70; // type:func
+SquareRoot = 0x80040B54; // type:func
+// SE dispatch, three id groups: <0x11, <0x1F, <0x3A
+snd_play_se = 0x8003A958; // type:func
+// distance-attenuated volume from world point (0x6991, 0xA23A)
+snd_update_ambience_volume = 0x80014B5C; // type:func
+// copies DRAWENV and shifts the vertical clip
+gfx_set_letterbox = 0x80029978; // type:func
+// ground height and track progress
+track_query_surface = 0x80017DF4; // type:func
+// decodes the 20-byte TrackNode, authoritative for its layout
+track_get_node_edge = 0x800178A0; // type:func
+track_side_of_segment = 0x80017838; // type:func
+// picks one of the three node tables
+track_select = 0x80020524; // type:func
+// per-frame integration and collision
+car_update_and_collide = 0x8001C490; // type:func
+// 859 instructions, the drift model
+car_simulate = 0x80019CF4; // type:func
+// race loop, drives g_race_phase
+st_race_main = 0x80014C2C; // type:func
+st_race_init = 0x8001384C; // type:func
+st_title_init = 0x8001CF28; // type:func
+// also used by state 12
+st_title_main = 0x8001D120; // type:func
+// 40 function pointers, indexed by g_game_state
+g_state_handlers = 0x80070EA4;
+// quarter sine wave, 1024 entries
+g_sin_table = 0x800757A0;
+// TrackNode[256]
+g_track_nodes_0 = 0x8005A44C;
+// TrackNode[256]
+g_track_nodes_1 = 0x8005B84C;
+// TrackNode[368]
+g_track_nodes_2 = 0x8005CC4C;
+
+// RAM globals (BSS). Not declarable here until psx.exe.yaml gets a bss
+// segment with a real bss_size, so they are recorded as notes only:
+//   0x801D34F8  g_game_state  -- starts at 2
+//   0x8007B1E0  g_frame_count  -- bit 0 selects the double buffer
+//   0x801D7768  g_buffer_index  -- buffer stride 0x22BF4
+//   0x8012CF68  g_frame_ctx  -- DRAWENV +0, DISPENV +0x5C, OT +0x70
+//   0x801D9060  g_race_phase  -- 0 intro, 1 grid, 2 racing, 3 finish, 4 results, 5/6 end
+//   0x80173310  g_race_frame_count
+//   0x801D77D0  g_paused  -- toggled by START (0x0800)
+//   0x801733A8  g_pause_cursor  -- 0..2
+//   0x801D35AE  g_pad_buttons
+//   0x8007C258  g_player_car
+//   0x8007C248  g_active_car
+//   0x801E9250  g_entities  -- 12 entities of 0x114 bytes
+//   0x801E91F0  g_camera_rot_matrix  -- pushed via SetRotMatrix
+//   0x801E90E0  g_track_node_count
+//   0x801733D8  g_track_nodes  -- TrackNode pointer for the current course
+//   0x801733A0  g_track_mirror_x  -- mirrored-course mechanism

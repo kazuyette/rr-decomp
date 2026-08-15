@@ -59,7 +59,7 @@ make report   # requires objdiff-cli
 
 ## Next steps
 
-1. Subdivide `psx.exe.yaml` into plausible translation units along the flag-set seams, and
+1. Subdivide `psx.exe.yaml` — splat suggests rodata seams at `0xF1C`, `0x11A0`, `0x16C4`, `0x18B0`, `0x19DC`, `0x2178` (seven rodata-owning units). Also into plausible translation units along the flag-set seams, and
    name them by subsystem using the 40-entry state machine at `0x80070EA4`
    (race / title / menu / replay / memory card / test mode).
 2. Convert leaf functions (no outgoing calls) to real C first — they match most easily.

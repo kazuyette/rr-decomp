@@ -1,6 +1,6 @@
 #include "common.h"
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800121F4);
+INCLUDE_ASM("asm/nonmatchings/29E8", game_init);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", main);
 
@@ -49,7 +49,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80013494);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800135B8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8001384C);
+INCLUDE_ASM("asm/nonmatchings/29E8", st_race_init);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80013BB8);
 
@@ -67,9 +67,9 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80014A74);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80014AE4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80014B5C);
+INCLUDE_ASM("asm/nonmatchings/29E8", snd_update_ambience_volume);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80014C2C);
+INCLUDE_ASM("asm/nonmatchings/29E8", st_race_main);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80015AAC);
 
@@ -93,15 +93,15 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800163E4);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800177B8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80017838);
+INCLUDE_ASM("asm/nonmatchings/29E8", track_side_of_segment);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800178A0);
+INCLUDE_ASM("asm/nonmatchings/29E8", track_get_node_edge);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80017A14);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80017B58);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80017DF4);
+INCLUDE_ASM("asm/nonmatchings/29E8", track_query_surface);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800181C8);
 
@@ -130,7 +130,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80019C6C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80019CA8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80019CF4);
+INCLUDE_ASM("asm/nonmatchings/29E8", car_simulate);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001AA60);
 
@@ -150,7 +150,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8001BD9C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001C0E4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8001C490);
+INCLUDE_ASM("asm/nonmatchings/29E8", car_update_and_collide);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001CD90);
 
@@ -164,13 +164,13 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8001CEA0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001CEC8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8001CF28);
+INCLUDE_ASM("asm/nonmatchings/29E8", st_title_init);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001CFD0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001CFF8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8001D120);
+INCLUDE_ASM("asm/nonmatchings/29E8", st_title_main);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8001D2C8);
 
@@ -220,7 +220,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800203F0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800204C8);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80020524);
+INCLUDE_ASM("asm/nonmatchings/29E8", track_select);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800205E4);
 
@@ -370,7 +370,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800297D8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8002989C);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80029978);
+INCLUDE_ASM("asm/nonmatchings/29E8", gfx_set_letterbox);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80029A64);
 
@@ -693,7 +693,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A678);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A748);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A958);
+INCLUDE_ASM("asm/nonmatchings/29E8", snd_play_se);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8003A9D8);
 
@@ -916,7 +916,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004095C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800409D4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80040B54);
+INCLUDE_ASM("asm/nonmatchings/29E8", SquareRoot);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80040C00);
 
@@ -1090,11 +1090,11 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80044A68);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80044BBC);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80044D0C);
+INCLUDE_ASM("asm/nonmatchings/29E8", rsin);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80044D70);
+INCLUDE_ASM("asm/nonmatchings/29E8", rsin_quadrant);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80044E2C);
+INCLUDE_ASM("asm/nonmatchings/29E8", rcos);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80044F04);
 
@@ -1132,18 +1132,18 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004591C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800459C0);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045AEC);
+INCLUDE_ASM("asm/nonmatchings/29E8", ClearOTagR);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80045B40);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80045B78);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045BEC);
+INCLUDE_ASM("asm/nonmatchings/29E8", DrawOTag);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045C44);
+INCLUDE_ASM("asm/nonmatchings/29E8", PutDrawEnv);
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045D64);
+INCLUDE_ASM("asm/nonmatchings/29E8", PutDispEnv);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80046078);
 
@@ -1155,7 +1155,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80046154);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004617C);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800461D0);
+INCLUDE_ASM("asm/nonmatchings/29E8", SetDrawEnv);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80046430);
 
@@ -1209,7 +1209,7 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800479C8);
 
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80047A40);
+INCLUDE_ASM("asm/nonmatchings/29E8", AddPrim);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80047A7C);
 

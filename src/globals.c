@@ -146,10 +146,16 @@ int func_80038264(int a0, int a1) {
     return d;
 }
 
-/* Four small "set object state to preset N" setters -- same two-field shape
- * (a type/kind byte at offset 3, a companion byte at offset 7), each with
- * its own pair of constants. Likely an enum-indexed table if disassembled
- * further, but each is its own tiny function here. */
+/* libgpu primitive initialisers: store the packet length at byte 3 of the
+ * tag and the GPU command code at byte 7 -- PSY-Q's setlen()/setcode() pair,
+ * i.e. the SetPolyF3 / SetSprt / SetTile family. Nineteen of them sit
+ * consecutively at 0x80047B48..0x80047CB0; the four below were converted
+ * first, the rest follow at the end of this file.
+ *
+ * The (len, code) pairs are ground truth, read from the disassembly. The
+ * PSY-Q names in the trailing comments are inferred from the codes and want
+ * checking against libgpu's headers before anything gets renamed in
+ * symbol_addrs.txt -- the line and tile codes are easy to get backwards. */
 void func_80047B98(unsigned char *a0) {
     a0[3] = 5;
     a0[7] = 0x28;
@@ -322,3 +328,81 @@ __asm__(
     "sh $a1, 0x8($a2)\n"
     ".set reorder\n"
 );
+
+/* Remainder of the libgpu primitive initialiser family (see the note above
+ * func_80047B98). Same shape and same flags as the four already converted,
+ * which is why they belong in this file rather than c_o2.c. */
+void func_80047B48(unsigned char *a0) {
+    a0[3] = 4;
+    a0[7] = 0x20;
+}
+
+void func_80047B5C(unsigned char *a0) {
+    a0[3] = 7;
+    a0[7] = 0x24;
+}
+
+void func_80047B70(unsigned char *a0) {
+    a0[3] = 6;
+    a0[7] = 0x30;
+}
+
+void func_80047B84(unsigned char *a0) {
+    a0[3] = 9;
+    a0[7] = 0x34;
+}
+
+void func_80047BE8(unsigned char *a0) {
+    a0[3] = 3;
+    a0[7] = 0x74;
+}
+
+void func_80047BFC(unsigned char *a0) {
+    a0[3] = 3;
+    a0[7] = 0x7C;
+}
+
+void func_80047C10(unsigned char *a0) {
+    a0[3] = 4;
+    a0[7] = 0x64;
+}
+
+void func_80047C24(unsigned char *a0) {
+    a0[3] = 2;
+    a0[7] = 0x68;
+}
+
+void func_80047C38(unsigned char *a0) {
+    a0[3] = 2;
+    a0[7] = 0x70;
+}
+
+void func_80047C4C(unsigned char *a0) {
+    a0[3] = 2;
+    a0[7] = 0x78;
+}
+
+void func_80047C60(unsigned char *a0) {
+    a0[3] = 3;
+    a0[7] = 0x60;
+}
+
+void func_80047C74(unsigned char *a0) {
+    a0[3] = 3;
+    a0[7] = 0x02;
+}
+
+void func_80047C88(unsigned char *a0) {
+    a0[3] = 3;
+    a0[7] = 0x40;
+}
+
+void func_80047C9C(unsigned char *a0) {
+    a0[3] = 4;
+    a0[7] = 0x50;
+}
+
+void func_80047CB0(unsigned char *a0) {
+    a0[3] = 5;
+    a0[7] = 0x48;
+}

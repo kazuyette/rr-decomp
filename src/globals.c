@@ -575,75 +575,96 @@ int func_80019CA8(int a0, int a1) {
 /* split arithmetic; m2c keeps func_80047D24's sum in one expression.   */
 /* ------------------------------------------------------------------ */
 
-void func_8001B284(int *car) {
-    int t = D_801D7800 - 0x1D4C;
-    int v;
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_8001B284(int *car) {
+ *     int t = D_801D7800 - 0x1D4C;
+ *     int v;
+ * 
+ *     if (t < 0) {
+ *         v = -t;
+ *     } else {
+ *         v = t * 6;
+ *         car[44] = car[44] / 2;
+ *     }
+ *     D_8012CFF0 = v + 0x3E8;
+ * }
+ */
 
-    if (t < 0) {
-        v = -t;
-    } else {
-        v = t * 6;
-        car[44] = car[44] / 2;
-    }
-    D_8012CFF0 = v + 0x3E8;
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * int func_800465A0(int a0, int a1) {
+ *     int y;
+ *     int x = a0 & 0xFFF;
+ * 
+ *     if (D_80077378 == 0) {
+ *         y = (a1 & 0x7FF) << 11;
+ *         x = a0 & 0x7FF;
+ *     } else {
+ *         y = (a1 & 0xFFF) << 12;
+ *     }
+ *     return y | (x | 0xE5000000);
+ * }
+ */
 
-int func_800465A0(int a0, int a1) {
-    int y;
-    int x = a0 & 0xFFF;
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_80047A7C(int *a0, int a1, int *a2) {
+ *     *a2 = (*a2 & 0xFF000000) | (*a0 & 0xFFFFFF);
+ *     *a0 = (*a0 & 0xFF000000) | (a1 & 0xFFFFFF);
+ * }
+ */
 
-    if (D_80077378 == 0) {
-        y = (a1 & 0x7FF) << 11;
-        x = a0 & 0x7FF;
-    } else {
-        y = (a1 & 0xFFF) << 12;
-    }
-    return y | (x | 0xE5000000);
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * int func_80047D24(unsigned char *a0, unsigned char *a1) {
+ *     int t = a0[3] + a1[3] + 1;
+ * 
+ *     if (t < 0x21) {
+ *         a0[3] = (unsigned char) t;
+ *         *(int *) a1 = 0;
+ *         return 0;
+ *     }
+ *     return -1;
+ * }
+ */
 
-void func_80047A7C(int *a0, int a1, int *a2) {
-    *a2 = (*a2 & 0xFF000000) | (*a0 & 0xFFFFFF);
-    *a0 = (*a0 & 0xFF000000) | (a1 & 0xFFFFFF);
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * int func_8004D238(int a0, short a1, short a2) {
+ *     short *p;
+ * 
+ *     if ((unsigned int) (a0 & 0xFFFF) >= 0x18U) {
+ *         return -1;
+ *     }
+ *     p = (short *) (((a0 << 16) >> 12) + D_8007745C);
+ *     p[0] = a1;
+ *     p[1] = a2;
+ *     return 0;
+ * }
+ */
 
-int func_80047D24(unsigned char *a0, unsigned char *a1) {
-    int t = a0[3] + a1[3] + 1;
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_8005163C(int a0, short a1) {
+ *     char *p = (a1 * 0xA8) + *(char **) ((char *) D_801E90E8 + ((a0 << 16) >> 14));
+ * 
+ *     *(int *) (p + 0x90) |= 4;
+ * }
+ */
 
-    if (t < 0x21) {
-        a0[3] = (unsigned char) t;
-        *(int *) a1 = 0;
-        return 0;
-    }
-    return -1;
-}
-
-int func_8004D238(int a0, short a1, short a2) {
-    short *p;
-
-    if ((unsigned int) (a0 & 0xFFFF) >= 0x18U) {
-        return -1;
-    }
-    p = (short *) (((a0 << 16) >> 12) + D_8007745C);
-    p[0] = a1;
-    p[1] = a2;
-    return 0;
-}
-
-void func_8005163C(int a0, short a1) {
-    char *p = (a1 * 0xA8) + *(char **) ((char *) D_801E90E8 + ((a0 << 16) >> 14));
-
-    *(int *) (p + 0x90) |= 4;
-}
-
-void func_8005486C(int a0, unsigned int a1) {
-    int t;
-    unsigned int i = 0;
-
-    if (a1 != 0) {
-        do {
-            t = i + a0;
-            i += 1;
-            *(int *) ((t << 5) + D_801734A0) = 0;
-        } while (i < a1);
-    }
-}
+/* Did not match; reverted to INCLUDE_ASM.
+ * Kept here as a starting point for the next attempt.
+ * void func_8005486C(int a0, unsigned int a1) {
+ *     int t;
+ *     unsigned int i = 0;
+ * 
+ *     if (a1 != 0) {
+ *         do {
+ *             t = i + a0;
+ *             i += 1;
+ *             *(int *) ((t << 5) + D_801734A0) = 0;
+ *         } while (i < a1);
+ *     }
+ * }
+ */

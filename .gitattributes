@@ -1,0 +1,8 @@
+# The PSY-Q-era toolchain cannot cope with CRLF: GCC 2.7.2's cpp sees a
+# backslash followed by CR (not LF) and fails to join macro continuation
+# lines, so include_asm.h's INCLUDE_ASM macro collapses into "stray '\' in
+# program" errors for the whole translation unit. Force LF everywhere on
+# checkout, on every platform.
+* text=auto eol=lf
+*.png binary
+*.bundle binary

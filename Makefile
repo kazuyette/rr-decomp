@@ -18,6 +18,13 @@ BUILD_DIR   := build
 ASM_DIR     := asm
 SRC_DIR     := src
 INC_DIR     := include
+# Docker Desktop on Windows exposes 64-bit inode numbers over its bind mount,
+# and the 32-bit cpp from GCC 2.7.2 gets EOVERFLOW ("Value too large for
+# defined data type") when it stats a header found through -I. Staging the
+# headers onto the container's own filesystem sidesteps it. On Linux this is
+# just a copy of four small files, and -I affects header lookup only, never
+# codegen.
+INC_STAGE   := /tmp/rr-include
 
 AS          := mipsel-linux-gnu-as
 LD          := mipsel-linux-gnu-ld
@@ -75,7 +82,8 @@ $(BUILD_DIR)/asm/29E8.o: $(ASM_DIR)/29E8.s | dirs
 	$(MASPSX) --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<
 
 $(BUILD_DIR)/src/%.s: $(SRC_DIR)/%.c | dirs
-	$(GCC) $(GCC_FLAGS) -I$(INC_DIR) -S $< -o $@
+	@mkdir -p $(INC_STAGE) && cp -f $(INC_DIR)/* $(INC_STAGE)/
+	$(GCC) $(GCC_FLAGS) -I$(INC_STAGE) -S $< -o $@
 
 # Rounds 67-68: the c_o1/c_o1_ndb/c_o2 files hold real-C conversions
 # that byte-match under the ORIGINAL per-unit compiler settings
@@ -91,7 +99,8 @@ $(BUILD_DIR)/src/c_o2.s: GCC_FLAGS := -O2 -mrnames -mmips-as -fno-builtin -fsign
 # c_257.c compiles with GCC 2.5.7 (no -mrnames: 2.5.7 would emit
 # symbolic register names that modern gas rejects).
 $(BUILD_DIR)/src/c_257.s: $(SRC_DIR)/c_257.c | dirs
-	$(GCC257) -O2 -mmips-as -fno-builtin -fsigned-char -gcoff -I$(INC_DIR) -S $< -o $@
+	@mkdir -p $(INC_STAGE) && cp -f $(INC_DIR)/* $(INC_STAGE)/
+	$(GCC257) -O2 -mmips-as -fno-builtin -fsigned-char -gcoff -I$(INC_STAGE) -S $< -o $@
 
 $(BUILD_DIR)/src/c_o1.o $(BUILD_DIR)/src/c_o1_ndb.o $(BUILD_DIR)/src/c_o2.o $(BUILD_DIR)/src/c_257.o: \
 $(BUILD_DIR)/src/%.o: $(BUILD_DIR)/src/%.s

@@ -103,7 +103,7 @@ block_31:
                                     M2C_FIELD(temp_s5, s32 *, 4) = (s32) (M2C_FIELD(arg1, s32 *, 0) - (((temp_s2 + M2C_FIELD(var_s1, s16 *, 4)) * 4) + 0x200));
                                     M2C_FIELD(arg1, u16 *, 0xA4) = (u16) M2C_FIELD(var_s1, u16 *, -4);
                                     M2C_FIELD(temp_s5, u16 *, 2) = (u16) M2C_FIELD(var_s1, u16 *, 0);
-                                    func_80043C80(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), temp_s5 + 0x70);
+                                    gte_dpcs(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), temp_s5 + 0x70);
                                     sp10 = func_80044098(sp10, temp_s5, var_s4, var_s3);
                                 }
                             }

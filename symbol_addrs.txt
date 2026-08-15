@@ -149,3 +149,43 @@ DeliverEvent = 0x80053618;
 strcpy = 0x80054244;
 strncmp = 0x80054254;
 TestEvent = 0x80059050;
+
+// The libgte operation wrappers: 0x80043B08 to 0x80044078, thirty-three
+// contiguous functions that exist only to issue one GTE instruction,
+// bounded on both sides by code that issues none. That contiguity is a
+// translation unit, the second one identified structurally rather than
+// by address after the BIOS trampoline block.
+//
+// Named after the coprocessor opcode each one issues, which is written
+// in the instruction and therefore certain. The PSY-Q public names
+// (RotTransPers, NormalClip, AverageZ3 and so on) are NOT applied here:
+// several operations appear twice -- a long form and a short one, the
+// usual full/raw pair -- and guessing which is which would put a wrong
+// name in the tree, which costs more than a dull one.
+gte_rtps = 0x80043B08;
+gte_rtpt = 0x80043B3C;
+gte_mvmva = 0x80043B98;
+gte_mvmva_2 = 0x80043BCC;
+gte_mvmva_3 = 0x80043C00;
+gte_mvmva_4 = 0x80043C28;
+gte_dpcs = 0x80043C80;
+gte_dpct = 0x80043CA0;
+gte_intpl = 0x80043CE0;
+gte_sqr = 0x80043D08;
+gte_sqr_2 = 0x80043D38;
+gte_ncs = 0x80043D68;
+gte_nct = 0x80043D8C;
+gte_ncds = 0x80043DD0;
+gte_ncdt = 0x80043DFC;
+gte_nccs = 0x80043E48;
+gte_ncct = 0x80043E6C;
+gte_cdp = 0x80043EB4;
+gte_cc = 0x80043EE0;
+gte_nclip = 0x80043F08;
+gte_nclip_2 = 0x80043F34;
+gte_avsz3 = 0x80043F4C;
+gte_avsz3_2 = 0x80043F70;
+gte_avsz4 = 0x80043F84;
+gte_avsz4_2 = 0x80043FAC;
+gte_op = 0x80043FC0;
+gte_op_2 = 0x8004401C;

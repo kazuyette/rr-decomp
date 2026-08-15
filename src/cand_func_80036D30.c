@@ -65,7 +65,7 @@ s32 *func_80036D30(s32 *arg0, void *arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5
                     M2C_FIELD(var_s1, s32 *, 0x14) = (s32) M2C_FIELD(var_s2, s32 *, -6);
                     M2C_FIELD(var_s1, u16 *, 0x1C) = (u16) M2C_FIELD(var_s2, u16 *, -2);
                     M2C_FIELD(var_s1, u16 *, 0x24) = (u16) M2C_FIELD(var_s2, u16 *, 2);
-                    func_80043C80(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), var_s3 + 4);
+                    gte_dpcs(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), var_s3 + 4);
                     *var_s3 = 0x09000000;
                     M2C_FIELD(var_s1, s8 *, 7) = 0x2C;
                     temp_a1 = var_s1;
@@ -133,7 +133,7 @@ block_35:
                         M2C_FIELD(temp_s6, s32 *, 4) = (s32) (M2C_FIELD(arg1, s32 *, 0) - (((temp_s1 + M2C_FIELD(var_s2_2, s16 *, -6)) * 4) + 0x200));
                         M2C_FIELD(arg1, u16 *, 0xA4) = (u16) M2C_FIELD(var_s2_2, u16 *, -0xE);
                         M2C_FIELD(temp_s6, u16 *, 2) = (u16) M2C_FIELD(var_s2_2, u16 *, -0xA);
-                        func_80043C80(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), temp_s6 + 0x70, temp_a3);
+                        gte_dpcs(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), temp_s6 + 0x70, temp_a3);
                         func_8004617C(var_s3, 0, 1, 0, &D_80077128);
                         AddPrim(M2C_FIELD(temp_s6, s32 *, 4), var_s3);
                         temp_v0_3 = func_80044098(var_s3 + 0xC, temp_s6, var_s5, var_s4);

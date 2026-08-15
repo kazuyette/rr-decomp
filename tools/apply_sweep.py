@@ -232,11 +232,17 @@ def main():
 
     bodies, decls = harvest(batch)
 
-    # A previous run leaves src/x_*.c behind. They are regenerated from
-    # scratch here, and keeping the old ones would define every surviving
-    # function twice.
-    for stale in sorted(f for f in os.listdir("src") if f.startswith("x_")):
-        os.remove(os.path.join("src", stale))
+    # Do NOT clear src/x_*.c here. An earlier version of this tool did,
+    # on the reasoning that they were its own output and would be
+    # regenerated -- but they are the accumulated result of every previous
+    # batch, and deleting them threw away 101 already-matching functions
+    # on each run while the tool reported success. The build stayed green
+    # because those functions simply reverted to INCLUDE_ASM, so the only
+    # visible symptom was the progress count going backwards.
+    #
+    # Nothing needs clearing now: candidates are one function per file and
+    # a winner is renamed into place, so the only file this run can
+    # collide with is its own destination, handled at the rename.
 
     chosen = {}
     for name, pipelines in wins.items():
@@ -270,6 +276,8 @@ def main():
     for name, path in solo.items():
         pipeline = wins[name][0]
         dest = f"src/x_{TAG[pipeline]}_{name}.c"
+        if os.path.exists(dest):
+            os.remove(dest)
         os.rename(path, dest)
         written.append(dest)
         batch.remove(path)

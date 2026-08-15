@@ -110,6 +110,42 @@ $(BUILD_DIR)/src/%.o: $(BUILD_DIR)/src/%.s
 $(BUILD_DIR)/src/%.o: $(BUILD_DIR)/src/%.s
 	$(MASPSX) --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<
 
+# --- pipeline-specific units (tools/flag_sweep.py + tools/apply_sweep.py) ---
+# src/x_<tag>_NN.c holds functions measured to reproduce the retail bytes
+# under one specific pipeline. No tag is a prefix of another, because make
+# resolves competing pattern rules by shortest stem and "x_o1_%" would
+# otherwise capture x_o1d_00 as well.
+#   o2p = -O2, plain            o2m = -O2 -mmips-as
+#   o1m = -O1 -mmips-as         o1d = -O1 -mmips-as -fno-delayed-branch
+#   c257 = GCC 2.5.7 -O2 -mmips-as
+$(BUILD_DIR)/src/x_o2p_%.s: GCC_FLAGS := -O2 -mrnames -fno-builtin -fsigned-char -gcoff
+$(BUILD_DIR)/src/x_o2m_%.s: GCC_FLAGS := -O2 -mrnames -mmips-as -fno-builtin -fsigned-char -gcoff
+$(BUILD_DIR)/src/x_o1m_%.s: GCC_FLAGS := -O1 -mrnames -mmips-as -fno-builtin -fsigned-char -gcoff
+$(BUILD_DIR)/src/x_o1d_%.s: GCC_FLAGS := -O1 -mrnames -mmips-as -fno-delayed-branch -fno-builtin -fsigned-char -gcoff
+
+$(BUILD_DIR)/src/x_c257_%.s: $(SRC_DIR)/x_c257_%.c | dirs
+	@mkdir -p $(INC_STAGE) && cp -f $(INC_DIR)/* $(INC_STAGE)/
+	$(GCC257) -O2 -mmips-as -fno-builtin -fsigned-char -gcoff -I$(INC_STAGE) -S $< -o $@
+
+# Everything but o2p goes through ASPSX 2.21 emulation and the epilogue
+# delay-slot swap, exactly like c_o1/c_o1_ndb/c_o2/c_257.
+
+$(BUILD_DIR)/src/x_o2m_%.o: $(BUILD_DIR)/src/x_o2m_%.s
+	$(PYTHON) tools/aspsx_epilogue_swap.py $< $<.swap
+	$(MASPSX) --aspsx-version 2.21 --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<.swap
+
+$(BUILD_DIR)/src/x_o1m_%.o: $(BUILD_DIR)/src/x_o1m_%.s
+	$(PYTHON) tools/aspsx_epilogue_swap.py $< $<.swap
+	$(MASPSX) --aspsx-version 2.21 --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<.swap
+
+$(BUILD_DIR)/src/x_o1d_%.o: $(BUILD_DIR)/src/x_o1d_%.s
+	$(PYTHON) tools/aspsx_epilogue_swap.py $< $<.swap
+	$(MASPSX) --aspsx-version 2.21 --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<.swap
+
+$(BUILD_DIR)/src/x_c257_%.o: $(BUILD_DIR)/src/x_c257_%.s
+	$(PYTHON) tools/aspsx_epilogue_swap.py $< $<.swap
+	$(MASPSX) --aspsx-version 2.21 --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<.swap
+
 # All currently-decompiled functions merged into one relocatable object, so
 # objdiff.json's units can diff against it regardless of which .c file each
 # function lives in.

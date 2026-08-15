@@ -9,9 +9,22 @@ binary — the same practice as every project on [decomp.dev](https://decomp.dev
 
 ## Status
 
-**44 of 943 functions are real C.** The rest are `INCLUDE_ASM` references to per-function
-disassembly under `asm/nonmatchings/`. That is the only number this repo reports, and it means
-what it says: a function is either recovered C or it is not.
+Run `python3 tools/progress.py`. As of the restructuring commit:
+
+```
+functions        72 /   971     7.4%  real C
+instructions    718 / 72854     1.0%  real C
+```
+
+The instruction figure is the one that matters — every large function is still assembly.
+`progress.py` reads `src/*.c` and `asm/nonmatchings/`, because **objdiff cannot answer this
+question**: a function pulled in with `INCLUDE_ASM` assembles to the original bytes and
+therefore always matches. objdiff's job is to verify that one newly written C function is
+byte-exact; `progress.py`'s job is to say how much is written. Conflating the two is what
+produced the old "100%" figure.
+
+(The function count is a source heuristic — it parses top-level definitions. The instruction
+count is exact, being derived from the splat listings.)
 
 > **History note.** Until August 2026 this repo reported "949/949 byte-matching". That figure
 > was true but meaningless: it was obtained by transcribing the original MIPS verbatim into

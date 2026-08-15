@@ -22,6 +22,7 @@ Usage:
   python3 tools/apply_sweep.py            # act
   python3 tools/apply_sweep.py --dry-run  # just count
 """
+import glob
 import json
 import os
 import re
@@ -233,7 +234,18 @@ def main():
 
     bodies, decls = harvest(batch)
 
-    # Do NOT clear src/x_*.c here. An earlier version of this tool did,
+    # One narrow cleanup, and only this one: an x_<tag>_<name>.c left by a
+    # previous run whose candidate file is present again. That pair defines
+    # the same function twice and the link fails. It happens whenever a
+    # `git reset --hard` restores the candidates without removing the
+    # untracked output of the run that consumed them -- which is a normal
+    # thing to do and should not break the build.
+    for name in bodies:
+        for stale in glob.glob(f"src/x_*_{name}.c"):
+            print(f"  removing {stale}: superseded by src/cand_{name}.c")
+            os.remove(stale)
+
+    # Do NOT clear src/x_*.c wholesale. An earlier version of this tool did,
     # on the reasoning that they were its own output and would be
     # regenerated -- but they are the accumulated result of every previous
     # batch, and deleting them threw away 101 already-matching functions

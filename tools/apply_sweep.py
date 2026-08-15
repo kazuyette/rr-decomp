@@ -36,6 +36,11 @@ GCC_DIR = os.environ.get("PSX_GCC_DIR", "/opt/psx-gcc")
 GCC257_DIR = os.environ.get("PSX_GCC257_DIR", "/opt/psx-gcc257")
 COMMON = ["-fno-builtin", "-fsigned-char", "-gcoff"]
 
+# Returned by compiles() when the compiler failed but the failure
+# cannot be pinned on one function; the caller then shrinks the file
+# instead of trusting it.
+UNATTRIBUTED = "\x00unattributed"
+
 # Same table as flag_sweep.py, minus the assembler half: to decide whether
 # a file compiles we only need the compiler.
 CC_FLAGS = {
@@ -87,19 +92,29 @@ def definition_span(text, name):
 
 
 def harvest(paths):
-    """{func: body} and {symbol: declaration}, over the batch files."""
+    """{func: body} and {symbol: declaration}, over the batch files.
+
+    Declarations are taken only from the head of each file -- the part
+    before the first definition. Scanning the whole file instead picks up
+    ordinary statements, which end in a semicolon exactly like a
+    declaration does; `func_80045750(0);` then gets re-emitted at the top
+    of a generated file, where it is a syntax error with no function to
+    blame it on.
+    """
     bodies, decls = {}, {}
+    DEF = re.compile(r"^[A-Za-z_][\w \*]*?\b(\w+)\s*\([^;{]*\)\s*\{", re.M)
     for p in paths:
         text = open(p).read()
-        for line in text.splitlines():
+        first = DEF.search(text)
+        head = text[:first.start()] if first else text
+        for line in head.splitlines():
             s = line.strip()
             if not s.endswith(";") or s.startswith(("#", "/*", "*")):
                 continue
             nm = re.findall(r"\b(\w+)\s*[\(;\[]", s)
             if nm:
                 decls.setdefault(nm[0], s)
-        for m in re.finditer(r"^[A-Za-z_][\w \*]*?\b(\w+)\s*\([^;{]*\)\s*\{",
-                             text, re.M):
+        for m in DEF.finditer(text):
             name = m.group(1)
             span = definition_span(text, name)
             if span:
@@ -149,8 +164,12 @@ def compiles(path, pipeline, spans):
                 bad.append(name)
                 break
     if not bad:
-        print(f"    {path}: unattributable error, dropping the file")
-        print("    " + (r.stderr.strip().splitlines() or [""])[0][:120])
+        errs = [l for l in r.stderr.splitlines()
+                if " error" in l or "parse error" in l or "undeclared" in l]
+        print(f"    {path}: error not attributable to a function")
+        for l in (errs or r.stderr.strip().splitlines())[:3]:
+            print("      " + l[:140])
+        return [UNATTRIBUTED]
     return list(dict.fromkeys(bad))
 
 
@@ -189,9 +208,15 @@ def main():
             cur, rest = list(pending), []
             while cur:
                 spans = render(path, pipeline, cur, bodies, decls)
-                bad = [b for b in compiles(path, pipeline, spans) if b in cur]
+                bad = compiles(path, pipeline, spans)
                 if not bad:
                     break
+                if bad == [UNATTRIBUTED]:
+                    # Cannot tell which one; shed the last and try again.
+                    bad = [cur[-1]]
+                bad = [b for b in bad if b in cur]
+                if not bad:
+                    bad = [cur[-1]]
                 for b in bad:
                     cur.remove(b)
                     rest.append(b)

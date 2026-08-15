@@ -4,10 +4,17 @@
 objdiff cannot answer "how much is decompiled": a function pulled in with
 INCLUDE_ASM assembles to the original bytes, so it always matches. The real
 question is a source-level one -- is this function written in C, or is it
-still a reference to a disassembly listing? -- so it is answered here, by
-reading src/*.c and asm/nonmatchings/.
+still a reference to a disassembly listing?
 
-Usage: python3 tools/progress.py [--json]
+The function list and the instruction counts come from build/asm/29E8.o,
+the reassembled target. They used to come from the listings under
+asm/nonmatchings/, which was wrong in a way that only showed once asm/
+stopped being committed: splat writes a listing only for functions still
+referenced by INCLUDE_ASM, so every function successfully converted
+*disappeared from the denominator*. The report read 0 / 609 at the exact
+moment it should have read 214 / 949.
+
+Usage: python3 tools/progress.py [--json]   (needs `make all` first)
 """
 import glob
 import json
@@ -15,20 +22,22 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from verify import disassemble  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INCLUDE_ASM_RE = re.compile(r'^\s*INCLUDE_ASM\("([^"]+)",\s*(\w+)\);', re.M)
 INSN_RE = re.compile(r'/\* \w+ [0-9A-Fa-f]{8} [0-9A-Fa-f]{8} \*/')
 
 
+TARGET = os.path.join(ROOT, "build", "asm", "29E8.o")
+
+
 def asm_sizes():
-    """Instruction count per function, from the splat listings."""
-    out = {}
-    for path in glob.glob(os.path.join(ROOT, "asm", "nonmatchings", "**", "*.s"),
-                          recursive=True):
-        name = os.path.basename(path)[:-2]
-        with open(path) as fh:
-            out[name] = len(INSN_RE.findall(fh.read()))
-    return out
+    """Instruction count per function, from the reassembled target."""
+    if not os.path.exists(TARGET):
+        return {}
+    return {name: len(ins) for name, ins in disassemble(TARGET).items()}
 
 
 def c_definitions(text):
@@ -72,7 +81,7 @@ def main():
     c_funcs &= set(sizes)
     total = len(asm_refs) + len(c_funcs)
     if not total:
-        print("nothing to report -- run splat first")
+        print(f"nothing to report -- {TARGET} is missing, run `make all` first")
         return 1
 
     c_insns = sum(sizes.get(n, 0) for n in c_funcs)

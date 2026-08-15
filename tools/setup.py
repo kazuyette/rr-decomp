@@ -24,6 +24,75 @@ EXE = "PSX.EXE"
 SHA1 = "31ec5d3616a0fdb456da27a984fc5b92259ff1f6"
 
 
+# The toolchain image ships a compiler, not a disassembler. splat is a
+# Python package, so it can be installed into the running container the
+# first time this script needs it; docker/toolchain.Dockerfile installs
+# the same set, so a rebuilt image skips this entirely.
+#
+# The versions are pinned deliberately. spimdisasm decides how the
+# listings are written, and a different version can emit a different --
+# still correct -- rendering of the same instruction. That would change
+# asm/29E8.s under our feet and break matches that have nothing wrong
+# with them.
+REQS = [
+    "splat64==0.50.0",
+    "spimdisasm==1.42.4",
+    "rabbitizer==1.16.2",
+    "intervaltree",
+    "colorama",
+    "tqdm",
+    "pyyaml",
+    "n64img",
+]
+
+
+def ensure_splat():
+    try:
+        import splat  # noqa: F401
+        return True
+    except ImportError:
+        pass
+
+    print("splat is not installed in this image; installing it now.")
+
+    # pylibyaml is only a C-loader accelerator for PyYAML and has no wheel
+    # for this platform -- pip would try to build it and fail. splat merely
+    # imports it, so a no-op module satisfies the import at no cost beyond
+    # slower YAML parsing.
+    import site
+    target = (site.getsitepackages() or [site.getusersitepackages()])[0]
+    shim = os.path.join(target, "pylibyaml.py")
+    if not os.path.exists(shim):
+        with open(shim, "w") as fh:
+            fh.write("# no-op stand-in: PyYAML's C loader accelerator.\n"
+                     "# splat imports this but does not require it.\n")
+
+    # --break-system-packages only exists from pip 23; the toolchain image
+    # is Ubuntu 22.04 and ships an older one, which rejects the flag
+    # outright. Try with it, fall back without.
+    def pip_install(args):
+        base = [sys.executable, "-m", "pip", "install", "--quiet"]
+        r = subprocess.run(base + ["--break-system-packages"] + args,
+                           capture_output=True, text=True)
+        if r.returncode != 0 and "break-system-packages" in r.stderr:
+            r = subprocess.run(base + args, capture_output=True, text=True)
+        if r.returncode != 0:
+            print(r.stdout[-2000:] or r.stderr[-2000:])
+        return r.returncode == 0
+
+    if not pip_install(["--no-deps", REQS[0]]):
+        return False
+    if not pip_install(REQS[1:]):
+        return False
+    try:
+        import splat  # noqa: F401
+        return True
+    except ImportError:
+        print("splat still will not import after installation.")
+        return False
+
+
+
 def main():
     if not os.path.exists(EXE):
         print(f"{EXE} not found in the repository root.\n"
@@ -33,6 +102,9 @@ def main():
     if digest != SHA1:
         print(f"{EXE} has sha1 {digest}, expected {SHA1}.\n"
               f"This project targets the Japanese release, SLPS-00001.")
+        return 1
+
+    if not ensure_splat():
         return 1
 
     if "--clean" in sys.argv and os.path.isdir("asm"):

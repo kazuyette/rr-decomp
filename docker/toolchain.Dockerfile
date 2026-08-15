@@ -99,6 +99,19 @@ RUN apt-get update \
         binutils-mipsel-linux-gnu python3 python3-pip make ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
+# splat, to regenerate asm/ from your own PSX.EXE (see tools/setup.py).
+# Versions pinned: spimdisasm decides how the listings are written, and a
+# different one can render the same instruction differently, which would
+# change asm/29E8.s and break matches for no reason.
+# pylibyaml is only PyYAML's C-loader accelerator and has no wheel here;
+# splat imports it but does not need it, so a no-op module stands in.
+RUN printf '# no-op stand-in for PyYAML\x27s C loader accelerator.\n' \
+        > /usr/lib/python3/dist-packages/pylibyaml.py \
+    && pip3 install --no-cache-dir --no-deps splat64==0.50.0 \
+    && pip3 install --no-cache-dir \
+        spimdisasm==1.42.4 rabbitizer==1.16.2 intervaltree colorama tqdm \
+        pyyaml n64img
+
 COPY --from=gcc-build /opt/psx-gcc /opt/psx-gcc
 COPY --from=gcc257-build /opt/psx-gcc257 /opt/psx-gcc257
 ENV PATH="/opt/psx-gcc:${PATH}"

@@ -102,3 +102,50 @@ g_track_nodes_2 = 0x8005CC4C;
 //   0x801E90E0  g_track_node_count
 //   0x801733D8  g_track_nodes  -- TrackNode pointer for the current course
 //   0x801733A0  g_track_mirror_x  -- mirrored-course mechanism
+
+// The BIOS call trampolines, named from the call number each one
+// jumps through: `addiu $t2, 0xA0/0xB0` then `jr $t2` with the
+// function index in $t1. Nothing is inferred here -- the number is
+// in the instruction and the tables are documented hardware.
+// Prefixed bios_ where the BIOS name collides with a libc symbol the
+// game also links (open/read/write/close/exit/format/rename).
+bios_close = 0x80049648;
+GPU_cw = 0x80049658;
+bios_write = 0x80049668;
+SetMem = 0x80049678;
+InitPAD2 = 0x80049688;
+bios_rename = 0x80049698;
+memchr = 0x800496A8;
+bios_format = 0x800496B8;
+printf = 0x800496C8;
+setjmp = 0x800496D8;
+strlen = 0x800496E8;
+get_timer = 0x800496F8;
+strcmp = 0x80049708;
+init_timer = 0x80049718;
+InitCARD2 = 0x80049728;
+HookEntryInt = 0x80049738;
+StartPAD2 = 0x80049748;
+memmove = 0x80049758;
+InitHeap = 0x80049768;
+StartCARD2 = 0x80049778;
+_bu_init = 0x80049788;
+nextfile = 0x80049798;
+enable_timer_irq = 0x800497A8;
+bios_read = 0x800497B8;
+rand = 0x800497C8;
+bios_open = 0x800497E8;
+bios_exit = 0x800497F8;
+_96_remove = 0x80049808;
+firstfile2 = 0x80049818;
+ReturnFromException = 0x80049828;
+CloseEvent = 0x8004DF1C;
+EnableEvent = 0x8004DF2C;
+DisableEvent = 0x8004DF3C;
+restart_timer = 0x8004DF4C;
+OpenEvent = 0x8004DF5C;
+putchar = 0x800534C8;
+DeliverEvent = 0x80053618;
+strcpy = 0x80054244;
+strncmp = 0x80054254;
+TestEvent = 0x80059050;

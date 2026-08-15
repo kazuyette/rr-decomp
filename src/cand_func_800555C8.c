@@ -46,7 +46,7 @@ loop_1:
         temp_v0 = D_800776D8 + 1;
         D_800776D8 = temp_v0;
         if (temp_v0 >= 0x1389) {
-            func_800496C8(&D_800118D0, &D_800118E4);
+            printf(&D_800118D0, &D_800118E4);
         } else if (M2C_FIELD(D_8007758C, u16 *, 0x1AE) & 0x7FF) {
             goto loop_1;
         }

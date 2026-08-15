@@ -17,8 +17,8 @@ extern M2C_UNK *D_A0000414;
 extern void *D_A0000454;
 extern void *D_A0000488;
 extern void *D_A000048C;
-M2C_UNK func_80049808();
-extern M2C_UNK func_80053618;
+M2C_UNK _96_remove();
+extern M2C_UNK DeliverEvent;
 extern M2C_UNK func_800536B0;
 extern M2C_UNK func_800536D8;
 extern M2C_UNK func_80053700;
@@ -27,12 +27,12 @@ extern M2C_UNK func_8005373C;
 void func_80053630(void) {
     void *temp_v0;
 
-    func_80049808();
+    _96_remove();
     D_A00003E0 = &func_800536B0;
     D_A00003F0 = &func_80053700;
     D_A00003F8 = &func_8005373C;
     D_A0000414 = &func_800536D8;
-    temp_v0 = &func_80053618 + 0x10;
+    temp_v0 = &DeliverEvent + 0x10;
     D_A0000454 = temp_v0;
     D_A0000488 = temp_v0;
     D_A000048C = temp_v0;

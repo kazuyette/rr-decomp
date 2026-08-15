@@ -137,7 +137,7 @@ block_48:
                         var_v1_2 = D_801D34E0;
                         D_8012CF90 = 1;
                         if (var_v1_2 == 0) {
-                            var_v1_2 = ((s32) (func_800497C8() & 0xFFF) % 6) + 1;
+                            var_v1_2 = ((s32) (rand() & 0xFFF) % 6) + 1;
                         }
                         D_80173338 = (s32) var_v1_2;
                         func_8003A1AC(-1);

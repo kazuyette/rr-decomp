@@ -10,14 +10,14 @@
  * Excluded on purpose: a couple of addresses in the disassembly START
  * with this same 3-instruction shape but are actually larger functions
  * with more (nominally unreachable, but still present) code after the
- * jr -- e.g. func_80049828 (0x44 bytes) and func_80053618 (0x18 bytes).
+ * jr -- e.g. ReturnFromException (0x44 bytes) and DeliverEvent (0x18 bytes).
  * Those need real analysis, not a blind pattern match, so they stay as
  * raw asm for now. Verified each of the ones below against the original
  * bytes before committing -- see BUILD_NOTES.md.
  */
 __asm__(
-    ".global func_80049648\n"
-    "func_80049648:\n"
+    ".global bios_close\n"
+    "bios_close:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -26,8 +26,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049658\n"
-    "func_80049658:\n"
+    ".global GPU_cw\n"
+    "GPU_cw:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -36,8 +36,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049668\n"
-    "func_80049668:\n"
+    ".global bios_write\n"
+    "bios_write:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -46,8 +46,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049678\n"
-    "func_80049678:\n"
+    ".global SetMem\n"
+    "SetMem:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -56,8 +56,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049688\n"
-    "func_80049688:\n"
+    ".global InitPAD2\n"
+    "InitPAD2:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -66,8 +66,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049698\n"
-    "func_80049698:\n"
+    ".global bios_rename\n"
+    "bios_rename:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -76,8 +76,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800496A8\n"
-    "func_800496A8:\n"
+    ".global memchr\n"
+    "memchr:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -86,8 +86,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800496B8\n"
-    "func_800496B8:\n"
+    ".global bios_format\n"
+    "bios_format:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -96,8 +96,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800496C8\n"
-    "func_800496C8:\n"
+    ".global printf\n"
+    "printf:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -106,8 +106,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800496D8\n"
-    "func_800496D8:\n"
+    ".global setjmp\n"
+    "setjmp:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -116,8 +116,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800496E8\n"
-    "func_800496E8:\n"
+    ".global strlen\n"
+    "strlen:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -126,8 +126,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800496F8\n"
-    "func_800496F8:\n"
+    ".global get_timer\n"
+    "get_timer:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -136,8 +136,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049708\n"
-    "func_80049708:\n"
+    ".global strcmp\n"
+    "strcmp:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -146,8 +146,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049718\n"
-    "func_80049718:\n"
+    ".global init_timer\n"
+    "init_timer:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -156,8 +156,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049728\n"
-    "func_80049728:\n"
+    ".global InitCARD2\n"
+    "InitCARD2:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -166,8 +166,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049738\n"
-    "func_80049738:\n"
+    ".global HookEntryInt\n"
+    "HookEntryInt:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -176,8 +176,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049748\n"
-    "func_80049748:\n"
+    ".global StartPAD2\n"
+    "StartPAD2:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -186,8 +186,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049758\n"
-    "func_80049758:\n"
+    ".global memmove\n"
+    "memmove:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -196,8 +196,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049768\n"
-    "func_80049768:\n"
+    ".global InitHeap\n"
+    "InitHeap:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -206,8 +206,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049778\n"
-    "func_80049778:\n"
+    ".global StartCARD2\n"
+    "StartCARD2:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -216,8 +216,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049788\n"
-    "func_80049788:\n"
+    ".global _bu_init\n"
+    "_bu_init:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -226,8 +226,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049798\n"
-    "func_80049798:\n"
+    ".global nextfile\n"
+    "nextfile:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -236,8 +236,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800497A8\n"
-    "func_800497A8:\n"
+    ".global enable_timer_irq\n"
+    "enable_timer_irq:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -246,8 +246,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800497B8\n"
-    "func_800497B8:\n"
+    ".global bios_read\n"
+    "bios_read:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -256,8 +256,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800497C8\n"
-    "func_800497C8:\n"
+    ".global rand\n"
+    "rand:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -266,8 +266,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800497E8\n"
-    "func_800497E8:\n"
+    ".global bios_open\n"
+    "bios_open:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -276,8 +276,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800497F8\n"
-    "func_800497F8:\n"
+    ".global bios_exit\n"
+    "bios_exit:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -286,8 +286,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049808\n"
-    "func_80049808:\n"
+    ".global _96_remove\n"
+    "_96_remove:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -296,8 +296,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80049818\n"
-    "func_80049818:\n"
+    ".global firstfile2\n"
+    "firstfile2:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -306,8 +306,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_8004DF1C\n"
-    "func_8004DF1C:\n"
+    ".global CloseEvent\n"
+    "CloseEvent:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -316,8 +316,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_8004DF2C\n"
-    "func_8004DF2C:\n"
+    ".global EnableEvent\n"
+    "EnableEvent:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -326,8 +326,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_8004DF3C\n"
-    "func_8004DF3C:\n"
+    ".global DisableEvent\n"
+    "DisableEvent:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -336,8 +336,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_8004DF4C\n"
-    "func_8004DF4C:\n"
+    ".global restart_timer\n"
+    "restart_timer:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -346,8 +346,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_8004DF5C\n"
-    "func_8004DF5C:\n"
+    ".global OpenEvent\n"
+    "OpenEvent:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -356,8 +356,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_800534C8\n"
-    "func_800534C8:\n"
+    ".global putchar\n"
+    "putchar:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"
@@ -366,8 +366,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80054244\n"
-    "func_80054244:\n"
+    ".global strcpy\n"
+    "strcpy:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -376,8 +376,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80054254\n"
-    "func_80054254:\n"
+    ".global strncmp\n"
+    "strncmp:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xA0\n"
     "jr $t2\n"
@@ -386,8 +386,8 @@ __asm__(
 );
 
 __asm__(
-    ".global func_80059050\n"
-    "func_80059050:\n"
+    ".global TestEvent\n"
+    "TestEvent:\n"
     ".set noreorder\n"
     "addiu $t2, $zero, 0xB0\n"
     "jr $t2\n"

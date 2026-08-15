@@ -97,12 +97,12 @@ M2C_UNK func_8004922C(M2C_UNK, s32);
 M2C_UNK func_800492B0();
 M2C_UNK func_80049580();
 M2C_UNK func_80049638();
-M2C_UNK func_80049658(s32);
+M2C_UNK GPU_cw(s32);
 M2C_UNK func_800497D8();
 M2C_UNK func_8004A9D4(s32, s32, M2C_UNK, M2C_UNK);
 M2C_UNK func_8004B310();
-M2C_UNK func_8004DF1C(s32);
-M2C_UNK func_8004DF3C(s32);
+M2C_UNK CloseEvent(s32);
+M2C_UNK DisableEvent(s32);
 M2C_UNK func_80052504(M2C_UNK);
 M2C_UNK func_80052854();
 M2C_UNK func_80052974();
@@ -253,7 +253,7 @@ void func_8003EE20(void) {
 }
 
 void func_80045418(s32 arg0) {
-    func_80049658(arg0 & 0xFFFFFF);
+    GPU_cw(arg0 & 0xFFFFFF);
 }
 
 void func_80045790(void) {
@@ -342,8 +342,8 @@ void func_8004D754(void) {
 void func_8004DEAC(void) {
     if ((D_8012D0C0 == 0) || (D_801D7E20 != 0)) {
         func_80049638();
-        func_8004DF3C(D_80077600);
-        func_8004DF1C(D_80077600);
+        DisableEvent(D_80077600);
+        CloseEvent(D_80077600);
         func_800497D8();
     }
     func_80058E58();

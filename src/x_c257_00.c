@@ -91,21 +91,21 @@ s32 func_8004788C(M2C_UNK, M2C_UNK, M2C_UNK, M2C_UNK);
 M2C_UNK func_80048ADC(s32);
 M2C_UNK func_80048CCC(M2C_UNK *, void *);
 M2C_UNK func_80049638();
-M2C_UNK func_80049648(s32);
-s32 func_80049668(s32, M2C_UNK, s32);
+M2C_UNK bios_close(s32);
+s32 bios_write(s32, M2C_UNK, s32);
 M2C_UNK func_800497D8();
-s32 func_800497E8(s32, M2C_UNK);
+s32 bios_open(s32, M2C_UNK);
 s32 func_80049AF4(M2C_UNK);
 M2C_UNK func_8004A808(s16, s32, s32, s32, s32);
 M2C_UNK func_8004B1BC(M2C_UNK, s16, s16, s32);
 M2C_UNK func_8004D400(s16);
-M2C_UNK func_8004DF1C(s32);
-M2C_UNK func_8004DF3C(s32);
+M2C_UNK CloseEvent(s32);
+M2C_UNK DisableEvent(s32);
 M2C_UNK func_8004E91C(s16, s16);
 s32 func_80051CAC(M2C_UNK, M2C_UNK);
 M2C_UNK func_80051E30(M2C_UNK, void *, M2C_UNK);
 M2C_UNK func_80051F8C(u32, M2C_UNK, M2C_UNK);
-s32 func_80059050(s32);
+s32 TestEvent(s32);
 extern void *g_gpu_device;
 s32 rcos(s32);
 s32 rsin(s32);
@@ -286,10 +286,10 @@ s32 func_80031840(s32 arg0, M2C_UNK arg1, s32 arg2, M2C_UNK arg3, s32 arg4) {
 
     func_80031238(arg1, &D_800105D4, 0x119, 0x590, 0x100);
     func_800314BC(arg3);
-    temp_v0 = func_800497E8(arg0, 2);
+    temp_v0 = bios_open(arg0, 2);
     if (temp_v0 >= 0) {
-        if ((func_80049668(temp_v0, arg1, arg2) == arg2) && (func_80049668(temp_v0, arg3, arg4) == arg4)) {
-            func_80049648(temp_v0);
+        if ((bios_write(temp_v0, arg1, arg2) == arg2) && (bios_write(temp_v0, arg3, arg4) == arg4)) {
+            bios_close(temp_v0);
             return 1;
         }
         
@@ -451,8 +451,8 @@ void func_80058E58(void) {
     if (D_800775B8 == 1) {
         D_800775B8 = 0;
         func_80049638();
-        func_8004DF1C(D_801E9228);
-        func_8004DF3C(D_801E9228);
+        CloseEvent(D_801E9228);
+        DisableEvent(D_801E9228);
         func_800497D8();
     }
 }
@@ -463,11 +463,11 @@ s32 func_80058F64(s32 arg0) {
     if ((D_8012CDD0 == 1) || (D_8012CDA8 == 1)) {
         return 1;
     }
-    var_v1 = func_80059050(D_801E9228);
+    var_v1 = TestEvent(D_801E9228);
     if (arg0 == 1) {
         if (var_v1 == 0) {
             do {
-                var_v1 = func_80059050(D_801E9228);
+                var_v1 = TestEvent(D_801E9228);
             } while (var_v1 == 0);
         }
         D_8012CDA8 = 1;

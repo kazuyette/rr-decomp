@@ -74,23 +74,23 @@ void func_8003D9B0(void) {
         var_s2_2 += 8;
     } while (var_s1_2 < 4);
     if (D_801D35AE & 0x1000) {
-        func_80048198(&D_800753F8, &D_800108F0, func_800496B8(&D_80077334));
+        func_80048198(&D_800753F8, &D_800108F0, bios_format(&D_80077334));
     }
     if (D_801D35AE & 0x4000) {
-        temp_v0 = func_800497E8(&D_80010908, 0x10200);
-        func_80048198(&D_800753F8, &D_80010914, temp_v0, func_80049648(temp_v0));
+        temp_v0 = bios_open(&D_80010908, 0x10200);
+        func_80048198(&D_800753F8, &D_80010914, temp_v0, bios_close(temp_v0));
     }
     if (D_801D35AE & 0x8000) {
         var_s1_3 = 0;
-        if (func_80049818(&D_8007733C, &sp90) != 0) {
+        if (firstfile2(&D_8007733C, &sp90) != 0) {
             var_a1 = 0;
             do {
                 var_s1_3 += 1;
-                func_800496C8(&D_8001092C, var_a1, &sp90);
+                printf(&D_8001092C, var_a1, &sp90);
                 var_a1 = var_s1_3;
-            } while (func_80049798(&sp90) != 0);
+            } while (nextfile(&sp90) != 0);
         } else {
-            func_800496C8(&D_80010938);
+            printf(&D_80010938);
         }
     }
     func_80028578(0x10, 0xA0, &D_800753F8, 0x64);

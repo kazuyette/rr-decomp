@@ -29,14 +29,14 @@ void func_80052440(s32 arg0) {
     var_s0 = &D_80077610;
     var_s1 = &D_80076C80;
     var_s2 = 0;
-    func_800496C8(&D_80011544, *(&D_80076C0C + ((arg0 & 0xFF) * 4)));
+    printf(&D_80011544, *(&D_80076C0C + ((arg0 & 0xFF) * 4)));
     do {
         temp_a1 = *var_s1;
         var_s1 += 4;
         var_s2 += 1;
-        func_800496C8(&D_800774EC, temp_a1, *var_s0);
+        printf(&D_800774EC, temp_a1, *var_s0);
         *var_s0 = 0;
         var_s0 += 1;
     } while (var_s2 < 6);
-    func_800534C8(0xA);
+    putchar(0xA);
 }

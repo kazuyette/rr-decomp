@@ -45,6 +45,7 @@ from verify import disassemble  # noqa: E402
 from units import TARGETS  # noqa: E402
 
 BUILD = "build"
+PIPELINES_FILE = "pipelines.json"
 SWEEP = os.path.join(BUILD, "sweep")
 INC_DIR = "include"
 INC_STAGE = "/tmp/rr-include"
@@ -149,6 +150,21 @@ def main():
 
     with open(os.path.join(BUILD, "sweep.json"), "w") as fh:
         json.dump(wins, fh, indent=1, sort_keys=True)
+
+    # Accumulate the same measurement in a tracked file. build/ is
+    # disposable; this is not. Which pipelines a function matches under is
+    # evidence about the original translation units -- one object was
+    # compiled with one set of flags -- and a function matching under
+    # exactly one pipeline pins its neighbours. Sweeping the already-
+    # converted units (tools/flag_sweep.py src/x_*.c) fills this in for
+    # work that is already done.
+    merged = {}
+    if os.path.exists(PIPELINES_FILE):
+        merged = json.load(open(PIPELINES_FILE))
+    merged.update({k: sorted(set(v)) for k, v in wins.items()})
+    with open(PIPELINES_FILE, "w") as fh:
+        json.dump(merged, fh, indent=1, sort_keys=True)
+    print(f"pipeline evidence for {len(merged)} function(s) in {PIPELINES_FILE}")
 
     print(f"\n{len(wins)} function(s) match under at least one flag set.")
     by = {}

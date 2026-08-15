@@ -35,6 +35,9 @@ options:
   # undefined_syms_auto_path: undefined_syms_auto.txt
 
   extensions_path: tools/splat_ext
+  # Make splat prefer tools/splat_ext over its own segment types. Needed
+  # for the header segment: see tools/splat_ext/header.py.
+  allow_segment_overrides: True
 
   subalign: 2
 

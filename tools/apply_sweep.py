@@ -181,12 +181,27 @@ def compiles(path, pipeline, spans):
 
 def main():
     dry = "--dry-run" in sys.argv
+    if not os.path.exists(SWEEP):
+        print(f"{SWEEP} missing -- run tools/flag_sweep.py first")
+        return 1
     wins = json.load(open(SWEEP))
     batch = sorted("src/" + f for f in os.listdir("src")
                    if f.startswith("cand_"))
     if not batch:
         print("no batch files left to file")
         return 0
+    # Refuse to act on a sweep that predates the candidates. This tool
+    # deletes files and rewrites src/29E8.c; doing that from a stale
+    # measurement silently throws away a whole batch, which is what
+    # happened once already when `make setup` failed and build/ was left
+    # over from the previous run.
+    stale = [b for b in batch if os.path.getmtime(b) > os.path.getmtime(SWEEP)]
+    if stale:
+        print(f"{SWEEP} is older than {len(stale)} candidate file(s), "
+              f"e.g. {stale[0]}.\nRe-run tools/flag_sweep.py; refusing to "
+              f"act on a stale sweep.")
+        return 1
+
     bodies, decls = harvest(batch)
 
     # A previous run leaves src/x_*.c behind. They are regenerated from

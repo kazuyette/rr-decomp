@@ -111,6 +111,15 @@ def main():
     if not os.path.exists(TARGET):
         print("build/asm/29E8.o missing -- run `make all` first")
         return 1
+    # A stale target is worse than a missing one: the sweep still produces
+    # a plausible-looking sweep.json, and apply_sweep then acts on it. If
+    # `make all` failed, build/ can easily be left over from an earlier run.
+    listing = os.path.join("asm", "29E8.s")
+    if (os.path.exists(listing)
+            and os.path.getmtime(listing) > os.path.getmtime(TARGET)):
+        print(f"{TARGET} is older than {listing} -- the build did not "
+              f"complete. Fix the build before sweeping.")
+        return 1
 
     os.makedirs(SWEEP, exist_ok=True)
     os.makedirs(INC_STAGE, exist_ok=True)

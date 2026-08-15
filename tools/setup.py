@@ -40,9 +40,9 @@ def main():
 
     r = subprocess.run([sys.executable, "-m", "splat", "split", "psx.exe.yaml"])
     if r.returncode != 0:
-        print("\nsplat failed. If it stopped on a UnicodeDecodeError inside "
-              "the header segment, set that segment's type to `bin` in "
-              "psx.exe.yaml, re-run, then set it back to `header`.")
+        print("\nsplat failed; its own output above says why. The header\n"
+              "segment used to be the usual culprit -- a non-ASCII byte at\n"
+              "0x7E -- which tools/splat_ext/header.py now handles.")
         return r.returncode
     print("\nasm/ regenerated. `make all` next.")
     return 0

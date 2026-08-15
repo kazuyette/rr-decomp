@@ -22,3 +22,4 @@ dist/
 # copy of the executable by `make setup`, which is why psx.exe.yaml,
 # symbol_addrs.txt and reloc_addrs.txt are tracked and asm/ is not.
 asm/
+__pycache__/

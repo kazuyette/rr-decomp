@@ -15,12 +15,14 @@ splat never overwrites an existing file, so a symbol rename only takes
 effect after the listings mentioning it are deleted; --clean does that.
 """
 import hashlib
+import re
 import os
 import shutil
 import subprocess
 import sys
 
 EXE = "PSX.EXE"
+YAML = "psx.exe.yaml"
 SHA1 = "31ec5d3616a0fdb456da27a984fc5b92259ff1f6"
 
 
@@ -125,12 +127,43 @@ def main():
     if "--clean" in sys.argv and os.path.isdir("asm"):
         shutil.rmtree("asm")
 
-    r = subprocess.run([sys.executable, "-m", "splat", "split", "psx.exe.yaml"])
+    # Two passes, because the tree needs two different things out of the
+    # same segment.
+    #
+    # As configured, the 29E8 subsegment is type `c`: splat writes one
+    # listing per function under asm/nonmatchings/, which is what the
+    # INCLUDE_ASM lines in src/29E8.c point at. It does not write
+    # asm/29E8.s -- and that file is the target of the whole build, the
+    # reassembled ground truth every conversion is compared against.
+    #
+    # Flipping the subsegment to `asm` produces exactly that file. So the
+    # yaml is patched, splat is run, and the yaml is put back. This was a
+    # manual dance documented in the README; it belongs here instead.
+    original = open(YAML).read()
+    listing_pass = re.sub(r"(\[\s*0x[0-9A-Fa-f]+\s*,\s*)c(\s*,)",
+                          r"\1asm\2", original)
+    if listing_pass == original:
+        print(f"no `c` subsegment found in {YAML}; expected at least one.")
+        return 1
+
+    try:
+        open(YAML, "w").write(listing_pass)
+        r = subprocess.run([sys.executable, "-m", "splat", "split", YAML])
+    finally:
+        open(YAML, "w").write(original)
+    if r.returncode != 0:
+        print("\nsplat failed on the listing pass; its output above says why.")
+        return r.returncode
+
+    # Second pass, with the yaml as committed: per-function listings, and
+    # the linker script and dependency file in their normal form.
+    r = subprocess.run([sys.executable, "-m", "splat", "split", YAML])
     if r.returncode != 0:
         print("\nsplat failed; its own output above says why. The header\n"
               "segment used to be the usual culprit -- a non-ASCII byte at\n"
               "0x7E -- which tools/splat_ext/header.py now handles.")
         return r.returncode
+
     print("\nasm/ regenerated. `make all` next.")
     return 0
 

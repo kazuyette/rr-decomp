@@ -33,6 +33,47 @@ rather than blended into one number nobody can check:
 A boundary supported by two of the three is worth acting on. One alone is
 a hypothesis.
 
+WHAT THIS TOOL FOUND, AND WHY IT IS KEPT ANYWAY
+-----------------------------------------------
+It found nothing. Over 407 game functions: 32 rodata anchors, 45 call-cut
+minima, and not one boundary carrying two signals.
+
+That could just mean the signals are too sparse to coincide, so the
+agreement was measured against chance -- placing the same number of minima
+at random and counting how often an anchor lands near one:
+
+    tolerance   observed   expected by chance
+      +-0           2           3.6
+      +-1           7           9.6
+      +-2           9          14.4
+      +-3          13          18.0
+
+Observed agreement is *below* chance at every tolerance. The two signals
+are not merely failing to reinforce each other; they are mildly
+anti-correlated. At least one of them is not measuring what it claims. The
+likeliest culprit is the call cut: a local minimum in short-range calls
+marks a stretch of large functions that call little, which has nothing to
+do with where an object ended.
+
+So the internal boundaries of the game code are NOT recoverable this way,
+and the honest move is to record that rather than keep adding heuristics
+until the answer comes out the way it was wanted.
+
+Two things do survive, and they are worth keeping:
+
+  * The rodata monotonicity itself -- 5 violations across 37 referencing
+    functions -- is real. It is a constraint any proposed split must
+    satisfy, even though it is far too sparse to *propose* one.
+  * The pipeline signal is sound and merely starved: 19 of 214 converted
+    functions discriminate today, because a short function matches under
+    several pipelines. That number grows with every conversion. When a few
+    hundred functions discriminate, this becomes a real partition of the
+    address space, and no other signal is needed.
+
+Which reverses the order of work. The module split is not a prerequisite
+for converting functions; it is a consequence of having converted enough
+of them.
+
 Usage: python3 tools/modules.py [--json]
 """
 import glob

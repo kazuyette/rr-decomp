@@ -22,6 +22,14 @@ extern short D_800775F8;
 extern int D_8012CDA8;
 extern int D_8007C268;
 extern int D_8007C270;
+extern int D_80077374;
+extern int D_80077378;
+extern int D_80077380;
+extern int D_80077474;
+extern int D_80076E04;
+extern short D_80077460;
+extern short D_80077462;
+extern short D_80079B74;
 
 extern void func_80032A54(void);
 
@@ -405,4 +413,64 @@ void func_80047C9C(unsigned char *a0) {
 void func_80047CB0(unsigned char *a0) {
     a0[3] = 5;
     a0[7] = 0x48;
+}
+
+/* ------------------------------------------------------------------ */
+/* Second batch of trivial accessors, same shapes as the ones already   */
+/* converted above -- plain stores, plain loads, set-and-return-old,    */
+/* and two constant returns. Nothing here is inferred: each is a        */
+/* one-to-one transcription of four or five instructions.               */
+/* ------------------------------------------------------------------ */
+
+/* Halfword stores, companions to func_8003A1AC. */
+void func_8004984C(void) {
+    D_80077460 = 0;
+}
+
+void func_8004985C(short a0) {
+    D_80077462 = a0;
+}
+
+void func_8004A4CC(void) {
+    D_800775F8 = 0;
+}
+
+/* Word store. */
+void func_800534B8(int a0) {
+    D_80076E04 = a0;
+}
+
+/* "Set and return old value", same shape as func_80051CCC and friends. */
+int func_80045738(int a0) {
+    int old = D_80077380;
+    D_80077380 = a0;
+    return old;
+}
+
+int func_80051BE4(int a0) {
+    int old = D_80077474;
+    D_80077474 = a0;
+    return old;
+}
+
+/* Plain getters. */
+int func_80045718(void) {
+    return D_80077378;
+}
+
+int func_80045728(void) {
+    return D_80077374;
+}
+
+short func_8004D460(void) {
+    return D_80079B74;
+}
+
+/* Constant returns -- capability/version stubs, most likely. */
+int func_80055800(void) {
+    return 3;
+}
+
+int func_80055808(void) {
+    return 1;
 }

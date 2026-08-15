@@ -1086,12 +1086,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800455F4);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800456B4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045718);
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045728);
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80045738);
-
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80045750);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80045790);
@@ -1299,10 +1293,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800497D8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80049828);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004984C);
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004985C);
-
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004986C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80049AF4);
@@ -1317,8 +1307,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004A28C);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004A33C);
 
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004A4CC);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004A4DC);
 
@@ -1421,8 +1409,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D3E0);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D400);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D460);
-
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D470);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_8004D52C);
@@ -1522,8 +1508,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80051B24);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80051BC4);
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80051BE4);
-
 
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80051C6C);
@@ -1591,8 +1575,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800531A8);
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800532C8);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80053390);
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_800534B8);
 
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800534D8);
@@ -1670,10 +1652,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_800554EC);
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80055570);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_800555C8);
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80055800);
-
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80055808);
 
 INCLUDE_ASM("asm/nonmatchings/29E8", func_80055810);
 

@@ -58,6 +58,6 @@ segments:
     # bss_size: Please fill out this value when you figure out the bss size
     subsegments:
       - [0x800, rodata, 800]
-      - [0x29F4, asm, 29E8] # estimated (was 0x29E8; fixed to not truncate debug format string in preceding rodata)
+      - [0x29F4, c, 29E8] # estimated (was 0x29E8; fixed to not truncate debug format string in preceding rodata)
       - [0x49A30, data, 49A30] # estimated
   - [0x68000]

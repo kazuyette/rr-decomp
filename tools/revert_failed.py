@@ -54,6 +54,26 @@ def definition_span(text, name):
     return None
 
 
+
+def regenerate_missing_listings(names):
+    """Re-run splat if any restored function has no listing.
+
+    splat writes asm/nonmatchings/<unit>/<func>.s only for functions the
+    unit still references with INCLUDE_ASM. A function that was real C at
+    `make setup` time therefore has no listing on disk -- and sending it
+    back to INCLUDE_ASM points the build at a file that does not exist.
+    That is not a hypothetical: it broke the build the first time a batch
+    was reverted after a clean setup.
+    """
+    missing = [n for n in names
+               if not os.path.exists(os.path.join(SEGMENT, n + ".s"))]
+    if not missing:
+        return
+    print(f"{len(missing)} restored function(s) have no listing "
+          f"(e.g. {missing[0]}); re-running tools/setup.py.")
+    subprocess.run([sys.executable, "tools/setup.py"])
+
+
 def main():
     dry = "--dry-run" in sys.argv
     names = failing()
@@ -88,6 +108,7 @@ def main():
 
     if not dry:
         open(GENERATED, "w").write(gen)
+        regenerate_missing_listings([n for n, _ in moved])
     for name, unit in moved:
         print(f"  <--  {name}  (commented out in {unit})")
     print(f"\n{len(moved)} reverted{' (dry run, nothing written)' if dry else ''}."

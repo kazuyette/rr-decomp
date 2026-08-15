@@ -179,6 +179,26 @@ def compiles(path, pipeline, spans):
     return list(dict.fromkeys(bad))
 
 
+
+def regenerate_missing_listings(names):
+    """Re-run splat if any restored function has no listing.
+
+    splat writes asm/nonmatchings/<unit>/<func>.s only for functions the
+    unit still references with INCLUDE_ASM. A function that was real C at
+    `make setup` time therefore has no listing on disk -- and sending it
+    back to INCLUDE_ASM points the build at a file that does not exist.
+    That is not a hypothetical: it broke the build the first time a batch
+    was reverted after a clean setup.
+    """
+    missing = [n for n in names
+               if not os.path.exists(os.path.join(SEGMENT, n + ".s"))]
+    if not missing:
+        return
+    print(f"{len(missing)} restored function(s) have no listing "
+          f"(e.g. {missing[0]}); re-running tools/setup.py.")
+    subprocess.run([sys.executable, "tools/setup.py"])
+
+
 def main():
     dry = "--dry-run" in sys.argv
     if not os.path.exists(SWEEP):
@@ -297,6 +317,7 @@ def main():
     open(GENERATED, "w").write(gen)
     for p in batch:
         os.remove(p)
+    regenerate_missing_listings(losers)
 
     print(f"\nwrote {len(written)} file(s); removed {len(batch)} batch file(s).")
     print("Add the pipeline rules to the Makefile if they are not there yet, "

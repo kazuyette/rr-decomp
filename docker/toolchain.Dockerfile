@@ -109,8 +109,9 @@ RUN printf '# no-op stand-in for PyYAML\x27s C loader accelerator.\n' \
         > /usr/lib/python3/dist-packages/pylibyaml.py \
     && pip3 install --no-cache-dir --no-deps splat64==0.50.0 \
     && pip3 install --no-cache-dir \
-        spimdisasm==1.42.4 rabbitizer==1.16.2 intervaltree colorama tqdm \
-        pyyaml n64img
+        spimdisasm==1.42.4 rabbitizer==1.16.2 intervaltree==3.1.0 \
+        tqdm==4.67.1 colorama pyyaml \
+        n64img pygfxd==1.0.5 crunch64==0.5.3
 
 COPY --from=gcc-build /opt/psx-gcc /opt/psx-gcc
 COPY --from=gcc257-build /opt/psx-gcc257 /opt/psx-gcc257

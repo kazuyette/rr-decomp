@@ -38,11 +38,19 @@ REQS = [
     "splat64==0.50.0",
     "spimdisasm==1.42.4",
     "rabbitizer==1.16.2",
-    "intervaltree",
+    # splat64 pins these two exactly; anything else and it refuses.
+    "intervaltree==3.1.0",
+    "tqdm==4.67.1",
     "colorama",
-    "tqdm",
     "pyyaml",
+    # Nothing below is used by a PSX project. splat imports its N64
+    # segment types eagerly, so pygfxd (display lists) and crunch64
+    # (MIO0/Yay0) have to be importable even though nothing here will ever
+    # call them. crunch64 is capped at 0.5.3 because later releases stopped
+    # shipping a CPython 3.10 wheel and the image is Ubuntu 22.04.
     "n64img",
+    "pygfxd==1.0.5",
+    "crunch64==0.5.3",
 ]
 
 

@@ -75,7 +75,7 @@ $(BUILD_DIR)/asm/29E8.o: $(ASM_DIR)/29E8.s | dirs
 	$(MASPSX) --run-assembler --gnu-as-path $(AS) -o $@ $(AS_FLAGS) $<
 
 $(BUILD_DIR)/src/%.s: $(SRC_DIR)/%.c | dirs
-	$(GCC) $(GCC_FLAGS) -S $< -o $@
+	$(GCC) $(GCC_FLAGS) -I$(INC_DIR) -S $< -o $@
 
 # Rounds 67-68: the c_o1/c_o1_ndb/c_o2 files hold real-C conversions
 # that byte-match under the ORIGINAL per-unit compiler settings
@@ -91,7 +91,7 @@ $(BUILD_DIR)/src/c_o2.s: GCC_FLAGS := -O2 -mrnames -mmips-as -fno-builtin -fsign
 # c_257.c compiles with GCC 2.5.7 (no -mrnames: 2.5.7 would emit
 # symbolic register names that modern gas rejects).
 $(BUILD_DIR)/src/c_257.s: $(SRC_DIR)/c_257.c | dirs
-	$(GCC257) -O2 -mmips-as -fno-builtin -fsigned-char -gcoff -S $< -o $@
+	$(GCC257) -O2 -mmips-as -fno-builtin -fsigned-char -gcoff -I$(INC_DIR) -S $< -o $@
 
 $(BUILD_DIR)/src/c_o1.o $(BUILD_DIR)/src/c_o1_ndb.o $(BUILD_DIR)/src/c_o2.o $(BUILD_DIR)/src/c_257.o: \
 $(BUILD_DIR)/src/%.o: $(BUILD_DIR)/src/%.s

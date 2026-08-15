@@ -564,100 +564,86 @@ int func_80019CA8(int a0, int a1) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Second attempt at the seven that did not match first time round.     */
+/* Third attempt at the seven, this time from m2c's output rather than  */
+/* from reading the listing by hand.                                    */
 /*                                                                      */
-/* The lesson from that round: what failed was not the logic but the    */
-/* order. GCC 2.7.2 at -O2 does not reorder freely enough to turn       */
-/* naturally-written C into the retail schedule, so these are written   */
-/* to mirror the instruction order of the disassembly -- conditions in  */
-/* the direction the branch tests, values computed into locals in the   */
-/* order the registers are filled, delay-slot assignments hoisted above */
-/* the branch they belong to.                                           */
+/* m2c disagreed with my hand-written versions on five of six, and the  */
+/* disagreements were exactly the things that decide a match: which way */
+/* round the condition is tested, whether the multiply happens before   */
+/* or after the memory load, and whether an expression stays whole or   */
+/* is split across statements. My "rules" from the last round said to   */
+/* split arithmetic; m2c keeps func_80047D24's sum in one expression.   */
 /* ------------------------------------------------------------------ */
 
-/* bgez tests >= 0, so the C tests the same way round; the multiply is
- * decomposed the way the delay slot forces (t*2 before the branch). */
 void func_8001B284(int *car) {
     int t = D_801D7800 - 0x1D4C;
+    int v;
 
-    if (t >= 0) {
-        int lat = car[44];
-        t = t * 6;
-        car[44] = lat / 2;
+    if (t < 0) {
+        v = -t;
     } else {
-        t = -t;
+        v = t * 6;
+        car[44] = car[44] / 2;
     }
-    D_8012CFF0 = t + 0x3E8;
+    D_8012CFF0 = v + 0x3E8;
 }
 
-/* The 0xFFF mask sits in the branch's delay slot, so it is the value on
- * the fall-through path and the else branch overwrites it. */
 int func_800465A0(int a0, int a1) {
-    int x = a0 & 0xFFF;
     int y;
+    int x = a0 & 0xFFF;
 
-    if (D_80077378 != 0) {
-        y = (a1 & 0xFFF) << 12;
-    } else {
+    if (D_80077378 == 0) {
         y = (a1 & 0x7FF) << 11;
         x = a0 & 0x7FF;
+    } else {
+        y = (a1 & 0xFFF) << 12;
     }
     return y | (x | 0xE5000000);
 }
 
-void func_80047A7C(unsigned int *a0, unsigned int a1, unsigned int *a2) {
-    unsigned int t;
-
-    t = *a2 & 0xFF000000;
-    *a2 = t | (*a0 & 0x00FFFFFF);
-    t = *a0 & 0xFF000000;
-    *a0 = t | (a1 & 0x00FFFFFF);
+void func_80047A7C(int *a0, int a1, int *a2) {
+    *a2 = (*a2 & 0xFF000000) | (*a0 & 0xFFFFFF);
+    *a0 = (*a0 & 0xFF000000) | (a1 & 0xFFFFFF);
 }
 
-/* addu then addiu: the +1 is its own instruction, so its own statement. */
 int func_80047D24(unsigned char *a0, unsigned char *a1) {
-    int len = a0[3] + a1[3];
+    int t = a0[3] + a1[3] + 1;
 
-    len = len + 1;
-    if (len < 0x21) {
-        a0[3] = len;
-        *(int *)a1 = 0;
+    if (t < 0x21) {
+        a0[3] = (unsigned char) t;
+        *(int *) a1 = 0;
         return 0;
     }
     return -1;
 }
 
-/* The index is masked to 16 bits for the bounds test but shifted with sra
- * for the address, so both spellings appear literally. */
 int func_8004D238(int a0, short a1, short a2) {
     short *p;
 
-    if ((a0 & 0xFFFF) < 0x18) {
-        p = (short *)(D_8007745C + ((a0 << 16) >> 12));
-        p[0] = a1;
-        p[1] = a2;
-        return 0;
+    if ((unsigned int) (a0 & 0xFFFF) >= 0x18U) {
+        return -1;
     }
-    return -1;
+    p = (short *) (((a0 << 16) >> 12) + D_8007745C);
+    p[0] = a1;
+    p[1] = a2;
+    return 0;
 }
 
-void func_8005163C(short a0, short a1) {
-    char *p = D_801E90E8[a0] + a1 * 168;
+void func_8005163C(int a0, short a1) {
+    char *p = (a1 * 0xA8) + *(char **) ((char *) D_801E90E8 + ((a0 << 16) >> 14));
 
-    *(int *)(p + 0x90) |= 4;
+    *(int *) (p + 0x90) |= 4;
 }
 
-/* Test at the bottom, early-out at the top -- beqz guards the loop and the
- * back-edge is bnez. Index written (i + a0), which is the operand order of
- * the addu. */
 void func_8005486C(int a0, unsigned int a1) {
+    int t;
     unsigned int i = 0;
 
-    if (a1 == 0) {
-        return;
+    if (a1 != 0) {
+        do {
+            t = i + a0;
+            i += 1;
+            *(int *) ((t << 5) + D_801734A0) = 0;
+        } while (i < a1);
     }
-    do {
-        *(int *)(D_801734A0 + ((i + a0) << 5)) = 0;
-        i++;
-    } while (i < a1);
 }

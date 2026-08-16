@@ -19,9 +19,22 @@ python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
 ./build/m0/m0 90 PSX.EXE
 ```
 
-`data.iso` est l'image de la piste de données de ton disque : elle sert les
-secteurs tels quels, le jeu y trouve son descripteur de volume, son répertoire
-et ses fichiers. Sans `--iso`, le jeu démarre puis s'arrête au chargement.
+Il te faut deux choses tirées de ta propre copie du jeu : `PSX.EXE`, et une
+image de la **piste de données** en secteurs de 2048 octets. Si tu pars d'une
+image BIN/CUE (2352 octets par secteur, ce que le lecteur lit vraiment) :
+
+```sh
+python3 tools/m0/bin2iso.py RidgeRacer.bin data.iso
+```
+
+`PSX.EXE` se copie ensuite depuis l'image montée, ou s'extrait avec n'importe
+quel outil ISO 9660. Sans `--iso`, le jeu démarre puis s'arrête au chargement.
+
+### Ce qu'il faut avoir installé
+
+Python 3 et un compilateur C, rien d'autre : `tools/setup.py` installe splat
+lui-même au premier appel. Sous Windows, passe par WSL — le banc utilise
+`getenv` et des chemins POSIX.
 
 `build.py` recalcule la liste des fonctions à chaque construction, à partir du
 désassemblage — rien n'est figé dans un fichier qui se périmerait au premier

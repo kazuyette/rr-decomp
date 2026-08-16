@@ -485,3 +485,54 @@ Ce qui corrige une troisième fois la phrase « aucun des trois types n'est un
 mur ». Le type A en contient, et des grands. Le test d'empreinte fine en plan
 les manquait parce qu'ils sont larges autant que hauts — fins seulement dans la
 troisième dimension, celle que la vue de dessus écrase.
+
+---
+
+# La visibilité est écrite en ASCII
+
+`func_80015BC4`, appelé par le constructeur des placements pour décider si une
+cellule est dessinée, ne fait aucun calcul de frustum. Il lit **un octet** et le
+décode comme un chiffre hexadécimal :
+
+```
+    index = cellZ * 34 + 31 − cellX
+    c     = table[index]                    ; lbu, un octet
+    si 'a' <= c <= 'z' :  zone = c − 0x57   ; 'a' -> 10
+    sinon si '0' <= c <= '9' : zone = c − 0x30
+    si zone == zone_de_la_camera : visible
+```
+
+Le `31 − cellX` est la troisième apparition indépendante de la réflexion en X.
+
+Les tables sont à `0x80071D70`, `0x800721B0` et `0x800725F0`, espacées de
+**1088 octets = 32 lignes de 34** : 32 caractères par ligne plus deux octets
+nuls. Une par circuit. Et leur contenu se lit tel quel :
+
+```
+zzzzzzzz888888888877777zzzzzzzzz
+zzzzzzzz8888888888777777zzzzzzzz
+zzzzzz99888888888877777766zzzzzz
+zzzz9999888888888877777766666zzz
+zzzz9999998888888887766666666zzz
+...
+aaaaaabbbbbbccbbbbb555555544444z
+aaaaaabbbbccccccbbbbb5554444333z
+```
+
+**C'est de l'art ASCII.** Un caractère par cellule, un chiffre hexadécimal par
+zone, `z` pour le reste. `D_80072A30` porte le nombre de zones — 14, 14 et 20
+pour les trois circuits — et `D_801E9210` l'index du circuit courant.
+
+Un ensemble de visibilité potentielle écrit à la main dans un éditeur de texte,
+en 1994, et compilé tel quel dans l'exécutable. Il n'y a rien à décoder : le
+format *est* sa propre représentation.
+
+### Ce qui n'est pas établi
+
+L'alignement exact des lignes de cette carte sur la grille `IDX.HED`. Une
+recherche libre de décalage donne 92 %, 92 % et 100 % de couverture mais avec
+trois décalages différents selon le circuit — c'est le signe d'un ajustement,
+pas d'une correspondance. Les trois circuits partagent la même géométrie et
+doivent partager le même alignement ; tant que trois décalages sortent, la
+question reste ouverte et se tranchera en lisant `func_80015AAC`, qui calcule
+la zone de la caméra à partir de sa cellule.

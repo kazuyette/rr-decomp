@@ -196,3 +196,7 @@ negate_rot_row0 = 0x80043738;
 draw_sections = 0x800437AC;
 build_section_placements = 0x80012C14;
 ApplyMatrixSV = 0x8004315C;
+cell_zone_visible = 0x80015BC4;
+camera_zone = 0x80015AAC;
+map_init = 0x80015CD4;
+draw_sections_2 = 0x80034050;

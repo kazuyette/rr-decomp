@@ -126,61 +126,57 @@ def disassemble(path):
 
 
 
-SAVED = re.compile(r"^s[0-7]$|^ra$|^fp$|^s8$")
+SAVED = re.compile(r"^s[0-8]$|^ra$|^fp$")
+BRANCHY = re.compile(r"^(jal|jalr|jr|j|b|b\w+)$")
 
 
-def frame(ins):
-    """(frame size, {saved regs}, index after the prologue).
+def strip_frame(ins):
+    """(frame size, saved regs, body, index map).
 
-    A prologue is the stack adjustment plus the register saves that follow
-    it. It is worth isolating because the compiler emits it *from* the body:
-    how much stack, and which callee-saved registers, are decided by what
-    the body needs. So a difference here is a symptom whose cause is
-    somewhere later, and reporting it as "the first divergence" points at
-    the least informative instruction in the whole function.
+    The prologue is not a clean prefix: GCC interleaves register saves with
+    the first instructions of the body, so scanning until the first thing
+    that is not a save stops far too early -- it reported VSync's base as
+    still saving s1 while the target was five instructions into its work.
+
+    So the prologue is collected as a *set* of instructions rather than a
+    span: every stack adjustment and every callee-saved store, anywhere
+    before the first branch or call. The epilogue is taken from the end,
+    where interleaving does not happen.
+
+    Both are removed because both are written by the compiler from what the
+    body needs. What remains is what the C actually said.
     """
-    size, saved, i = None, set(), 0
-    while i < len(ins):
-        m = re.match(r"sp,sp,(-?\d+)$", ins[i].args)
-        if ins[i].mnem == "addiu" and m and size is None:
+    size, saved, drop = None, set(), set()
+    limit = len(ins)
+    for i, a in enumerate(ins):
+        if BRANCHY.match(a.mnem):
+            limit = i
+            break
+    for i in range(limit):
+        a = ins[i]
+        m = re.match(r"sp,sp,(-\d+)$", a.args)
+        if a.mnem == "addiu" and m:
             size = -int(m.group(1))
-            i += 1
+            drop.add(i)
             continue
-        m = re.match(r"(\w+),\d+\(sp\)$", ins[i].args)
-        if ins[i].mnem in ("sw", "swc1", "sdc1") and m and SAVED.match(m.group(1)):
+        m = re.match(r"(\w+),\d+\(sp\)$", a.args)
+        if a.mnem in ("sw", "swc1", "sdc1") and m and SAVED.match(m.group(1)):
             saved.add(m.group(1))
-            i += 1
-            continue
-        break
-    return size, saved, i
-
-
-def body_end(ins, saved):
-    """Index just past the last body instruction, i.e. before the epilogue.
-
-    The epilogue restores exactly what the prologue saved and undoes the
-    stack adjustment, so it differs whenever the frame does -- for the same
-    reason and with the same lack of information. Trimming it stops a frame
-    difference from being reported twice, once at each end.
-    """
+            drop.add(i)
     i = len(ins)
     while i > 0:
         a = ins[i - 1]
-        if a.mnem == "jr" and a.args == "ra":
-            i -= 1
-            continue
-        if a.mnem == "addiu" and re.match(r"sp,sp,\d+$", a.args):
-            i -= 1
-            continue
         m = re.match(r"(\w+),\d+\(sp\)$", a.args)
-        if a.mnem in ("lw", "lwc1", "ldc1") and m and m.group(1) in saved:
-            i -= 1
-            continue
-        if a.mnem == "nop":
+        if (a.mnem == "jr" and a.args == "ra") or a.mnem == "nop" \
+                or (a.mnem == "addiu" and re.match(r"sp,sp,\d+$", a.args)) \
+                or (a.mnem in ("lw", "lwc1", "ldc1") and m
+                    and m.group(1) in saved):
+            drop.add(i - 1)
             i -= 1
             continue
         break
-    return i
+    keep = [i for i in range(len(ins)) if i not in drop]
+    return size, saved, [ins[i] for i in keep], keep
 
 
 def classify(target, base, i, k=None):
@@ -255,25 +251,28 @@ def main():
         if name not in target or name not in base:
             continue
         t, b = target[name], base[name]
-        ft, fb = frame(t), frame(b)
+        ft, fb = strip_frame(t), strip_frame(b)
         prologue_differs = (ft[0], ft[1]) != (fb[0], fb[1])
 
         if prologue_differs:
             # Compare the bodies past the prologue. The prologue itself is
             # a summary of the body's needs, so the informative question is
             # where the bodies part company, not that the frames do.
-            et, eb = body_end(t, ft[1]), body_end(b, fb[1])
-            j = first_divergence(t[:et], b[:eb], ft[2], fb[2])
+            bt, bb = ft[2], fb[2]
+            j = first_divergence(bt, bb)
             note = f"frame {ft[0]} vs {fb[0]}"
             extra = (ft[1] | fb[1]) - (ft[1] & fb[1])
             if extra:
                 note += ", saved " + "/".join(sorted(extra))
             if j is None:
-                kind, i, k = "frame-only", ft[2], fb[2]
+                kind = "frame-only"
+                i = ft[3][0] if ft[3] else 0
+                k = fb[3][0] if fb[3] else 0
                 note += " -- bodies identical"
             else:
-                i, k = ft[2] + j, fb[2] + j
-                kind = "frame+" + classify(t[:et], b[:eb], i, k)
+                kind = "frame+" + classify(bt, bb, j)
+                i = ft[3][j] if j < len(ft[3]) else len(t) - 1
+                k = fb[3][j] if j < len(fb[3]) else len(b) - 1
         else:
             i = k = first_divergence(t, b)
             if i is None:

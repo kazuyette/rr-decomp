@@ -28,6 +28,7 @@ void video_fin(void) {}
 
 #include <SDL2/SDL.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static SDL_Window *fenetre;
 static SDL_Renderer *rendu;
@@ -35,6 +36,42 @@ static SDL_Texture *texture;
 static int tex_l, tex_h;
 static int ferme;
 static u32 boutons = 0xFFFF;
+
+/* La cadence.
+ *
+ * Rien ne bride le jeu : le code traduit s'execute a la vitesse de la machine
+ * hote, et il produit ses images aussi vite qu'on les lui laisse produire.
+ * Sur la console, c'est le balayage video qui donne le tempo -- soixante fois
+ * par seconde en NTSC, ce qu'est la version japonaise. Sans cette limite, la
+ * voiture accelere quatre fois trop vite et le jeu devient injouable pour une
+ * raison qui n'a rien a voir avec lui.
+ *
+ * On attend donc, apres avoir montre l'image, ce qui reste de son seizieme de
+ * seconde. Attendre ici plutot qu'ailleurs a une raison : le jeu bloque sur
+ * son propre echange de tampons, donc brider l'affichage bride tout le reste
+ * sans qu'on ait a toucher a la base de temps.
+ *
+ * Le retard ne s'accumule pas. Si une image a coute plus que son temps, on
+ * repart de maintenant plutot que de courir apres : rattraper un retard sur
+ * un jeu de course revient a le rendre saccade pour rien.
+ */
+static double hz = 60.0;
+static Uint64 prochaine, freq;
+
+static void cadencer(void)
+{
+    Uint64 maintenant;
+    if (hz <= 0.0) return;
+    if (!freq) { freq = SDL_GetPerformanceFrequency(); prochaine = SDL_GetPerformanceCounter(); }
+    prochaine += (Uint64)((double)freq / hz);
+    maintenant = SDL_GetPerformanceCounter();
+    if (maintenant > prochaine) { prochaine = maintenant; return; }
+    {
+        double reste = (double)(prochaine - maintenant) / (double)freq;
+        if (reste > 0.002) SDL_Delay((Uint32)((reste - 0.001) * 1000.0));
+        while (SDL_GetPerformanceCounter() < prochaine) { }
+    }
+}
 
 int video_init(void)
 {
@@ -58,6 +95,13 @@ int video_init(void)
     /* Le filtrage lineaire adoucit un affichage 320 par 240 etire en 640 par
        480. C'est un gout, pas une fidelite : la console n'en avait pas. */
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+    {   /* HZ=0 pour ne rien brider, HZ=30 pour la cadence que la course tient
+           sur la console -- le jeu y dessine une image sur deux balayages. */
+        const char *h = getenv("HZ");
+        if (h) hz = atof(h);
+        if (hz > 0.0) printf("fenetre : %g images par seconde au plus\n", hz);
+        else printf("fenetre : cadence libre\n");
+    }
     return 1;
 }
 
@@ -122,6 +166,7 @@ void video_image(const u16 *vram, int x, int y, int l, int h)
     SDL_RenderCopy(rendu, texture, NULL, NULL);
     SDL_RenderPresent(rendu);
     touches();
+    cadencer();
 }
 
 u32 video_manette(void) { return boutons; }

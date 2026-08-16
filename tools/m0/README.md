@@ -112,6 +112,29 @@ L'image est présentée quand le jeu échange ses tampons, c'est-à-dire au mome
 exact où il déclare une image finie — pas au bout d'un compteur choisi par
 nous. `SANS_FENETRE=1` revient au mode images sur disque.
 
+### La cadence
+
+Rien ne bride le code traduit : il produit ses images aussi vite que la machine
+hôte le permet, et la voiture accélère alors plusieurs fois trop vite pour une
+raison qui n'a rien à voir avec le jeu. Sur la console, c'est le balayage vidéo
+qui donne le tempo — soixante fois par seconde en NTSC, ce qu'est la version
+japonaise.
+
+L'attente se fait donc dans l'échange de tampons, et pas ailleurs : le jeu y
+bloque déjà de lui-même, donc brider l'affichage bride tout le reste sans
+toucher à la base de temps. Le retard ne s'accumule pas — une image trop longue
+n'est pas rattrapée sur la suivante.
+
+```sh
+HZ=30 ./build/m0/m0 600 PSX.EXE     # la cadence de la course sur console
+HZ=0  ./build/m0/m0 600 PSX.EXE     # aucune bride, pour mesurer
+```
+
+**Comment savoir laquelle est juste** : le chronomètre de la course décompte
+des secondes. Lancer une course, regarder `TIME` descendre montre en soixante
+secondes réelles combien le jeu en a compté. Une unité par seconde, et la
+cadence est bonne.
+
 Sans SDL2, rien ne change : images sur disque et scénario, et `build.py` le dit
 au lieu de le taire.
 

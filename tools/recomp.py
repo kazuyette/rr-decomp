@@ -193,8 +193,20 @@ def _decode(w, pc):
     if op == 40: return f"SB({r(rs)} + {simm}, {r(rt)});", None, False
     if op == 41: return f"SH({r(rs)} + {simm}, {r(rt)});", None, False
     if op == 43: return f"SW({r(rs)} + {simm}, {r(rt)});", None, False
-    if op == 18: raise Unsupported(f"COP2 (GTE) en {pc:08X} -- hors du domaine de ce traducteur")
-    if op in (50, 58): raise Unsupported(f"lwc2/swc2 (GTE) en {pc:08X}")
+    # COP2 : le GTE. Les transferts deviennent des appels aux accesseurs, les
+    # commandes un appel avec leur encodage brut -- c'est l'implementation qui
+    # decode les champs sf, lm, mx, v et cv, pas le traducteur, pour que les
+    # deux restent verifiables separement.
+    if op == 18:
+        if rs & 0x10:
+            return f"gte_command(0x{w & 0x1FFFFFF:07X}u);", None, False
+        if rs == 0: return f"{r(rt)} = gte_read_data({rd});", None, False
+        if rs == 2: return f"{r(rt)} = gte_read_ctrl({rd});", None, False
+        if rs == 4: return f"gte_write_data({rd}, {r(rt)});", None, False
+        if rs == 6: return f"gte_write_ctrl({rd}, {r(rt)});", None, False
+        raise Unsupported(f"COP2 rs={rs} en {pc:08X}")
+    if op == 50: return f"gte_write_data({rt}, LW({r(rs)} + {simm}));", None, False
+    if op == 58: return f"SW({r(rs)} + {simm}, gte_read_data({rt}));", None, False
     raise Unsupported(f"opcode {op} en {pc:08X}")
 
 
@@ -310,6 +322,7 @@ if __name__ == "__main__":
     names = sys.argv[3:]
     print("/* genere par tools/recomp.py -- ne pas editer */")
     print('#include "rt.h"')
+    print('#include "gte.h"')
     for nm in names:
         a, c = func_length(asm, nm)
         if a is None:

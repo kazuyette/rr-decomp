@@ -189,3 +189,75 @@ d'angle — et rend une valeur que la référence tire d'un appel dont ma
 détection d'écriture de `$v0` ne rend pas compte. Ce sont deux cas à instruire,
 pas deux erreurs établies ; et le fait qu'il n'en reste que deux sur 116 dit où
 en est le traducteur.
+
+---
+
+# Étape 3 : le GTE
+
+## Ce qui a été implémenté
+
+Pas les quarante opérations du catalogue : **les vingt-deux que ce binaire
+utilise réellement**, relevées en comptant les encodages dans les 948
+fonctions. Vingt-neuf encodages distincts, `mvmva` en tête avec vingt-cinq
+occurrences, puis `nclip`, `intpl`, `rtpt`, `avsz4`, `rtps`. Le reste lève une
+erreur franche plutôt que de rendre un résultat faux.
+
+Avec les registres et leurs particularités — la pile des coordonnées écran, la
+pile des Z, la pile des couleurs, le dépaquetage 5-5-5 d'IRGB à l'écriture, le
+compte de zéros en tête de LZCS, le registre H relu signé — et la saturation
+complète avec ses dix-neuf drapeaux.
+
+La division de projection reproduit le chemin du matériel : table de 257
+entrées et deux itérations de Newton-Raphson, pas une division exacte. Une
+division juste au sens mathématique donnerait des coordonnées écran
+différentes de un ou deux — visibles sur les arêtes, invisibles dans un test
+qui ne les cherche pas.
+
+## Le traducteur, maintenant
+
+| | fonctions traduisibles |
+|---|---|
+| avant les appels et les globals | 115 |
+| après | 836 |
+| **après le GTE** | **945 sur 948** |
+
+Il ne reste que deux `syscall` et un accès COP0.
+
+Les transferts deviennent des appels aux accesseurs, les commandes un appel
+avec leur encodage brut. Le décodage des champs `sf`, `lm`, `mx`, `v` et `cv`
+est fait par l'implémentation, pas par le traducteur — pour que les deux
+restent vérifiables séparément.
+
+## Le contrôle, et ce qu'il vaut
+
+qemu ne connaît pas le COP2 : la référence par exécution qui a validé les
+fonctions entières ne dit rien ici. Le seul contrôle disponible est de
+réécrire les opérations **une seconde fois**, dans un autre langage, depuis la
+même documentation, puis de comparer sur des états de registres tirés au
+hasard.
+
+**4 400 comparaisons — quatre cents états, onze encodages — et aucun écart**
+sur `mvmva` (quatre variantes de matrice, de vecteur et de décalage), `nclip`,
+`avsz3`, `avsz4`, `sqr` et `op`.
+
+Ce que ça vaut, précisément : deux transcriptions indépendantes ne se trompent
+pas au même endroit, sauf si la documentation elle-même est ambiguë. Ça attrape
+les fautes de frappe, les décalages inversés, les saturations oubliées —
+l'essentiel de ce qui rate dans ce genre de code. **Ça n'attrape pas une
+lecture fausse partagée.** Le seul contrôle qui le ferait serait la console.
+
+Et le chargeur du banc a lui-même produit un faux échec avant de servir :
+écrire les trente-deux registres dans l'ordre détruit une partie de l'état,
+parce qu'écrire IRGB dépaquette une couleur dans IR1-3 et qu'écrire SXYP
+pousse la pile des coordonnées. Quatre cents états divergeaient pour cette
+seule raison.
+
+## Ce qui n'est pas encore contrôlé
+
+`rtps` et `rtpt` — donc la projection elle-même, avec sa division — et toute la
+famille des calculs d'éclairage et de brume : `ncds`, `ncdt`, `nccs`, `ncct`,
+`ncs`, `nct`, `cdp`, `cc`, `dpcs`, `dpct`, `dcpl`, `intpl`, `gpf`, `gpl`. Elles
+sont implémentées mais pas encore doublées en Python.
+
+C'est la moitié la plus délicate, et je préfère le dire plutôt que de laisser
+« GTE validé » suggérer plus que les 4 400 comparaisons ne prouvent.

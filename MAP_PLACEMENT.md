@@ -240,3 +240,53 @@ assignée à cette cellule doit être posée à `(x+1) * 2048`, puisque ses somm
 s'étendent de `−8192` à `0` en X. Les deux énoncés disent la même chose : la
 section couvre sa propre cellule, son origine étant sur le bord `+X` de
 celle-ci.
+
+## Le placement n'est pas encore exact — et la réflexion est écartée
+
+Observation extérieure : le tracé est bon, le placement de la géométrie ne
+l'est pas. Elle est juste, et deux mesures la rendent précise.
+
+L'instrument est le tunnel : un tunnel doit être centré sur l'axe. En prenant
+les centroïdes des 695 quads de type C et leur distance à la polyligne, avec
+une demi-largeur effective de route de **503 unités monde** (`hw*2 >> 4`) :
+
+| placement | distance médiane à l'axe |
+|---|---|
+| origine à `x_idx * 2048` | 990 |
+| origine à `(x_idx + 1) * 2048` | 556 |
+| meilleur ajustement libre `(+1536, +512)` | 260 |
+
+Donc le décalage d'une cellule en X va dans le bon sens et divise l'erreur par
+presque deux, mais un ajustement libre fait encore deux fois mieux, sur une
+valeur qui n'est un multiple propre de rien. **La convention d'origine n'est
+donc pas encore dérivée ; elle est ajustée.** C'est à corriger dans la section
+précédente, où j'écrivais que le décalage « n'avait qu'une valeur admissible » :
+c'était vrai à la résolution d'une cellule, et faux à la résolution où on peut
+maintenant mesurer.
+
+## La réflexion en X est réfutée
+
+Même instrument, et cette fois le verdict est net :
+
+| indexation | tunnels | tous les quads |
+|---|---|---|
+| `x_monde = x_idx * 2048` | 990 | 1 384 |
+| `x_monde = (30 − x_idx) * 2048` | 15 813 | 3 889 |
+| `x_monde = (31 − x_idx) * 2048` | 17 854 | 4 298 |
+| `x_monde = (29 − x_idx) * 2048` | 13 775 | 3 601 |
+
+Seize fois pire. L'hypothèse d'une réflexion en X entre la grille et la
+polyligne, ouverte depuis trois sections de cette page, est **fausse** :
+`z*32 + x` est bien la correspondance, sans miroir. Le `30 − x` du code
+s'explique donc par un stockage inversé de la caméra dans `D_801D9068`, la
+réflexion s'appliquant deux fois et s'annulant — ce qui reste à lire, mais
+n'est plus une alternative ouverte sur le placement.
+
+## Où chercher la suite
+
+Pas dans un ajustement plus fin. Les deux candidats qui restent sont dans le
+code de chargement : `func_800125B4`, qui construit la table de 32 octets par
+section à `D_801D35F0`, et ce qui écrit `D_801D82D0`. Si une origine par
+section existe, elle est posée là — et un décalage constant qui n'est un
+multiple propre de rien ressemble beaucoup plus à un champ lu dans un fichier
+qu'à une convention de grille.

@@ -667,3 +667,53 @@ Il bute sur la lecture, ce qui est attendu — aucune donnée ne lui est encore
 servie. Et c'est là que la remarque sur les deux usages du lecteur prend toute
 sa valeur : il n'y a qu'un chargement à servir, une fois, avant que le jeu
 n'ait plus jamais besoin du disque.
+
+## Le disque, servi
+
+L'image `data.iso` est un **vrai système de fichiers ISO 9660**, simplement
+tronqué : `RIDGERACER`, 184 568 secteurs annoncés dont on possède les 1 559
+premiers — ce qui suffit, parce que le descripteur de volume est au secteur 16,
+la table des chemins au 18 et la racine au 22. Tout ce qui décrit le disque est
+là ; il ne manque que les données.
+
+Et les données, on les a par ailleurs. Le répertoire donne pour chacune son
+secteur de départ :
+
+| fichier | secteur | taille |
+|---|---|---|
+| `PSX.EXE` | 23 | 425 984 |
+| `RR.VH` / `RR.VB` | 231 / 247 | son |
+| `TEX4` … `TEX3` | 487 … 1003 | textures |
+| `MAP.RRM` | 1057 | 271 548 |
+| `OBJ.RRO` | 1190 | 445 348 |
+| `IDX.HED` | 1408 | 2 048 |
+
+La couche de service est donc simple : **les métadonnées viennent de l'image,
+les données des fichiers extraits**, chacun à son secteur déclaré. Le jeu ne
+voit aucune différence — il demande un secteur, il obtient les octets qui y
+sont. Aucune donnée n'est versionnée : la table se régénère depuis ta propre
+image.
+
+`Setloc` est décodé — minutes, secondes et trames en décimal binaire, moins les
+150 trames d'amorce — et le canal 3 du DMA transfère un secteur vers la RAM
+puis avance d'un.
+
+## Où en est la séquence
+
+Elle s'allonge à chaque correction :
+
+```
+CdlReset                                          (au depart)
+CdlReset -> CdlSetloc -> CdlSetmode -> CdlReadN    (apres le service BIOS)
+... -> CdlReadN -> CdlPause -> CdlReadN            (maintenant)
+```
+
+Le pilote enchaîne désormais lecture et pause, et recommence. Mais aucun
+secteur n'est encore demandé : il n'atteint pas le transfert, parce que son
+initialisation expire toujours avant d'enregistrer sa fonction de
+synchronisation — laquelle reste donc nulle, et le rappel jamais appelé.
+
+C'est un cercle qu'il faut ouvrir par le bon bout : ce n'est pas la donnée qui
+manque au pilote, c'est la confirmation que sa commande a abouti. Le prochain
+travail est là, sur l'achèvement `INT2` et non sur les secteurs — qui, eux,
+sont prêts à être servis le jour où il les demandera.

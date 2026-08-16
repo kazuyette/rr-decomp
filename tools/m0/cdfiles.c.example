@@ -1,0 +1,18 @@
+/* Table du disque, lue dans le repertoire ISO 9660 de ta propre image. */
+struct cdfile { unsigned int lba, size; const char *path; };
+const struct cdfile CDFILES[] = {
+  {  1408,      2048, "/tmp/rr/files/IDX.HED"},
+  {  1057,    271548, "/tmp/rr/files/MAP.RRM"},
+  {  1190,    445348, "/tmp/rr/files/OBJ.RRO"},
+  {    23,    425984, "/tmp/rr/files/PSX.EXE"},
+  {   247,    491056, "/tmp/rr/files/RR.VB"},
+  {   231,     32288, "/tmp/rr/files/RR.VH"},
+  {   495,    699908, "/tmp/rr/files/TEX0.TMS"},
+  {   837,    197128, "/tmp/rr/files/TEX1.TMS"},
+  {   934,    140704, "/tmp/rr/files/TEX2.TMS"},
+  {  1003,    109948, "/tmp/rr/files/TEX3.TMS"},
+  {   487,     14996, "/tmp/rr/files/TEX4.TMS"},
+};
+const int NCDFILES = 11;
+const char *CD_META = "/tmp/rr/data.iso";
+const unsigned int CD_META_SECTORS = 1559;

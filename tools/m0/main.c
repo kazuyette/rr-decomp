@@ -257,6 +257,11 @@ static void report(int sig)
     printf("interruptions livrees      : %lu\n", irq_delivered);
     printf("evenements delivres        : %lu\n", ev_delivered);
     printf("rappel CD du jeu appele    : %lu fois\n", cdcb_hits);
+    {
+        extern unsigned long cd_sectors_served, cd_sectors_missing, dma3_done;
+        printf("secteurs servis            : %lu (%lu introuvables), %lu transferts DMA\n",
+               cd_sectors_served, cd_sectors_missing, dma3_done);
+    }
     printf("commandes GP0 les plus frequentes :\n");
     for (i = 0; i < 256; i++)
         if (prim_hist[i] && n < 12) {

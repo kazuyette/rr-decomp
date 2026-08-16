@@ -24,6 +24,43 @@ void irq_raise(u32 bit) { istat |= bit; }
 #define IRQ_VBLANK 0x0001
 #define IRQ_CDROM  0x0004
 
+/* --- servir les secteurs ------------------------------------------------
+ *
+ * Les metadonnees -- descripteur de volume, table des chemins, repertoire --
+ * viennent de l'image du disque ; les donnees des fichiers extraits, chacun a
+ * son secteur declare dans le repertoire. Le jeu ne voit aucune difference :
+ * il demande un secteur, il obtient les octets qui y sont.
+ */
+#include <stdio.h>
+struct cdfile { unsigned int lba, size; const char *path; };
+extern const struct cdfile CDFILES[];
+extern const int NCDFILES;
+extern const char *CD_META;
+extern const unsigned int CD_META_SECTORS;
+unsigned long cd_sectors_served, cd_sectors_missing;
+
+static void cd_fetch(u32 lba, u8 *out)
+{
+    int i;
+    FILE *f;
+    for (i = 0; i < 2048; i++) out[i] = 0;
+    if (lba < CD_META_SECTORS) {
+        f = fopen(CD_META, "rb");
+        if (f) { fseek(f, (long)lba * 2048, SEEK_SET); fread(out, 1, 2048, f); fclose(f);
+                 cd_sectors_served++; return; }
+    }
+    for (i = 0; i < NCDFILES; i++) {
+        u32 n = (CDFILES[i].size + 2047) / 2048;
+        if (lba >= CDFILES[i].lba && lba < CDFILES[i].lba + n) {
+            f = fopen(CDFILES[i].path, "rb");
+            if (f) { fseek(f, (long)(lba - CDFILES[i].lba) * 2048, SEEK_SET);
+                     fread(out, 1, 2048, f); fclose(f); cd_sectors_served++; return; }
+        }
+    }
+    cd_sectors_missing++;
+}
+
+
 u8 RAM[0x200000];
 u8 SPAD[0x400];
 u32 g_sp;
@@ -71,6 +108,8 @@ static void gp0_write(u32 v)
  * chaînée en RAM et demande au DMA de la dérouler. Dérouler cette liste ici,
  * c'est voir exactement ce qu'une image contient. */
 static u32 dma2_madr, dma2_bcr, dma2_chcr;
+static u32 dma3_madr, dma3_bcr, dma3_chcr;
+unsigned long dma3_done;
 unsigned long ot_lists, ot_nodes;
 
 static void dma2_run(void)
@@ -118,6 +157,12 @@ static u8 cd_pending_cmd;
    compte les deux separement -- ses compteurs Acknowledge et Complete -- et
    n'avance pas tant qu'il n'a pas eu le second. */
 static u8 cd_second;
+static u32 cd_lba;           /* position courante, en secteurs */
+static int cd_reading;
+static u8 cd_sector[2048];
+static int cd_sector_ready;
+
+static u32 bcd(u8 v) { return (v >> 4) * 10 + (v & 15); }
 
 void cd_event(u32 spec);
 
@@ -141,7 +186,19 @@ static void cd_command(u8 cmd)
     one[0] = cd_stat;
     switch (cmd) {
     case 0x01: cd_reply(3, one, 1); break;                 /* Nop     */
-    case 0x02: cd_reply(3, one, 1); break;                 /* Setloc  */
+    case 0x02:                                             /* Setloc  */
+        /* Les parametres sont en minutes, secondes et trames, codes en
+           decimal binaire, et l'origine est a deux secondes du debut. */
+        if (cd_nparam >= 3)
+            cd_lba = (bcd(cd_param[0]) * 60 + bcd(cd_param[1])) * 75
+                     + bcd(cd_param[2]) - 150;
+        cd_reply(3, one, 1);
+        break;
+    case 0x06: case 0x1B:                                  /* ReadN, ReadS */
+        cd_reading = 1;
+        cd_reply(3, one, 1);
+        cd_second = 1;      /* INT1 : un secteur est pret */
+        break;
     case 0x0A: cd_stat = 0x02; cd_reply(3, one, 1); cd_second = 2; break; /* Init  */
     case 0x09: cd_reply(3, one, 1); cd_second = 2; break;  /* Pause   */
     case 0x15: case 0x16: cd_reply(3, one, 1); cd_second = 2; break; /* Seek */
@@ -210,10 +267,15 @@ static void cd_write(u32 p, u32 v)
             if (b & 0x07) {
                 cd_irq = 0;
                 if (cd_second) {
-                    /* L'accuse a ete releve : on enchaine sur l'achevement. */
                     u8 st = cd_stat;
-                    cd_reply(cd_second, &st, 1);
+                    u8 nxt = cd_second;
                     cd_second = 0;
+                    if (nxt == 1) {           /* un secteur est disponible */
+                        cd_fetch(cd_lba, cd_sector);
+                        cd_sector_ready = 1;
+                    }
+                    cd_reply(nxt, &st, 1);
+                    if (cd_reading) cd_second = 1;   /* et le suivant apres lui */
                 }
             }
         }
@@ -299,6 +361,9 @@ u32 hw_read32(u32 p)
     case 0x1F8010A0: return dma2_madr;
     case 0x1F8010A4: return dma2_bcr;
     case 0x1F8010A8: return dma2_chcr;
+    case 0x1F8010B0: return dma3_madr;
+    case 0x1F8010B4: return dma3_bcr;
+    case 0x1F8010B8: return dma3_chcr;
     case 0x1F801800: case 0x1F801801:
     case 0x1F801802: case 0x1F801803: return cd_read(p);
     case 0x1F801070: return istat;
@@ -344,6 +409,23 @@ void hw_write32(u32 p, u32 v, int width)
         }
         imask = v; break;
     }
+    case 0x1F8010B0: dma3_madr = v; break;
+    case 0x1F8010B4: dma3_bcr = v; break;
+    case 0x1F8010B8:
+        dma3_chcr = v;
+        if (v & 0x01000000u) {
+            /* Le lecteur remplit la memoire : un secteur, puis on avance. */
+            u32 words = (dma3_bcr & 0xFFFF) * (dma3_bcr >> 16);
+            u32 a = dma3_madr & 0x1FFFFC, i;
+            if (!cd_sector_ready) cd_fetch(cd_lba, cd_sector);
+            for (i = 0; i < words && i < 512; i++)
+                __builtin_memcpy(RAM + ((a + i * 4) & 0x1FFFFC), cd_sector + i * 4, 4);
+            cd_sector_ready = 0;
+            cd_lba++;
+            dma3_chcr &= ~0x01000000u;
+            dma3_done++;
+        }
+        break;
     case 0x1F8010A0: dma2_madr = v; break;
     case 0x1F8010A4: dma2_bcr = v; break;
     case 0x1F8010A8:

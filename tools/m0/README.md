@@ -86,6 +86,35 @@ seconde, sans toucher à la base de temps du reste.
 | `gte.c` | Le coprocesseur géométrique, vérifié contre une seconde implémentation indépendante (`gte_check.py`, 11 600 comparaisons, 29 encodages). |
 | `main.c` | Le chargeur, l'aiguillage des appels indirects, les appels BIOS, la manette. |
 
+## La fenêtre
+
+Si SDL2 est installé, `build.py` le détecte et le jeu s'ouvre dans une fenêtre,
+avec le clavier vivant :
+
+```sh
+sudo apt install libsdl2-dev     # Debian, Ubuntu, WSL
+python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
+./build/m0/m0 600 PSX.EXE
+```
+
+| touche | manette |
+|---|---|
+| flèches | croix directionnelle |
+| espace ou X | croix — accélérer |
+| C | rond — freiner |
+| S, D | carré, triangle |
+| A, E | L1, R1 |
+| entrée | start |
+| maj | select |
+| échap | quitter |
+
+L'image est présentée quand le jeu échange ses tampons, c'est-à-dire au moment
+exact où il déclare une image finie — pas au bout d'un compteur choisi par
+nous. `SANS_FENETRE=1` revient au mode images sur disque.
+
+Sans SDL2, rien ne change : images sur disque et scénario, et `build.py` le dit
+au lieu de le taire.
+
 ## La manette
 
 Le BIOS ne lit pas la manette à la demande : il remplit un tampon que le jeu
@@ -117,8 +146,9 @@ reste une image. Un scénario écrit une fois continue de marcher.
 | M2 — l'image : écran de chargement, écran-titre | ✅ |
 | M3 — la piste : la démonstration tourne | ✅ |
 | M4 — la manette : menu et course | ✅ |
-| M5 — le son | ✗ (`ss_init error` : le SPU n'est pas modélisé) |
-| M6 — la vitesse : GP0 vers OpenGL | ✗ |
+| M5 — la fenêtre : le jeu se joue au clavier | ✅ |
+| M6 — le son | ✗ (`ss_init error` : le SPU n'est pas modélisé) |
+| M7 — la vitesse : GP0 vers le matériel | ✗ |
 
 ## Ce que ce banc a appris au reste du projet
 

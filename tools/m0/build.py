@@ -168,6 +168,19 @@ def ecrire_disque(iso, sortie):
     return secteurs
 
 
+def sdl_drapeaux():
+    """Les options de compilation de SDL2, ou None s'il n'est pas installe."""
+    for outil in (["pkg-config", "--cflags", "--libs", "sdl2"],
+                  ["sdl2-config", "--cflags", "--libs"]):
+        try:
+            r = subprocess.run(outil, capture_output=True, text=True)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.split()
+        except FileNotFoundError:
+            continue
+    return None
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -198,10 +211,21 @@ def main():
     else:
         print("disque : aucun (--iso absent) -- le jeu s'arretera au chargement")
 
-    sources = [os.path.join(ICI, f) for f in ("main.c", "hw.c", "gpu.c", "gte.c")]
+    sources = [os.path.join(ICI, f)
+               for f in ("main.c", "hw.c", "gpu.c", "gte.c", "video.c")]
     sources += [os.path.join(a.out, f) for f in ("game.c", "table.c", "cdfiles.c", "ram.c")]
     cmd = [a.cc, "-O1", "-w", "-fcommon", "-I", ICI,
            "-o", os.path.join(a.out, "m0")] + sources
+
+    # SDL2 est facultatif : sans lui le banc ecrit des images sur disque et
+    # lit un scenario, comme avant. Avec lui, une fenetre et un clavier.
+    sdl = sdl_drapeaux()
+    if sdl:
+        cmd += ["-DAVEC_SDL"] + sdl
+        print("SDL2 trouve : le jeu s'ouvrira dans une fenetre")
+    else:
+        print("SDL2 absent : pas de fenetre (images sur disque et scenario)")
+        print("   sous Debian ou Ubuntu :  sudo apt install libsdl2-dev")
     if a.compile:
         print("compilation...")
         r = subprocess.run(cmd)

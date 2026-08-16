@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "rt.h"
 
 /* Les interruptions, pour de vrai.
@@ -578,6 +579,12 @@ unsigned long g_cycles;
 void psx_clock(void)
 {
     void cd_tick(void);
+    int video_fermee(void);
+    extern int g_video;
+    /* Fermer la fenetre arrete le jeu, et l'etat des lieux s'imprime comme si
+       le temps imparti etait ecoule -- une sortie voulue vaut bien une sortie
+       subie. */
+    if (g_video && video_fermee()) { void report(int); report(1); _exit(0); }
     cd_tick();
     /* Le retour de balayage. Il etait cadence sur les lectures de l'etat du
        GPU -- or l'attente de VSync ne lit que I_STAT, jamais le GPU : la

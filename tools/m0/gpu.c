@@ -398,7 +398,12 @@ void gpu_gp1(u32 v)
     gp1_cmds++;
     if (op == 0x00) { nfifo = 0; img_left = 0; }
     else if (op == 0x05) {
+        /* Le jeu designe la zone a afficher : c'est son echange de tampons,
+           donc le moment exact ou une image est finie. C'est la, et pas au
+           bout d'un compteur arbitraire, qu'il faut la montrer. */
+        void video_image(const u16 *, int, int, int, int);
         disp_x = (int)(v & 0x3FF); disp_y = (int)((v >> 10) & 0x1FF);
+        video_image(VRAM, disp_x, disp_y, disp_w, disp_h);
     }
     else if (op == 0x08) {
         static const int wtab[4] = { 256, 320, 512, 640 };

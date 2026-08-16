@@ -120,6 +120,7 @@ int g_seconds = 20;
  * s'arretait ; maintenant qu'il ne s'arrete plus, il ne fait que cacher ce que
  * le jeu lui-meme imprime. Il faut donc le demander : VERBEUX=1. */
 int g_verbeux;
+int g_video;
 u32 g_pad_buf[2];
 int g_pad_on;
 u32 g_pad_boutons = 0xFFFF;   /* actifs a zero : rien d'enfonce */
@@ -134,9 +135,18 @@ void pad_ecrire(unsigned long tick)
 {
     int i;
     u32 m = 0xFFFF;
+    u32 video_manette(void);
     if (!g_pad_on) return;
     for (i = 0; i < nscenario; i++)
         if (tick >= scenario[i].quand) m = scenario[i].masque;
+    /* Le clavier prime sur le scenario des qu'une touche est enfoncee : on
+       peut ainsi lancer une partie avec un scenario et reprendre la main en
+       cours de route, ce qui est commode pour rejoindre vite un endroit du
+       jeu qu'on veut essayer. */
+    if (g_video) {
+        u32 vivant = video_manette();
+        if (vivant != 0xFFFF) m = vivant;
+    }
     g_pad_boutons = m;
     for (i = 0; i < 2; i++) {
         u32 p = g_pad_buf[i] & 0x1FFFFF;
@@ -474,7 +484,7 @@ u32 psx_dispatch(u32 addr, u32 a0, u32 a1, u32 a2, u32 a3, u32 t1)
     return 0;
 }
 
-static void report(int sig)
+void report(int sig)
 {
     int i, n = 0;
     if (sig) printf("\n--- interrompu apres %d s ---\n", g_seconds);
@@ -621,6 +631,11 @@ int main(int argc, char **argv)
     g_sp = 0x801FFF00u;
 
     g_verbeux = getenv("VERBEUX") ? 1 : 0;
+    {   /* La fenetre s'ouvre si SDL est la et qu'on ne l'a pas refusee. Sans
+           elle, images sur disque et scenario, comme avant. */
+        int video_init(void);
+        g_video = getenv("SANS_FENETRE") ? 0 : video_init();
+    }
     { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
     signal(SIGALRM, report);
     alarm(seconds);

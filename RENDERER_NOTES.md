@@ -80,3 +80,51 @@ besoin de porter :
 Les deux correctifs ne touchent que l'édition de liens de l'hôte, jamais la
 génération de code : les 944 matchs sont retombés à l'identique après
 reconstruction.
+
+## Le bloc des initialiseurs de primitives libgpu
+
+Vingt-deux fonctions contiguës de `0x80047B48` à `0x80047D1C`, chacune de cinq
+ou huit instructions, toutes bâties sur le même geste : écrire une longueur
+dans l'octet 3 du tag et un code de commande GP0 dans l'octet 7. C'est la
+signature de `setPolyF4` et de toute sa fratrie, et une plage contiguë de
+fonctions faisant exactement la même chose, bornée par du code qui ne la fait
+pas, est une **unité de traduction d'origine** — la troisième identifiée par
+contiguïté après les trampolines BIOS et les enveloppes GTE.
+
+| adresse | longueur | code GP0 | nom |
+|---|---|---|---|
+| `0x80047B48` | 4 | `0x20` | `SetPolyF3` |
+| `0x80047B5C` | 7 | `0x24` | `SetPolyFT3` |
+| `0x80047B70` | 6 | `0x30` | `SetPolyG3` |
+| `0x80047B84` | 9 | `0x34` | `SetPolyGT3` |
+| `0x80047B98` | 5 | `0x28` | `SetPolyF4` |
+| `0x80047BAC` | 9 | `0x2C` | `SetPolyFT4` |
+| `0x80047BC0` | 8 | `0x38` | `SetPolyG4` |
+| `0x80047BD4` | 12 | `0x3C` | `SetPolyGT4` |
+| `0x80047BE8` | 3 | `0x74` | `SetSprt8` |
+| `0x80047BFC` | 3 | `0x7C` | `SetSprt16` |
+| `0x80047C10` | 4 | `0x64` | `SetSprt` |
+| `0x80047C24` | 2 | `0x68` | `SetTile1` |
+| `0x80047C38` | 2 | `0x70` | `SetTile8` |
+| `0x80047C4C` | 2 | `0x78` | `SetTile16` |
+| `0x80047C60` | 3 | `0x60` | `SetTile` |
+| `0x80047C74` | 3 | `0x02` | `SetFill` |
+| `0x80047C88` | 3 | `0x40` | `SetLineF2` |
+| `0x80047C9C` | 4 | `0x50` | `SetLineG2` |
+| `0x80047CB0` | 5 | `0x48` | `SetLineF3` |
+| `0x80047CC4` | 7 | `0x58` | `SetLineG3` |
+| `0x80047CE4` | 6 | `0x4C` | `SetLineF4` |
+| `0x80047D04` | 9 | `0x5C` | `SetLineG4` |
+
+Les codes des polygones, des sprites et des tuiles sont ceux du matériel et se
+lisent dans n'importe quelle documentation du GPU. Les quatre lignes demandent
+un pas de plus : `0x4C` et `0x5C` posent le bit `0x04`, **que le GPU ignore**.
+Le matériel ne connaît que `0x48` pour une polyligne plate et `0x58` pour une
+polyligne dégradée ; c'est libgpu qui se sert de ce bit libre comme marqueur
+interne pour distinguer la variante à trois points de celle à quatre. Les
+longueurs le confirment sans ambiguïté : 5 et 6 pour les plates, 7 et 9 pour
+les dégradées, avec le terminateur `0x55555555` écrit au mot correspondant —
+`0x18` pour la longueur 6, `0x1C` pour la 7, `0x24` pour la 9.
+
+Ces vingt-deux noms sont acquis sans SDK, en lisant deux constantes par
+fonction et une table de commandes matérielles.

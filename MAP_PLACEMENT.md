@@ -346,3 +346,56 @@ mérite d'être noté comme tel : moins de 0,4 % des sommets coïncident d'une
 section à l'autre dans toutes les configurations. Les sections sont autonomes
 et pavent leur cellule quel que soit le signe, donc la continuité interne ne
 peut rien arbitrer ici.
+
+## La polyligne n'est pas l'axe : c'est un bord de route
+
+Observation extérieure, sur trois portions différentes : la géométrie est
+toujours du même côté du trait rouge — au-dessus sur les deux droites
+horizontales, à gauche sur la portion verticale. Demande : la basculer de
+l'autre côté.
+
+La mesure dit autre chose, et elle est nette. Sur la longue droite sud, les
+**353 sommets de type B proches du trait tombent tous dans `[−800, 0]`** en
+distance signée. Rien, pas un seul, de l'autre côté. La demi-largeur des nœuds
+y vaut 655.
+
+Une géométrie mal placée serait décalée ; une géométrie coupée net sur le trait
+ne l'est pas. **La polyligne stockée est un bord de la route, pas son axe.**
+C'est moi qui l'appelais l'axe depuis le début, et c'est cette erreur de
+lecture qui donnait l'impression d'un décalage.
+
+Ça se confirme en traçant le second bord à `2 × demi-largeur` du premier, du
+côté où se trouve la géométrie : sur les deux droites et dans les tunnels, le
+ruban de route est **encadré** par les deux traits. Le rendu de contrôle
+`map_v4.png` le montre.
+
+Ce qui recale au passage plusieurs chiffres de cette page. Toutes les distances
+« à l'axe » mesurées plus haut étaient en fait des distances à un bord, donc
+biaisées d'une demi-largeur — et il faut leur retirer ce biais avant de les
+comparer entre elles.
+
+### Un défaut de mesure à signaler
+
+La table de la section précédente (990 / 650 / 300) est fausse. La fonction de
+score divisait les coordonnées locales par 16 au lieu de 4, rétrécissant la
+géométrie d'un facteur quatre et réduisant toutes les distances d'autant. Le
+rendu, lui, utilisait le bon facteur — d'où une image qui s'améliorait pendant
+que les chiffres devenaient trop beaux. Table refaite, à l'échelle correcte,
+avec la distance signée qui doit s'annuler :
+
+| convention | signée | absolue |
+|---|---|---|
+| `origine + local` | +331 | 1901 |
+| `origine + local`, +1 cellule en X | −52 | 813 |
+| demi-tour, origine `(+1024, +1024)` | −562 | 1011 |
+| **demi-tour, origine `(+0, +1024)`** | **−89** | **351** |
+| X nié seul, origine `(+0, +1024)` | +59 | 606 |
+| Z nié seul, origine `(+0, +1024)` | +273 | 1744 |
+
+La convention retenue est donc le demi-tour avec l'origine décalée de `+1024`
+en Z seulement — et non `+1024` sur les deux axes comme écrit hier.
+
+C'est la deuxième fois sur cette page qu'un chiffre trop flatteur venait d'un
+facteur d'échelle et non du sujet étudié. Le garde-fou qui manquait est simple :
+quand une image et une métrique divergent sur le même objet, c'est la métrique
+qu'il faut relire.

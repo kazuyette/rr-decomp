@@ -35,17 +35,21 @@ tampon final. On compare les textes.
 
 ## Résultat
 
-**120 cas — cinq fonctions, vingt-quatre vecteurs chacune — et aucune
-divergence.** `_get_tw`, `MargePrim`, `SetLineG3`, `TermPrim` et
-`SetSemiTrans` rendent octet pour octet ce que rend le vrai code.
+**1 120 cas — soixante-dix fonctions, seize vecteurs chacune — et aucune
+divergence.** (Première mesure : 120 cas sur cinq fonctions.) Sur les 115 fonctions traduisibles, 45 sont écartées parce que la référence
+elle-même ne peut pas les exécuter sur des entrées quelconques — pointeur
+invalide ou boucle sans fin, ce que la console ferait aussi. Les 70 restantes
+rendent octet pour octet ce que rend le vrai code, valeur de retour comprise.
 
-Ce n'est pas un grand nombre de fonctions, mais c'est la bonne question posée
-de la bonne façon : la référence n'est pas ma lecture du code, c'est son
-exécution.
+La référence n'est pas ma lecture du code : c'est son exécution.
 
-## Trois erreurs que le banc a attrapées
+## Ce que le banc a attrapé
 
-Chacune aurait produit du code plausible et faux.
+Deux erreurs de traduction, et cinq défauts du banc lui-même. La distinction
+compte : un banc qui échoue pour ses propres raisons ferait condamner un
+traducteur correct.
+
+### Dans le traducteur
 
 **Les sauts absolus.** L'opcode `j` n'encode que les 28 bits bas de sa cible.
 Ma première version calculait `(w & 0x3FFFFFF) << 2` en oubliant les quatre
@@ -58,9 +62,34 @@ lui, pris ou non. Émise après le `goto`, elle donne du code qui marche partout
 sauf là où le créneau modifie le registre testé. Le traducteur la déplace donc
 systématiquement devant, après avoir figé la condition.
 
-**Les entrées que la console refuserait.** Mes premiers vecteurs passaient des
-pointeurs non alignés : `SIGBUS` immédiat, comme sur le vrai matériel. Le banc
-doit poser des questions que la console pouvait entendre.
+### Dans le banc
+
+**Les entrées que la console refuserait.** Les premiers vecteurs passaient des
+pointeurs non alignés : `SIGBUS` immédiat, comme sur le vrai matériel.
+
+**Les vecteurs en littéraux C.** Douze fonctions donnaient déjà 276 Ko de
+source et six minutes quarante de compilation, dont 0,2 seconde de calcul. Les
+entrées vivent maintenant dans un fichier binaire lu à l'exécution : 0,3
+seconde pour cent quinze fonctions.
+
+**Le garde-fou cassé.** Attraper les fautes par `siglongjmp` depuis un
+gestionnaire de signal échoue : glibc refuse le retour vers un cadre qu'il juge
+non initialisé, et une fonction partie en boucle sans fin n'était pas rattrapée
+du tout. Un fils par fonction avec une alarme le fait sans faille.
+
+**Les fonctions sans valeur de retour.** Comparer `$v0` d'une fonction qui ne
+l'écrit jamais, c'est comparer du bruit — la fonction vide `func_8003FA94` en
+donnait un exemple net. Le banc ne compare le retour que si le désassemblage
+montre une écriture de ce registre.
+
+**L'adresse absolue du tampon.** `func_800409D4` ajoute `0x5D50AD` à son
+argument et calcule sur le résultat : sa sortie dépend de la valeur du
+pointeur, pas seulement de ce qu'il désigne. Le tampon est donc placé à la même
+adresse fixe des deux côtés, par une section liée.
+
+**Le cinquième argument.** `func_80048128` lit `0x10($sp)`, là où l'appelant
+dépose son cinquième paramètre. Avec quatre arguments elle lisait de la pile
+non initialisée. Les deux harnais en passent six, aux mêmes emplacements.
 
 ## L'état, honnêtement
 
@@ -74,9 +103,6 @@ sont traduisibles en l'état — sans GTE, sans appel externe, sans global absol
   explicitement plutôt que de les traduire à moitié ;
 - **les appels et les globals** : 722 fonctions, ce qui demande une table de
   symboles et un espace mémoire simulé, pas un changement de principe ;
-- **un harnais qui tient la charge** : à quarante fonctions, la construction
-  du banc devient très lente, et certaines fonctions nourries d'entrées
-  quelconques partent en boucle sans fin sous qemu. Une alarme par cas et une
-  génération en deux temps sont en place mais pas encore validées.
-
-Rien de tout cela ne remet en cause la fidélité mesurée sur les cinq premières.
+Le harnais, lui, tient désormais la charge : 2,8 secondes pour construire et
+exécuter la référence sur cent quinze fonctions, 1,2 seconde pour la
+traduction.

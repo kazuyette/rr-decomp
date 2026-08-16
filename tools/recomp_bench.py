@@ -1,193 +1,220 @@
 #!/usr/bin/env python3
-"""Banc d'essai du traducteur : le vrai MIPS contre la traduction.
+"""Banc d'essai du traducteur, deuxième version : entrées hors du source.
 
-La question à trancher n'est pas « ma traduction a-t-elle l'air juste » mais
-« produit-elle exactement les mêmes octets que le code d'origine ». La seule
-réponse qui vaille passe donc par l'exécution du vrai code.
+La première version écrivait les vecteurs d'essai en littéraux C. Pour douze
+fonctions cela faisait déjà 276 Ko de source, et la compilation s'écroulait
+bien avant d'atteindre l'échelle voulue -- six minutes quarante pour douze
+fonctions, dont 0,2 seconde de calcul. Le reste était de l'attente.
 
-Deux exécutables, un seul jeu d'entrées :
+La correction ne consiste pas à optimiser la génération mais à supprimer sa
+cause : les entrées vivent dans un fichier binaire que les deux harnais lisent
+à l'exécution. Le source redevient minuscule et constant, quel que soit le
+nombre de vecteurs.
 
-  - la référence : les mots du retail copiés tels quels dans un objet mipsel,
-    appelés par un harnais C compilé pour MIPS et exécutés sous qemu-mipsel.
-    Aucune interprétation de ma part n'intervient -- ce sont les instructions
-    d'origine sur un processeur qui les comprend.
-
-  - la traduction : le C produit par tools/recomp.py, compilé pour la machine
-    hôte.
-
-Chacun reçoit le même tampon de 256 octets rempli pseudo-aléatoirement et les
-mêmes quatre registres d'argument, puis imprime la valeur de retour et le
-tampon final. On compare les deux textes.
-
-Le tampon est aligné à la même adresse relative des deux côtés, et les
-fonctions choisies n'utilisent que des pointeurs qu'on leur passe : leurs
-résultats ne peuvent donc pas dépendre de l'adresse absolue, seulement du
-contenu.
+Le reste du protocole est inchangé, et c'est lui qui compte : la référence est
+le vrai code du retail exécuté sous qemu-mipsel, pas une lecture de ce code.
 """
 import random
 import struct
 import subprocess
 import sys
+import time
 
-FUNCS = sys.argv[1:] or ["func_800465DC", "func_80047D24", "func_80047CC4",
-                         "func_80047AE0", "func_80047AF8"]
-EXE = "/tmp/rr/files/PSX.EXE"
-ASMS = ["/tmp/rrdecomp/asm/psyq.s", "/tmp/rrdecomp/asm/29E8.s"]
-
-
-def find(nm):
-    """Les fonctions vivent dans l'une ou l'autre des deux unites."""
-    for a in ASMS:
-        addr, cnt = recomp.func_length(a, nm)
-        if addr is not None:
-            return a, addr, cnt
-    raise SystemExit("fonction introuvable : " + nm)
 sys.path.insert(0, "/tmp/rrdecomp/tools")
 import recomp
 
-BUF = 0x1000      # où le tampon d'essai vit dans la RAM simulée
+EXE = "/tmp/rr/files/PSX.EXE"
+ASMS = ["/tmp/rrdecomp/asm/psyq.s", "/tmp/rrdecomp/asm/29E8.s"]
+D = "/tmp/recomp"
+BUF = 0x00100000   # meme adresse absolue des deux cotes : certaines fonctions
+                   # calculent sur la valeur du pointeur, pas seulement sur ce
+                   # qu'il designe
 SIZE = 256
-ROUNDS = 24
+ROUNDS = 16
+BASE = 0x00010000
 
 
-def vectors():
+def writes_v0(words):
+    """Vrai si la fonction ecrit $v0 quelque part."""
+    for w in words:
+        op = w >> 26
+        if op == 0:
+            fn = w & 63
+            if fn in (0x10, 0x12) or (fn not in (0x08, 0x18, 0x19, 0x1A, 0x1B, 0x11, 0x13)):
+                if ((w >> 11) & 31) == 2:
+                    return True
+            if fn in (0x10, 0x12) and ((w >> 11) & 31) == 2:
+                return True
+        elif op in (8, 9, 10, 11, 12, 13, 14, 15, 32, 33, 35, 36, 37):
+            if ((w >> 16) & 31) == 2:
+                return True
+    return False
+
+
+def find(nm):
+    for a in ASMS:
+        addr, cnt = recomp.func_length(a, nm)
+        if addr is not None:
+            return addr, cnt
+    raise SystemExit("fonction introuvable : " + nm)
+
+
+def make_vectors():
     rnd = random.Random(20260816)
-    out = []
-    for _ in range(ROUNDS):
-        buf = bytes(rnd.randrange(256) for _ in range(SIZE))
-        # Les deux premiers arguments sont des pointeurs : ils doivent être
-        # alignés sur 4, sinon le MIPS lève SIGBUS sur le premier lw -- ce que
-        # le vrai matériel ferait aussi. Le banc doit poser des questions que
-        # la console pouvait entendre.
-        args = [4 * rnd.randrange(0, 16), 4 * rnd.randrange(0, 16),
-                rnd.randrange(0, 0x100), rnd.randrange(0, 0x100)]
-        out.append((buf, args))
-    return out
+    with open(D + "/vec.bin", "wb") as f:
+        for _ in range(ROUNDS):
+            f.write(bytes(rnd.randrange(256) for _ in range(SIZE)))
+            # Pointeurs alignés sur 4 : le MIPS lève SIGBUS sur un lw désaligné,
+            # exactement comme la console. Le banc ne doit poser que des
+            # questions que le vrai matériel pouvait entendre.
+            f.write(struct.pack("<4I", 4 * rnd.randrange(16), 4 * rnd.randrange(16),
+                                rnd.randrange(0x100), rnd.randrange(0x100)))
 
 
-VEC = vectors()
+HARNESS = r"""
+/* Isolation par processus plutôt que par longjmp.
 
+   La première version attrapait les fautes avec sigsetjmp/siglongjmp depuis un
+   gestionnaire de signal. Deux choses l'ont mise en échec : glibc refuse un
+   longjmp qui remonte vers un cadre de pile qu'il juge non initialisé
+   (« longjmp causes uninitialized stack frame »), et une fonction partie en
+   boucle sans fin -- func_80045334 sur un tampon quelconque -- n'était pas
+   rattrapée du tout.
 
-def c_bytes(b):
-    return ",".join(str(x) for x in b)
+   Un fils par fonction, une alarme dans le fils, le père qui récolte : une
+   fonction qui faute ou qui boucle tue son fils et rien d'autre. */
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+%(decl)s
+%(bufdecl)s
+struct vec { unsigned char b[%(size)d]; unsigned int a[4]; };
+static struct vec V[%(rounds)d];
+/* Six arguments : certaines fonctions lisent leur cinquieme parametre en
+   0x10($sp), la ou l'appelant l'a depose. Avec quatre, elles lisaient de la
+   pile non initialisee -- differente des deux cotes, et la comparaison
+   echouait pour une raison qui n'a rien a voir avec la traduction. */
+typedef unsigned int (*fn_t)(unsigned int, unsigned int, unsigned int, unsigned int,
+                             unsigned int, unsigned int);
+static const char *NAMES[] = { %(names)s };
+static const fn_t FNS[] = { %(fns)s };
+/* Une fonction qui n'ecrit jamais $v0 n'a pas de valeur de retour : ce que le
+   contexte y avait laisse n'est pas comparable. On ne l'imprime que pour les
+   fonctions dont le desassemblage montre une ecriture de ce registre. */
+static const int RETS[] = { %(rets)s };
+int main(void)
+{
+    FILE *f = fopen("%(dir)s/vec.bin", "rb");
+    int nf = sizeof NAMES / sizeof *NAMES, i, k, j, st;
+    pid_t pid;
+    if (!f || fread(V, sizeof V, 1, f) != 1) { fprintf(stderr, "vec.bin\n"); return 1; }
+    fclose(f);
+    for (j = 0; j < nf; j++) {
+        fflush(stdout);
+        pid = fork();
+        if (pid == 0) {
+            alarm(5);
+            for (k = 0; k < %(rounds)d; k++) {
+                unsigned int rv;
+                %(setup)s
+                %(extra)s rv = FNS[j](%(a0)s, %(a1)s, V[k].a[2], V[k].a[3], V[k].a[2], V[k].a[3]);
+                /* Un retour qui pointe dans le tampon est une adresse : elle
+                   ne peut pas coincider entre les deux harnais, dont les
+                   tampons vivent ailleurs. On l'imprime relative a sa base. */
+                if (RETS[j]) {
+                    unsigned int b = (unsigned int)(%(base)s);
+                    if (rv >= b && rv < b + %(size)d) printf("%%s %%d rv=@+%%x", NAMES[j], k, rv - b);
+                    else printf("%%s %%d rv=%%08x", NAMES[j], k, rv);
+                }
+                else printf("%%s %%d (sans retour)", NAMES[j], k);
+                for (i = 0; i < %(size)d; i++) printf(" %%02x", %(peek)s);
+                printf("\n");
+            }
+            fflush(stdout);
+            _exit(0);
+        }
+        waitpid(pid, &st, 0);
+        if (st != 0) printf("%%s ECARTEE\n", NAMES[j]);
+        fflush(stdout);
+    }
+    return 0;
+}
+"""
 
-
-# ---------------------------------------------------------------- référence
-def build_reference():
-    words = {}
-    for nm in FUNCS:
-        _, a, c = find(nm)
-        words[nm] = (a, recomp.words_from_exe(EXE, a, c))
-    # Les sauts absolus (opcode j) n'encodent que les 28 bits bas de leur
-    # cible. Copier le code ailleurs en mémoire les envoie donc dans le vide.
-    # On place chaque fonction à son adresse d'origine masquée sur 28 bits,
-    # dans une section liée à la bonne base : les j retombent alors juste.
-    BASE = 0x00010000
-    with open("/tmp/recomp/ref_code.s", "w") as f:
+def build_reference(funcs):
+    words = {nm: (find(nm)[0], recomp.words_from_exe(EXE, *find(nm))) for nm in funcs}
+    with open(D + "/ref_code.s", "w") as f:
         f.write('    .set noreorder\n    .section .psx,"ax",@progbits\n')
         for nm, (a, ws) in sorted(words.items(), key=lambda kv: kv[1][0]):
+            # Les sauts absolus n'encodent que 28 bits : chaque fonction doit
+            # retrouver son adresse d'origine masquée, sinon ses `j` partent
+            # dans le vide.
             f.write(f"    .org 0x{(a & 0x0FFFFFFF) - BASE:X}\n")
-            f.write(f"    .globl psx_{nm}\n    .type psx_{nm}, @function\npsx_{nm}:\n")
+            f.write(f"    .globl psx_{nm}\npsx_{nm}:\n")
             for w in ws:
                 f.write(f"    .word 0x{w:08X}\n")
-            f.write(f"    .size psx_{nm}, .-psx_{nm}\n")
-    # Certaines fonctions, nourries d'entrées quelconques, sortent du tampon ou
-    # déréférencent un pointeur invalide -- ce que la console ferait aussi. On
-    # ne peut pas leur poser la question, alors on note le cas et on l'exclut
-    # des deux côtés, plutôt que de bricoler des entrées sur mesure qui
-    # rendraient la comparaison moins probante.
-    src = ['#include <stdio.h>', '#include <string.h>', '#include <signal.h>',
-           '#include <setjmp.h>',
-           'typedef unsigned int u32;',
-           'static sigjmp_buf JB;',
-           'static void onsig(int s){ (void)s; siglongjmp(JB, 1); }',
-           '#include <unistd.h>',
-           'static unsigned char buf[%d] __attribute__((aligned(16)));' % SIZE]
-    for nm in FUNCS:
-        src.append(f"u32 psx_{nm}(u32,u32,u32,u32);")
-    src.append("int main(void){ u32 rv; int i,k;")
-    src.append("  signal(SIGSEGV, onsig); signal(SIGBUS, onsig); signal(SIGALRM, onsig);")
-    for nm in FUNCS:
-        src.append(f'  for (k = 0; k < {len(VEC)}; k++) {{')
-        src.append('    static const unsigned char V[][%d] = {' % SIZE)
-        src.append(",\n".join("      {%s}" % c_bytes(b) for b, _ in VEC))
-        src.append('    };')
-        src.append('    static const u32 A[][4] = {%s};' %
-                   ",".join("{%s}" % ",".join(str(x) for x in a) for _, a in VEC))
-        src.append('    memcpy(buf, V[k], sizeof buf);')
-        src.append('    if (sigsetjmp(JB, 1)) { alarm(0); printf("%s %d CRASH\\n", "'+nm+'", k); continue; }')
-        src.append('    alarm(1);')
-        src.append(f'    rv = psx_{nm}((u32)buf + A[k][0], (u32)buf + A[k][1],'
-                   f' A[k][2], A[k][3]);')
-        src.append('    alarm(0);')
-        src.append(f'    printf("{nm} %d rv=%08x", k, rv);')
-        src.append('    for (i = 0; i < %d; i++) printf(" %%02x", buf[i]);' % SIZE)
-        src.append('    printf("\\n");')
-        src.append('  }')
-    src.append("  return 0; }")
-    open("/tmp/recomp/ref_main.c", "w").write("\n".join(src))
-    subprocess.run(["mipsel-linux-gnu-gcc", "-static", "-O1", "-o", "/tmp/recomp/ref",
-                    "-Wl,--section-start=.psx=0x00010000",
-                    "/tmp/recomp/ref_main.c", "/tmp/recomp/ref_code.s"], check=True)
-    return subprocess.run(["qemu-mipsel", "/tmp/recomp/ref"],
-                          capture_output=True, text=True, check=True).stdout
+    src = HARNESS % dict(
+        decl="\n".join("unsigned int psx_%s();" % n for n in funcs),
+        bufdecl='static unsigned char buf[%d] __attribute__((section(".psxbuf"), aligned(16)));' % SIZE,
+        size=SIZE, rounds=ROUNDS, dir=D,
+        names=", ".join('"%s"' % n for n in funcs),
+        fns=", ".join("psx_%s" % n for n in funcs),
+        rets=", ".join("1" if writes_v0(recomp.words_from_exe(EXE, *find(n))) else "0" for n in funcs),
+        setup="memcpy(buf, V[k].b, %d);" % SIZE,
+        a0="(unsigned int)buf + V[k].a[0]", a1="(unsigned int)buf + V[k].a[1]",
+        peek="buf[i]", base="buf", extra="")
+    open(D + "/ref_main.c", "w").write(src)
+    subprocess.run(["mipsel-linux-gnu-gcc", "-static", "-O1", "-o", D + "/ref",
+                    "-Wl,--section-start=.psx=0x%08X" % BASE,
+                    "-Wl,--section-start=.psxbuf=0x%08X" % BUF,
+                    D + "/ref_main.c", D + "/ref_code.s"], check=True)
+    return subprocess.run(["qemu-mipsel", D + "/ref"], capture_output=True,
+                          text=True).stdout
 
 
-# --------------------------------------------------------------- traduction
-def build_translated(FUNCS):
-    parts = ["/* genere par tools/recomp.py */", '#include "rt.h"']
-    for nm in FUNCS:
-        asm, a, c = find(nm)
-        ws = recomp.words_from_exe(EXE, a, c)
-        parts.append(recomp.translate("psx_" + nm, a, ws))
-    open("/tmp/recomp/gen.c", "w").write("\n".join(parts))
-    src = ['#include <stdio.h>', '#include <string.h>', '#include "rt.h"',
-           'u8 RAM[0x200000];']
-    for nm in FUNCS:
-        src.append(f"u32 psx_{nm}(u32,u32,u32,u32);")
-    src.append("int main(void){ u32 rv; int i,k;")
-    for nm in FUNCS:
-        src.append(f'  for (k = 0; k < {len(VEC)}; k++) {{')
-        src.append('    static const unsigned char V[][%d] = {' % SIZE)
-        src.append(",\n".join("      {%s}" % c_bytes(b) for b, _ in VEC))
-        src.append('    };')
-        src.append('    static const u32 A[][4] = {%s};' %
-                   ",".join("{%s}" % ",".join(str(x) for x in a) for _, a in VEC))
-        src.append('    memcpy(RAM + %d, V[k], %d);' % (BUF, SIZE))
-        src.append(f'    rv = psx_{nm}({BUF} + A[k][0], {BUF} + A[k][1], A[k][2], A[k][3]);')
-        src.append(f'    printf("{nm} %d rv=%08x", k, rv);')
-        src.append('    for (i = 0; i < %d; i++) printf(" %%02x", RAM[%d + i]);'
-                   % (SIZE, BUF))
-        src.append('    printf("\\n");')
-        src.append('  }')
-    src.append("  return 0; }")
-    open("/tmp/recomp/gen_main.c", "w").write("\n".join(src))
-    subprocess.run(["gcc", "-O1", "-I/tmp/recomp", "-o", "/tmp/recomp/gen",
-                    "/tmp/recomp/gen_main.c", "/tmp/recomp/gen.c"], check=True)
-    return subprocess.run(["/tmp/recomp/gen"], capture_output=True, text=True,
-                          check=True).stdout
+def build_translated(funcs):
+    parts = ['#include "rt.h"', "u8 RAM[0x200000];"]
+    for nm in funcs:
+        a, c = find(nm)
+        parts.append(recomp.translate("psx_" + nm, a, recomp.words_from_exe(EXE, a, c)))
+    open(D + "/gen.c", "w").write("\n".join(parts))
+    src = HARNESS % dict(
+        bufdecl="",
+        decl='#include "rt.h"\nextern u8 RAM[0x200000];\n' +
+             "\n".join("unsigned int psx_%s();" % n for n in funcs),
+        size=SIZE, rounds=ROUNDS, dir=D,
+        names=", ".join('"%s"' % n for n in funcs),
+        fns=", ".join("psx_%s" % n for n in funcs),
+        rets=", ".join("1" if writes_v0(recomp.words_from_exe(EXE, *find(n))) else "0" for n in funcs),
+        setup="memcpy(RAM + %d, V[k].b, %d);" % (BUF, SIZE),
+        a0="%d + V[k].a[0]" % BUF, a1="%d + V[k].a[1]" % BUF,
+        peek="RAM[%d + i]" % BUF, base=str(BUF),
+        extra="SW(0x001FFF10, V[k].a[2]); SW(0x001FFF14, V[k].a[3]);")
+    open(D + "/gen_main.c", "w").write(src)
+    subprocess.run(["gcc", "-O1", "-w", "-I" + D, "-o", D + "/gen",
+                    D + "/gen_main.c", D + "/gen.c"], check=True)
+    return subprocess.run([D + "/gen"], capture_output=True, text=True).stdout
 
 
-a = build_reference().splitlines()
-crashed = {l.split()[0] for l in a if l.endswith("CRASH")}
-# Une fonction que la référence n'a pas su exécuter -- pointeur invalide ou
-# boucle sans fin sur des entrées quelconques -- est retirée des deux côtés :
-# la traduction s'y perdrait pareillement, et une comparaison entre deux
-# blocages ne prouve rien.
-survivors = [f for f in FUNCS if f not in crashed]
-a = [l for l in a if l.split()[0] in set(survivors)]
-b = build_translated(survivors).splitlines()
-keep = list(range(min(len(a), len(b))))
-bad = [i for i in keep if a[i] != b[i]]
-print("%d fonctions demandees, %d exclues faute d'entrees valides pour la reference"
-      % (len(FUNCS), len(crashed)))
-print("%d cas compares" % len(keep))
-if len(a) != len(b):
-    print("NOMBRE DE LIGNES DIFFERENT : %d contre %d" % (len(a), len(b)))
+funcs = sys.argv[1:]
+make_vectors()
+t = time.time(); ref = build_reference(funcs).splitlines()
+print("reference   : %5.1f s" % (time.time() - t), flush=True)
+crashed = {l.split()[0] for l in ref if l.endswith("ECARTEE")}
+surv = [f for f in funcs if f not in crashed]
+ref = [l for l in ref if l.split()[0] in set(surv)]
+t = time.time(); tr = build_translated(surv).splitlines()
+print("traduction  : %5.1f s" % (time.time() - t), flush=True)
+n = min(len(ref), len(tr))
+bad = [i for i in range(n) if ref[i] != tr[i]]
+print("%d fonctions demandees, %d ecartees (entrees invalides ou boucle sans fin)"
+      % (len(funcs), len(crashed)))
+print("%d cas compares sur %d fonctions" % (n, len(surv)))
 if bad:
-    print("%d divergences. Premiere :" % len(bad))
-    i = bad[0]
-    print("  vrai MIPS  :", a[i][:150])
-    print("  traduction :", b[i][:150])
+    print("%d DIVERGENCES. Premiere :" % len(bad))
+    print("  vrai MIPS  :", ref[bad[0]][:120])
+    print("  traduction :", tr[bad[0]][:120])
 else:
-    print("AUCUNE DIVERGENCE : la traduction rend les memes octets que le retail.")
+    print("AUCUNE DIVERGENCE.")

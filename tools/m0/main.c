@@ -90,8 +90,13 @@ void deliver_irq(void)
     in_irq = 1;
     in_irq_flag = 1;
     irq_delivered++;
+    /* Ne PAS relever la reponse ici : le jeu a enregistre son propre
+       gestionnaire pour l'interruption 2, en D_800797A8[2], et le repartiteur
+       l'appelle. Mon service BIOS lui volait l'interruption -- il effacait le
+       drapeau et la reponse avant que le gestionnaire du jeu puisse les lire.
+       Rendre un service que personne n'a demande est une facon discrete de
+       casser une chaine qui marchait. */
     psx_irq_body(0, 0, 0, 0);
-    bios_cd_service();
     in_irq_flag = 0;
     in_irq = 0;
 }
@@ -257,6 +262,15 @@ static void report(int sig)
     printf("interruptions livrees      : %lu\n", irq_delivered);
     printf("evenements delivres        : %lu\n", ev_delivered);
     printf("rappel CD du jeu appele    : %lu fois\n", cdcb_hits);
+    {
+        int k;
+        printf("table des rappels d'interruption (D_800797A8) :\n");
+        for (k = 0; k < 8; k++) {
+            u32 h = LW(0x800797A8u + 4 * k);
+            if (h) printf("   irq %d -> %08X%s\n", k, h, k == 2 ? "   <-- lecteur CD" : "");
+        }
+        printf("rappel de synchronisation CD (D_801E9170) : %08X\n", LW(0x801E9170u));
+    }
     {
         extern unsigned long cd_sectors_served, cd_sectors_missing, dma3_done;
         printf("secteurs servis            : %lu (%lu introuvables), %lu transferts DMA\n",

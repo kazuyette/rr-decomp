@@ -717,3 +717,47 @@ C'est un cercle qu'il faut ouvrir par le bon bout : ce n'est pas la donnée qui
 manque au pilote, c'est la confirmation que sa commande a abouti. Le prochain
 travail est là, sur l'achèvement `INT2` et non sur les secteurs — qui, eux,
 sont prêts à être servis le jour où il les demandera.
+
+## La chaîne était complète — et je la cassais
+
+En remontant les compteurs du pilote, tout s'éclaire.
+
+`func_80052440` imprime « *commande* : timeout » puis six compteurs lus en
+`D_80077610`, qu'elle remet à zéro. Ces compteurs sont incrémentés par
+`func_80052504` — la routine d'interruption du pilote, celle qui touche la base
+du lecteur et le rappel de synchronisation. Elle est appelée par `D_80052820`,
+encore une fonction étiquetée en donnée, dont l'adresse est confiée à
+`func_80049140`, qui enregistre… **pour l'interruption 2, celle du lecteur.**
+
+Et à l'exécution, la table est bien remplie :
+
+```
+irq 2 -> 80052820        <-- le gestionnaire CD du jeu
+rappel de synchronisation (D_801E9170) : 800535C8
+```
+
+Le jeu ne comptait donc **pas** sur le BIOS pour le lecteur : il a son propre
+gestionnaire, dûment enregistré, et le répartiteur l'appelle par `jalr`.
+
+Mon « service CD du BIOS », écrit au tour précédent, **lui volait
+l'interruption** : il relevait la réponse et effaçait le drapeau avant que le
+gestionnaire du jeu puisse les lire. Il est retiré.
+
+C'est une leçon qui vaut d'être notée telle quelle : *rendre un service que
+personne n'a demandé est une façon discrète de casser une chaîne qui marchait*.
+La séquence s'était allongée juste après son ajout, ce qui m'avait convaincu
+qu'il aidait — alors qu'elle s'allongeait pour une autre raison, la base de
+temps corrigée au même moment.
+
+## Ce qui reste
+
+Le pilote reçoit son accusé `INT3` à chaque commande, et **n'acquitte jamais**
+au niveau du contrôleur : aucune écriture à l'index 1 sur `0x1F801803`. Or sans
+acquittement, le matériel ne délivre pas la réponse suivante — l'achèvement
+`INT2` que le pilote attend pour conclure.
+
+Deux lectures possibles, et il faut les départager plutôt que de choisir :
+soit mon modèle du registre d'état est faux et le pilote acquitte autrement,
+soit son gestionnaire n'atteint pas le code qui acquitte. La trace des accès
+est en place ; ce qui manque est de la lire depuis l'intérieur du gestionnaire
+du jeu plutôt que depuis le contrôleur.

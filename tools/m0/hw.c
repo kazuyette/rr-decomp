@@ -241,10 +241,11 @@ static void cd_command(u8 cmd)
 
 /* Le dialogue avec le lecteur, dans l'ordre. Les compteurs disent qu'il
    s'arrete ; la sequence dit ou. */
+extern int g_verbeux;
 static int cdlog;
 static void cdtrace(const char *what, u32 a, u32 b)
 {
-    if (cdlog++ < 60) { printf("  cd: %-12s %02X %02X\n", what, a, b); fflush(stdout); }
+    if (g_verbeux && cdlog++ < 200) { printf("  cd: %-12s %02X %02X\n", what, a, b); fflush(stdout); }
 }
 
 static u32 cd_read(u32 p)

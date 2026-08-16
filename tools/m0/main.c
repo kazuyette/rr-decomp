@@ -114,6 +114,12 @@ void deliver_irq(void)
     in_irq = 0;
 }
 int g_seconds = 20;
+
+/* Le journal détaillé -- appels BIOS et dialogue avec le lecteur -- est un
+ * outil de mise au point, pas une sortie. Il servait a trouver ou le demarrage
+ * s'arretait ; maintenant qu'il ne s'arrete plus, il ne fait que cacher ce que
+ * le jeu lui-meme imprime. Il faut donc le demander : VERBEUX=1. */
+int g_verbeux;
 u32 g_pad_buf[2];
 int g_pad_on;
 u32 g_pad_boutons = 0xFFFF;   /* actifs a zero : rien d'enfonce */
@@ -236,7 +242,7 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
        le demarrage bien mieux qu'un histogramme. */
     {
         static int seq;
-        if (seq < 60 && !(vec == 0xA0 && (fn & 0xFF) == 0x3F)) {
+        if (g_verbeux && seq < 200 && !(vec == 0xA0 && (fn & 0xFF) == 0x3F)) {
             printf("[bios %c0(%02X) a0=%08X a1=%08X a2=%08X]\n",
                    "ABC"[v], fn & 0xFF, a0, a1, a2);
             fflush(stdout);
@@ -378,9 +384,15 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
     if (vec == 0xB0 && (fn & 0xFF) == 0x19) {
         /* HookEntryInt : le premier mot de la structure est l'adresse du
            gestionnaire. On la retient pour pouvoir l'appeler. */
+        /* Le jeu reinstalle son gestionnaire a chaque tour de boucle : le
+           dire chaque fois noie tout le reste sous des milliers de lignes
+           identiques. On ne signale donc qu'un changement. */
+        u32 avant = g_irq_handler;
         g_irq_handler = LW(a0);
-        printf("[gestionnaire d'interruptions installe en %08X]\n", g_irq_handler);
-        fflush(stdout);
+        if (g_irq_handler != avant) {
+            printf("[gestionnaire d'interruptions installe en %08X]\n", g_irq_handler);
+            fflush(stdout);
+        }
         return 0;
     }
     if (vec == 0xA0 && (fn & 0xFF) == 0x3F) {
@@ -595,6 +607,7 @@ int main(int argc, char **argv)
        console. On prend donc la pile par defaut du BIOS. */
     g_sp = 0x801FFF00u;
 
+    g_verbeux = getenv("VERBEUX") ? 1 : 0;
     { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
     signal(SIGALRM, report);
     alarm(seconds);

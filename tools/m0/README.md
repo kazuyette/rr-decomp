@@ -49,6 +49,12 @@ IMAGES=/tmp/images ./build/m0/m0 90 PSX.EXE
 python3 tools/m0/ppm2png.py /tmp/images/*.ppm
 ```
 
+Par défaut, la sortie tient en quelques lignes : ce que le jeu imprime
+lui-même, puis un état des lieux à la fin. `VERBEUX=1` ajoute le journal des
+appels BIOS et le dialogue avec le lecteur — c'est un outil de mise au point,
+qui servait à trouver où le démarrage s'arrêtait. Maintenant qu'il ne s'arrête
+plus, il ne fait que cacher le reste.
+
 ## Les fichiers
 
 | | |

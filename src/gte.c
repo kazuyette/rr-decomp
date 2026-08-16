@@ -304,3 +304,123 @@ __asm__(
     ".set reorder\n"
 );
 
+
+/* ---------------------------------------------------------------------
+ * The remaining control-register accessors. Seven functions, and the
+ * register table they rely on was established from the code rather than
+ * taken on trust: a published table fetched for this purpose turned out to
+ * be wrong, expanding each matrix element into its own register where the
+ * hardware packs two per 32-bit word.
+ *
+ * What settles it is the grouping. Registers 5-7 are written as a triple
+ * and 21-23 as another, which is what a vector and a colour look like;
+ * 24/25 and 26 match the comments already in this file from earlier work.
+ * And the translation setter reads its source at offset 0x14 of the
+ * structure it is given -- exactly where PSY-Q's MATRIX keeps the
+ * translation after a 3x3 of shorts.
+ * --------------------------------------------------------------------- */
+
+/* Writes the far colour RFC/GFC/BFC (control registers 21-23), each
+ * argument scaled up by four bits first. */
+__asm__(
+    ".global func_8003FC08\n"
+    "func_8003FC08:\n"
+    ".set noreorder\n"
+    "sll $a0, $a0, 4\n"
+    "sll $a1, $a1, 4\n"
+    "sll $a2, $a2, 4\n"
+    "ctc2 $a0, $21\n"
+    "ctc2 $a1, $22\n"
+    "ctc2 $a2, $23\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes rotation-matrix words 0, 2 and 4 -- the three control registers
+ * that hold RT11/RT12, RT22/RT23 and RT33 -- leaving words 1 and 3
+ * untouched. Not a full matrix load; naming it would mean guessing what
+ * the caller intends by writing only these, so it keeps its address. */
+__asm__(
+    ".global func_8003FC68\n"
+    "func_8003FC68:\n"
+    ".set noreorder\n"
+    "ctc2 $a0, $0\n"
+    "ctc2 $a1, $2\n"
+    "ctc2 $a2, $4\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes DQB (control register 28), the depth-cueing offset. */
+__asm__(
+    ".global func_8003FCCC\n"
+    "func_8003FCCC:\n"
+    ".set noreorder\n"
+    "ctc2 $a0, $28\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads FLAG (control register 31), the GTE's calculation-error bits. */
+__asm__(
+    ".global func_8003FDC0\n"
+    "func_8003FDC0:\n"
+    ".set noreorder\n"
+    "cfc2 $v0, $31\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads the screen offset OFX/OFY (control registers 24/25) and stores
+ * each through a pointer argument, shifted down from 16.16 fixed point.
+ * The counterpart of the setter above. */
+__asm__(
+    ".global func_8003FDCC\n"
+    "func_8003FDCC:\n"
+    ".set noreorder\n"
+    "cfc2 $t0, $24\n"
+    "cfc2 $t1, $25\n"
+    "sra $t0, $t0, 16\n"
+    "sra $t1, $t1, 16\n"
+    "sw $t0, 0x0($a0)\n"
+    "sw $t1, 0x0($a1)\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads H (control register 26), the projection plane distance. */
+__asm__(
+    ".global func_8003FDEC\n"
+    "func_8003FDEC:\n"
+    ".set noreorder\n"
+    "cfc2 $v0, $26\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Loads the translation vector from offsets 0x14/0x18/0x1C of the MATRIX
+ * passed in, and writes it to TRX/TRY/TRZ (control registers 5-7). The
+ * offset is a cross-check in itself: PSY-Q's MATRIX puts a 3x3 of shorts
+ * first and the translation at 0x14, which is exactly where these loads
+ * land. */
+__asm__(
+    ".global func_80043500\n"
+    "func_80043500:\n"
+    ".set noreorder\n"
+    "lw $t0, 0x14($a0)\n"
+    "lw $t1, 0x18($a0)\n"
+    "lw $t2, 0x1C($a0)\n"
+    "ctc2 $t0, $5\n"
+    "ctc2 $t1, $6\n"
+    "ctc2 $t2, $7\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+

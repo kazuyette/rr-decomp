@@ -60,6 +60,30 @@ int g_longjmp;          /* fait rendre 1 a setjmp, le temps d'une interruption *
  * traduction par fonction : ne pas rejouer, entrer au bon endroit. */
 u32 psx_irq_body(u32, u32, u32, u32);
 
+/* Le service CD du BIOS.
+ *
+ * Le repartiteur du jeu ne traite que les interruptions dont il a enregistre
+ * le rappel, et il n'en enregistre aucun pour le lecteur : il compte sur le
+ * BIOS pour lire la reponse, acquitter, et appeler la fonction de
+ * synchronisation qu'il a posee par CdSyncCallback.
+ *
+ * C'est donc ce service-la qu'il faut rendre -- pas emuler une image du BIOS,
+ * mais reecrire la quinzaine de fonctions que ce jeu appelle. Celle-ci en fait
+ * partie, et c'est le chainon qui manquait. */
+#define CD_RESULT 0x801FFE00u
+u32 cd_take_response(u8 *buf);   /* rend le type d'interruption, remplit buf */
+
+static void bios_cd_service(void)
+{
+    u8 buf[16];
+    u32 intr, cb, i;
+    intr = cd_take_response(buf);
+    if (!intr) return;
+    for (i = 0; i < 16; i++) SB(CD_RESULT + i, buf[i]);
+    cb = LW(0x801E9170u);            /* pose par CdSyncCallback */
+    if (cb) psx_dispatch(cb, intr, CD_RESULT, 0, 0, 0);
+}
+
 void deliver_irq(void)
 {
     if (in_irq) return;
@@ -67,10 +91,12 @@ void deliver_irq(void)
     in_irq_flag = 1;
     irq_delivered++;
     psx_irq_body(0, 0, 0, 0);
+    bios_cd_service();
     in_irq_flag = 0;
     in_irq = 0;
 }
 unsigned long dispatch_misses;
+unsigned long cdcb_hits;   /* entrees dans le rappel CD du jeu */
 
 /* Les appels BIOS. Le jeu y accède par des trampolines qui posent le numéro
  * d'appel dans $t1 et sautent en 0xA0, 0xB0 ou 0xC0. On ne les implémente pas
@@ -230,6 +256,7 @@ static void report(int sig)
     printf("sauts indirects sans cible : %lu\n", dispatch_misses);
     printf("interruptions livrees      : %lu\n", irq_delivered);
     printf("evenements delivres        : %lu\n", ev_delivered);
+    printf("rappel CD du jeu appele    : %lu fois\n", cdcb_hits);
     printf("commandes GP0 les plus frequentes :\n");
     for (i = 0; i < 256; i++)
         if (prim_hist[i] && n < 12) {

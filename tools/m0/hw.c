@@ -221,6 +221,20 @@ static void cd_write(u32 p, u32 v)
     }
 }
 
+/* Le BIOS, sur interruption du lecteur, releve la reponse et acquitte a la
+   place du jeu. On expose ici de quoi le faire. */
+u32 cd_take_response(u8 *out)
+{
+    int i;
+    u32 t = cd_irq;
+    if (!t) return 0;
+    for (i = 0; i < 16; i++) out[i] = (i < cd_nresp) ? cd_resp[i] : 0;
+    cd_irq = 0;
+    istat &= ~IRQ_CDROM;
+    if (cd_second) { u8 st = cd_stat; cd_reply(cd_second, &st, 1); cd_second = 0; }
+    return t;
+}
+
 /* --- registres ---------------------------------------------------------- */
 unsigned long hw_writes, hw_reads;
 

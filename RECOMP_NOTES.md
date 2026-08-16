@@ -631,3 +631,39 @@ dans la chaîne d'interruption est identifiée, traduite, et présente dans le
 binaire natif. Ce qui reste est de comprendre par quel chemin elle devrait être
 atteinte depuis le gestionnaire général, puisque celui-ci ne touche jamais au
 lecteur.
+
+## Le chaînon trouvé : le jeu comptait sur le BIOS
+
+La lecture du répartiteur du jeu, dans `func_800492B0`, règle la question.
+
+Il boucle sur les bits de `I_STAT & I_MASK`, cherche un rappel dans
+`D_800797A8[bit]`, l'appelle par `jalr`, puis acquitte en écrivant
+`~(1 << bit)`. Une seconde branche fait la même chose pour les sept canaux du
+DMA, avec sa propre table `D_80079788`.
+
+Or **personne n'enregistre de rappel pour le bit 2**, celui du lecteur.
+`func_800490B0` enregistre bien `func_80054664`, mais pour le **canal DMA 3** —
+le DMA du lecteur, pas son interruption. Le jeu compte donc sur le BIOS pour
+lire la réponse, acquitter, et appeler la fonction qu'il a posée par
+`CdSyncCallback`.
+
+C'est exactement le service qu'il fallait rendre — non pas émuler une image du
+BIOS, mais réécrire la fonction que ce jeu appelle. Une vingtaine de lignes :
+relever le type d'interruption et la réponse, acquitter, enchaîner sur
+l'achèvement si la commande en attend un, et appeler le rappel avec
+`(type, résultat)`.
+
+## Le résultat : la séquence de démarrage avance
+
+```
+CdlReset   -> CdlSetloc -> CdlSetmode -> CdlReadN
+```
+
+Le pilote franchit maintenant quatre étapes là où il rejouait `CdlReset` en
+boucle. C'est la séquence exacte d'un démarrage sur disque : réinitialiser,
+se positionner, régler le mode, lire.
+
+Il bute sur la lecture, ce qui est attendu — aucune donnée ne lui est encore
+servie. Et c'est là que la remarque sur les deux usages du lecteur prend toute
+sa valeur : il n'y a qu'un chargement à servir, une fois, avant que le jeu
+n'ait plus jamais besoin du disque.

@@ -665,6 +665,9 @@ int main(int argc, char **argv)
            elle, images sur disque et scenario, comme avant. */
         int video_init(void);
         g_video = getenv("SANS_FENETRE") ? 0 : video_init();
+        /* Sans fenetre, on capture d'office : c'est le seul moyen de voir. Avec
+           une fenetre, seulement si on l'a demande par IMAGES. */
+        { extern int g_capture; g_capture = (!g_video) || getenv("IMAGES") != 0; }
     }
     { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
     signal(SIGALRM, report);

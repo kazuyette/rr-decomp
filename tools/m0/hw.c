@@ -45,10 +45,15 @@ static void cd_fetch(u32 lba, u8 *out)
 {
     int i;
     FILE *f;
+    /* L'image du disque reste ouverte. L'ouvrir et la refermer a chaque
+       secteur coute peu sur un disque local et beaucoup a travers un montage,
+       ce qui est le cas courant sous WSL. */
+    static FILE *image;
     for (i = 0; i < 2048; i++) out[i] = 0;
     if (lba < CD_META_SECTORS) {
-        f = fopen(CD_META, "rb");
-        if (f) { fseek(f, (long)lba * 2048, SEEK_SET); fread(out, 1, 2048, f); fclose(f);
+        if (!image) image = fopen(CD_META, "rb");
+        f = image;
+        if (f) { fseek(f, (long)lba * 2048, SEEK_SET); fread(out, 1, 2048, f);
                  cd_sectors_served++; return; }
     }
     for (i = 0; i < NCDFILES; i++) {
@@ -93,6 +98,7 @@ u32 g_ot_node, g_ot_n;
 
 unsigned long g_instr_par_image = 376000;
 int g_cout_dessin = 1;
+int g_capture;
 extern unsigned long long g_pixels, g_cycles, g_echeance;
 void psx_horloge(void);
 static unsigned long long pixels_vus;
@@ -151,6 +157,14 @@ static void dma2_run(void)
        espacees, plutot que toutes : ce qu'on veut voir est la progression. */
     {
         static unsigned long n;
+        /* Ecrire une image de 230 Ko sur disque toutes les cent tables suffit
+           a faire saccader le jeu -- et comme le compte s'arrete a cent vingt,
+           la saccade s'arrete elle aussi, apres environ un tour de circuit.
+           Un defaut qui guerit tout seul est le plus difficile a imputer : on
+           croit voir le jeu se mettre en route.
+
+           Quand il y a une fenetre, on ne capture donc que si on l'a demande. */
+        if (!g_capture) return;
         if (++n % 100 == 0 && n / 100 <= 120) {
             char p[256];
             const char *d = getenv("IMAGES");

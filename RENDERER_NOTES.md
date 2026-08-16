@@ -160,3 +160,43 @@ forcée par les masques eux-mêmes.
 La quatorzième, `func_8003FA94`, est un `jr $ra ; nop` — une fonction vide, à
 l'adresse exacte de la frontière. Elle reste sans nom : une fonction vide ne
 porte aucune preuve de ce qu'elle était.
+
+## Sept de plus, dans les blocs déjà entamés
+
+Un voisinage nommé contraint fortement ce qui reste. Les cinq fonctions non
+identifiées du bloc libgpu et les deux du bloc des trampolines :
+
+**`0x80047AE0` — `TermPrim`.** `p->tag |= 0x00FFFFFF` : le champ d'adresse sur
+24 bits passe à sa valeur de fin de liste. C'est le terminateur d'une table
+d'affichage, et rien d'autre n'écrit cette constante-là à cet endroit-là.
+
+**`0x80047AF8` — `SetSemiTrans`** et **`0x80047B20` — `SetShadeTex`.** Deux
+fonctions jumelles : selon leur second argument, elles posent ou effacent un bit
+de l'octet de code en `0x7`. Le bit `0x02` est ABE, la semi-transparence ; le
+bit `0x01` est le drapeau « texture sans ombrage ». Les deux sont des bits de
+commande du GPU, documentés au niveau matériel.
+
+**`0x80047D24` — `MargePrim`.** Additionne les deux longueurs lues en `0x3`,
+ajoute un, refuse au-delà de `0x20` en rendant `-1`, sinon écrit la nouvelle
+longueur et met à zéro le tag du second. C'est mot pour mot le contrat de
+`MargePrim` : fusionner deux primitives contiguës, ou échouer proprement.
+
+**`0x80049638` — `EnterCriticalSection`** et **`0x800497D8` —
+`ExitCriticalSection`.** `a0 = 1 ; syscall` et `a0 = 2 ; syscall`. Les numéros
+d'appel système du noyau PSX sont écrits dans l'instruction.
+
+**`0x80043C54` — `gte_dpcl`.** Charge IR1-3 depuis le premier argument, RGB
+depuis le deuxième, IR0 depuis le troisième, lance `dpcl` et range RGB2 dans le
+quatrième. C'est la **seule** fonction du binaire à émettre `dpcl` — l'unicité
+vaut identification.
+
+Le double `swc2 $22, 0x0($a3)` n'est pas une erreur de lecture : l'écriture est
+répétée telle quelle dans le retail. C'est le contournement d'un aléa de lecture
+des registres du coprocesseur, présent dans tout le code GTE de l'époque.
+
+### Laissée sans nom
+
+`0x80047AB8` copie le champ d'adresse 24 bits d'une primitive vers une autre en
+préservant l'octet de longueur. Le geste est clair, le nom ne l'est pas : c'est
+la première moitié d'`AddPrim` sans sa seconde, et je préfère une adresse à un
+nom plausible.

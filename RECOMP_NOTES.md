@@ -236,10 +236,15 @@ réécrire les opérations **une seconde fois**, dans un autre langage, depuis l
 même documentation, puis de comparer sur des états de registres tirés au
 hasard.
 
-**7 600 comparaisons — quatre cents états, dix-neuf encodages — et aucun
-écart** sur `mvmva` (quatre variantes de matrice, de vecteur et de décalage),
-`nclip`, `avsz3`, `avsz4`, `sqr`, `op`, **`rtps`, `rtpt`** — donc la projection
-et sa division par table — **`gpf`, `gpl`, `intpl` et `dpcs`**.
+**11 200 comparaisons — quatre cents états, vingt-huit encodages — et aucun
+écart.** C'est-à-dire les vingt-neuf encodages relevés dans le binaire moins
+`dpct`, qui répète `dpcs` trois fois sur la pile des couleurs.
+
+La liste : `mvmva` en quatre variantes de matrice, de vecteur et de décalage ;
+`nclip` ; `avsz3` et `avsz4` ; `sqr` et `op` en deux décalages chacun ; `rtps`
+et `rtpt`, donc la projection avec sa division par table ; `gpf`, `gpl`,
+`intpl`, `dpcs`, `dcpl` ; et toute la famille éclairage — `ncs`, `nct`,
+`nccs`, `ncct`, `ncds`, `ncdt`, `cc`, `cdp`.
 
 Ce que ça vaut, précisément : deux transcriptions indépendantes ne se trompent
 pas au même endroit, sauf si la documentation elle-même est ambiguë. Ça attrape
@@ -253,7 +258,7 @@ parce qu'écrire IRGB dépaquette une couleur dans IR1-3 et qu'écrire SXYP
 pousse la pile des coordonnées. Quatre cents états divergeaient pour cette
 seule raison.
 
-## La méthode a payé : un vrai bug trouvé
+## La méthode a payé : deux vrais bugs trouvés
 
 `gpf` et `gpl` se sont accordées du premier coup. `intpl` et `dpcs` ont
 divergé sur les quatre cents états — et l'erreur était dans le C.
@@ -271,15 +276,28 @@ d'invariant ne l'aurait vu : les valeurs restaient plausibles, du même ordre de
 grandeur, simplement fausses. La seconde transcription l'a attrapé au premier
 état tiré.
 
-C'est exactement ce pour quoi la méthode existe, et c'est la première fois
-qu'elle rend quelque chose. Le correctif touchait aussi le chemin brume des
-calculs d'éclairage, qui compensait le bug en pré-décalant ses entrées — deux
-erreurs qui s'annulaient à moitié.
+Le correctif touchait aussi le chemin brume des calculs d'éclairage, qui
+compensait le bug en pré-décalant ses entrées — deux erreurs qui s'annulaient à
+moitié.
+
+**Le second, dans `ncs` et `nct`.** Sans teinte par `RGBC`, la spécification
+garde le MAC issu de la seconde matrice : c'est *lui* le résultat, et la FIFO
+de couleur reçoit `MAC/16`. Je le recalculais depuis `IR`, ce qui le divisait
+par 256 quand `sf` valait 1. Des couleurs presque noires — plausibles à l'œil,
+fausses. Les variantes teintées (`nccs`, `ncct`, `ncds`, `ncdt`) étaient
+justes, ce qui rendait l'erreur d'autant plus difficile à soupçonner : elle ne
+touchait que deux opérations sur huit de la même famille.
+
+Deux bugs, tous deux dans la manipulation d'échelle, tous deux invisibles à un
+test d'invariant, tous deux attrapés au premier état tiré. C'est exactement ce
+pour quoi la méthode existe.
 
 ## Ce qui n'est pas encore contrôlé
 
-La famille des calculs d'éclairage : `ncds`, `ncdt`, `nccs`, `ncct`, `ncs`,
-`nct`, `cdp`, `cc`, `dpct`, `dcpl`. Elles sont implémentées et elles partagent
-maintenant l'interpolation corrigée, mais elles ne sont pas encore doublées en
-Python. Vingt-cinq occurrences dans le binaire, contre plus de cent pour ce qui
-est vérifié.
+`dpct`, qui répète `dpcs` sur la pile des couleurs — une occurrence dans le
+binaire. Les drapeaux de `FLAG` ne sont pas comparés non plus : la référence
+Python les accumule mais le banc ne les lit pas. Le jeu les consulte rarement,
+mais « rarement » n'est pas « jamais ».
+
+Et la limite de fond ne bouge pas : deux transcriptions indépendantes
+n'attrapent pas une lecture fausse partagée. Seule la console le ferait.

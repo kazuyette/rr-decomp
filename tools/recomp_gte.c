@@ -393,27 +393,37 @@ static void interp_far(int sf, int lm, s32 r, s32 g, s32 b)
 
 static void light_color(s16 vx, s16 vy, s16 vz, int sf, int lm, int use_rgb, int fog)
 {
+    int s = sf ? 12 : 0;
     s32 r, g, b;
     mat_vec(gte.LLM, vx, vy, vz, 0, 0, 0, sf, lm);
     mat_vec(gte.LCM, gte.IR1, gte.IR2, gte.IR3, gte.RBK, gte.GBK, gte.BBK, sf, lm);
-    if (use_rgb) {
-        r = (s32)((gte.RGBC & 0xFF) * gte.IR1) << 4;
-        g = (s32)(((gte.RGBC >> 8) & 0xFF) * gte.IR2) << 4;
-        b = (s32)(((gte.RGBC >> 16) & 0xFF) * gte.IR3) << 4;
-    } else {
-        r = (s32)gte.IR1 << 4; g = (s32)gte.IR2 << 4; b = (s32)gte.IR3 << 4;
+
+    if (!use_rgb) {
+        /* NCS et NCT : le MAC issu de la seconde matrice EST le resultat.
+         * Ma premiere version le recalculait depuis IR, ce qui le divisait par
+         * 256 quand sf valait 1 -- des couleurs presque noires, plausibles a
+         * l'oeil et fausses. Trouve par la seconde transcription, comme la
+         * brume. */
+        push_rgb(sat_col(1, gte.MAC1 >> 4), sat_col(2, gte.MAC2 >> 4),
+                 sat_col(3, gte.MAC3 >> 4));
+        return;
     }
+
+    r = (s32)((gte.RGBC & 0xFF) * gte.IR1) << 4;
+    g = (s32)(((gte.RGBC >> 8) & 0xFF) * gte.IR2) << 4;
+    b = (s32)(((gte.RGBC >> 16) & 0xFF) * gte.IR3) << 4;
     if (fog) {
         interp_far(sf, lm, r, g, b);
         return;
     }
-    gte.MAC1 = mac123(1, (s64)r >> (sf ? 12 : 0));
-    gte.MAC2 = mac123(2, (s64)g >> (sf ? 12 : 0));
-    gte.MAC3 = mac123(3, (s64)b >> (sf ? 12 : 0));
+    gte.MAC1 = mac123(1, (s64)r >> s);
+    gte.MAC2 = mac123(2, (s64)g >> s);
+    gte.MAC3 = mac123(3, (s64)b >> s);
     gte.IR1 = sat_ir(1, gte.MAC1, lm);
     gte.IR2 = sat_ir(2, gte.MAC2, lm);
     gte.IR3 = sat_ir(3, gte.MAC3, lm);
-    push_rgb(sat_col(1, gte.MAC1 >> 4), sat_col(2, gte.MAC2 >> 4), sat_col(3, gte.MAC3 >> 4));
+    push_rgb(sat_col(1, gte.MAC1 >> 4), sat_col(2, gte.MAC2 >> 4),
+             sat_col(3, gte.MAC3 >> 4));
 }
 
 void gte_command(u32 code)

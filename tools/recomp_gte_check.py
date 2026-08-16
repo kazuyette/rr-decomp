@@ -207,6 +207,63 @@ class Ref:
         return self.interp([(rgbc & 0xFF) << 16, ((rgbc >> 8) & 0xFF) << 16,
                             ((rgbc >> 16) & 0xFF) << 16], sf, lm)
 
+    # --- eclairage
+    def matvec(self, mk, v, t, sf, lm):
+        sh = 12 if sf else 0
+        m = self.MX(mk)
+        out = []
+        for row in range(3):
+            x = ((t[row] << 12) + m[row * 3] * v[0] + m[row * 3 + 1] * v[1]
+                 + m[row * 3 + 2] * v[2])
+            out.append(self.mac(row + 1, x >> sh))
+        irs = [self.ir(i + 1, out[i], lm) for i in range(3)]
+        return out, irs
+
+    def nc(self, vi, sf, lm, use_rgb, fog):
+        """La chaine complete : lumiere, couleur, teinte, puis brume.
+
+        Le point sur lequel les deux transcriptions pouvaient diverger est le
+        sort du MAC entre la seconde matrice et la couleur : sans teinte par
+        RGBC, la specification le laisse tel quel et la FIFO recoit MAC/16.
+        """
+        sh = 12 if sf else 0
+        v = self.V(vi)
+        _, ir = self.matvec(1, v, (0, 0, 0), sf, lm)
+        bk = (s32(self.c[13]), s32(self.c[14]), s32(self.c[15]))
+        mac, ir = self.matvec(2, ir, bk, sf, lm)
+        rgbc = self.d[6]
+        if use_rgb:
+            base = [((rgbc >> (8 * i)) & 0xFF) * ir[i] << 4 for i in range(3)]
+        else:
+            base = list(mac)
+        if fog:
+            return self.interp(base, sf, lm)
+        if use_rgb:
+            out = [self.mac(i + 1, base[i] >> sh) for i in range(3)]
+        else:
+            out = list(base)
+        firs = [self.ir(i + 1, out[i], lm) for i in range(3)]
+        return out, firs, [self.col(out[i] >> 4, i + 1) for i in range(3)]
+
+    def cc_op(self, sf, lm, depth):
+        sh = 12 if sf else 0
+        ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
+        bk = (s32(self.c[13]), s32(self.c[14]), s32(self.c[15]))
+        mac, ir = self.matvec(2, ir, bk, sf, lm)
+        rgbc = self.d[6]
+        base = [((rgbc >> (8 * i)) & 0xFF) * ir[i] << 4 for i in range(3)]
+        if depth:
+            return self.interp(base, sf, lm)
+        out = [self.mac(i + 1, base[i] >> sh) for i in range(3)]
+        firs = [self.ir(i + 1, out[i], lm) for i in range(3)]
+        return out, firs, [self.col(out[i] >> 4, i + 1) for i in range(3)]
+
+    def dcpl(self, sf, lm):
+        rgbc = self.d[6]
+        ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
+        return self.interp([((rgbc >> (8 * i)) & 0xFF) * ir[i] << 4 for i in range(3)],
+                           sf, lm)
+
     # --- projection
     def unr(self, h, sz3):
         """La division du materiel : table de 257 entrees, deux iterations.
@@ -328,6 +385,11 @@ CASES = [
     ("gpf    sf=1", 0x198003D), ("gpf    sf=0", 0x190003D),
     ("gpl    sf=1", 0x1A8003E), ("gpl    sf=0", 0x1A0003E),
     ("intpl",       0x0980011), ("dpcs",        0x0780010),
+    ("ncs",         0x0C8041E), ("nct",         0x0D80420),
+    ("nccs",        0x108041B), ("ncct",        0x118043F),
+    ("ncds",        0x0E80413), ("ncdt",        0x0F80416),
+    ("cc",          0x138041C), ("cdp",         0x1280414),
+    ("dcpl",        0x0680029),
 ]
 
 rnd = random.Random(20260816)
@@ -369,6 +431,23 @@ for k in range(ROUNDS):
             sf = (code >> 19) & 1; lm = (code >> 10) & 1
             f = {0x3D: ref.gpf, 0x3E: ref.gpl, 0x11: ref.intpl, 0x10: ref.dpcs}[fn]
             macs, irs, rgb = f(sf, lm)
+            want = (tuple(macs), tuple(irs), tuple(rgb))
+            c2 = lib.gte_read_data(22)
+            got = (tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27)),
+                   tuple(s16(lib.gte_read_data(i)) for i in (9, 10, 11)),
+                   (c2 & 0xFF, (c2 >> 8) & 0xFF, (c2 >> 16) & 0xFF))
+        elif fn in (0x1E, 0x20, 0x1B, 0x3F, 0x13, 0x16, 0x1C, 0x14, 0x29):
+            sf = (code >> 19) & 1; lm = (code >> 10) & 1
+            if fn == 0x29:
+                macs, irs, rgb = ref.dcpl(sf, lm)
+            elif fn in (0x1C, 0x14):
+                macs, irs, rgb = ref.cc_op(sf, lm, fn == 0x14)
+            else:
+                three = fn in (0x20, 0x3F, 0x16)
+                use_rgb = fn in (0x1B, 0x3F, 0x13, 0x16)
+                fog = fn in (0x13, 0x16)
+                for vi in range(3 if three else 1):
+                    macs, irs, rgb = ref.nc(vi, sf, lm, use_rgb, fog)
             want = (tuple(macs), tuple(irs), tuple(rgb))
             c2 = lib.gte_read_data(22)
             got = (tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27)),

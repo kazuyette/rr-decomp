@@ -230,6 +230,19 @@ def translate(name, base, words):
         if t is not None and base <= t < end:
             labels.add(t)
 
+    # Un `jr` sur autre chose que $ra vise soit une autre fonction, soit -- et
+    # c'est le cas des switch de gcc -- une adresse a l'interieur de celle-ci,
+    # lue dans une table. Le dispatcher global ne connait que les entrees de
+    # fonction : il ne peut pas servir le second cas, et ce silence coutait
+    # tout ce qui suit le switch, acquittement d'interruption compris. On donne
+    # donc a ces fonctions un aiguillage local vers chacune de leurs adresses,
+    # avec repli sur le dispatcher global pour les cibles externes.
+    has_jrind = any(
+        decode(w, base + 4 * i)[0].startswith("JRIND ")
+        for i, w in enumerate(words))
+    if has_jrind:
+        labels |= {base + 4 * i for i in range(n)}
+
     protos = []
     for i, w in enumerate(words):
         if (w >> 26) == 3:
@@ -298,7 +311,8 @@ def translate(name, base, words):
             reg = txt.split()[1]
             if dtxt:
                 out.append("    " + dtxt)
-            out.append(f"    return psx_dispatch({reg}, r_a0, r_a1, r_a2, r_a3, r_t1);")
+            out.append(f"    pc_next = {reg};")
+            out.append("    goto AIGUILLAGE;")
         elif txt.startswith("JALR "):
             _, reg, link = txt.split()
             if dtxt:
@@ -327,6 +341,16 @@ def translate(name, base, words):
             out.append(f"{after}:;")
         i += 2
 
+    if has_jrind:
+        out.append("    goto FIN;")
+        out.append("AIGUILLAGE:;")
+        out.append("    switch (pc_next) {")
+        for k in range(n):
+            a = base + 4 * k
+            out.append(f"    case 0x{a:08X}u: goto L_{a:08X};")
+        out.append("    }")
+        out.append("    return psx_dispatch(pc_next, r_a0, r_a1, r_a2, r_a3, r_t1);")
+        out.append("FIN:;")
     out.append("    return r_v0;")
     out.append("}")
     return "\n".join(out)

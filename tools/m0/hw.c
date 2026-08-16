@@ -73,15 +73,33 @@ static unsigned gp0_cmd;
 
 FILE *gpulog;
 
+static int gp0_img;          /* mots de donnees d'image restants */
+static int gp0_hdr;          /* mots d'en-tete restants avant les donnees */
+static u32 gp0_wh;
+
+void gp0_reset(void) { gp0_img = 0; gp0_hdr = 0; gp0_left = 0; }
+
 static void gp0_write(u32 v)
 {
     gp0_words++;
+    if (gp0_img > 0) { gp0_img--; return; }
+    if (gp0_hdr > 0) {
+        /* En-tete d'un transfert vers la memoire video : destination puis
+           taille. La taille dit combien de mots de pixels suivent -- sans
+           quoi la texture elle-meme serait lue comme des commandes, et c'est
+           exactement ce qui remplissait le journal de codes impossibles. */
+        if (--gp0_hdr == 0) {
+            u32 w = v & 0xFFFF, h = v >> 16;
+            if (!w) w = 1024;
+            if (!h) h = 512;
+            gp0_img = (int)((w * h + 1) / 2);
+        }
+        return;
+    }
     if (gp0_left == 0) {
         gp0_cmd = v >> 24;
         prim_hist[gp0_cmd]++;
         prim_count++;
-        /* Longueur des commandes de dessin les plus courantes. Les autres
-           passent pour un mot, ce qui suffit à un journal. */
         switch (gp0_cmd & 0xE0) {
         case 0x20: {           /* polygones */
             int quad = (gp0_cmd & 8) ? 4 : 3;
@@ -90,9 +108,19 @@ static void gp0_write(u32 v)
             gp0_left = quad * (1 + tex + grad) + (grad ? 0 : 1) - 1;
             break;
         }
-        case 0x60: gp0_left = (gp0_cmd & 4) ? 3 : 2; break;   /* rectangles */
-        case 0x40: gp0_left = 3; break;                        /* lignes */
-        case 0xA0: case 0xC0: gp0_left = 2; break;             /* transferts */
+        case 0x60: {           /* rectangles */
+            int tex = (gp0_cmd & 4) ? 1 : 0;
+            int var = ((gp0_cmd >> 3) & 3) == 0 ? 1 : 0;   /* taille libre */
+            gp0_left = 1 + tex + var;
+            break;
+        }
+        case 0x40:             /* lignes */
+            gp0_left = (gp0_cmd & 0x10) ? 3 : 2;
+            break;
+        case 0xA0:             /* memoire principale -> memoire video */
+            gp0_hdr = 2; gp0_left = 0; return;
+        case 0xC0:             /* memoire video -> memoire principale */
+            gp0_left = 2; break;
         default:   gp0_left = 0; break;
         }
         if (gpulog && prim_count < 200)
@@ -109,8 +137,10 @@ static void gp0_write(u32 v)
  * c'est voir exactement ce qu'une image contient. */
 static u32 dma2_madr, dma2_bcr, dma2_chcr;
 static u32 dma3_madr, dma3_bcr, dma3_chcr;
+static u32 dma6_madr, dma6_bcr, dma6_chcr;
+unsigned long otc_runs;
 unsigned long dma3_done;
-unsigned long ot_lists, ot_nodes;
+unsigned long ot_lists, ot_nodes, ot_broken;
 
 static void dma2_run(void)
 {
@@ -122,12 +152,20 @@ static void dma2_run(void)
         __builtin_memcpy(&header, RAM + addr, 4);
         n = header >> 24;
         ot_nodes++;
+        /* Chaque noeud porte un paquet complet, sa longueur est dans l'entete.
+           Repartir a zero a chaque noeud borne les degats d'une longueur mal
+           lue : elle ne peut plus avaler la liste entiere. */
+        gp0_reset();
         for (i = 0; i < n; i++) {
             u32 w;
             __builtin_memcpy(&w, RAM + ((addr + 4 + i * 4) & 0x1FFFFC), 4);
             gp0_write(w);
         }
         if ((header & 0xFFFFFF) == 0xFFFFFF) break;
+        /* Un chainage nul n'est pas une fin de liste : c'est une entree qui
+           n'a jamais ete initialisee. La suivre menait a l'adresse zero, puis
+           a tourner jusqu'a la garde -- deux millions de noeuds pour rien. */
+        if ((header & 0xFFFFFF) == 0) { ot_broken++; break; }
         addr = (header & 0x1FFFFC);
     }
     dma2_chcr &= ~0x01000000u;
@@ -157,6 +195,8 @@ static u8 cd_pending_cmd;
    compte les deux separement -- ses compteurs Acknowledge et Complete -- et
    n'avance pas tant qu'il n'a pas eu le second. */
 static u8 cd_second;
+static u8 cd_pend;           /* seconde reponse en attente d'echeance */
+static int cd_delay;
 static u32 cd_lba;           /* position courante, en secteurs */
 static int cd_reading;
 static u8 cd_sector[2048];
@@ -218,7 +258,7 @@ static void cd_command(u8 cmd)
 static int cdlog;
 static void cdtrace(const char *what, u32 a, u32 b)
 {
-    if (cdlog++ < 70) { printf("  cd: %-12s %02X %02X\n", what, a, b); fflush(stdout); }
+    if (cdlog++ < 60) { printf("  cd: %-12s %02X %02X\n", what, a, b); fflush(stdout); }
 }
 
 static u32 cd_read(u32 p)
@@ -266,20 +306,36 @@ static void cd_write(u32 p, u32 v)
             cdtrace("acquitte", b, cd_second);
             if (b & 0x07) {
                 cd_irq = 0;
-                if (cd_second) {
-                    u8 st = cd_stat;
-                    u8 nxt = cd_second;
-                    cd_second = 0;
-                    if (nxt == 1) {           /* un secteur est disponible */
-                        cd_fetch(cd_lba, cd_sector);
-                        cd_sector_ready = 1;
-                    }
-                    cd_reply(nxt, &st, 1);
-                    if (cd_reading) cd_second = 1;   /* et le suivant apres lui */
-                }
+                istat &= ~IRQ_CDROM;
+                /* La seconde reponse ne suit pas l'acquittement d'un cycle :
+                   le mecanisme met des millisecondes a bouger, et le pilote
+                   boucle tant qu'un drapeau reste leve. Repondre sur-le-champ
+                   l'enfermait dans cette boucle -- six millions de secteurs
+                   servis sans qu'il en sorte jamais. On differe donc, et on
+                   compte le temps sur la boucle d'attente du jeu, jamais sur
+                   les acces du gestionnaire lui-meme. */
+                if (cd_second) { cd_pend = cd_second; cd_delay = 1; cd_second = 0; }
             }
         }
         break;
+    }
+}
+
+/* Le battement du lecteur. Appele depuis la boucle d'attente du jeu, et de la
+   seulement : c'est ce qui garantit que le gestionnaire d'interruption puisse
+   se terminer avant que la reponse suivante n'arrive. */
+void cd_tick(void)
+{
+    if (!cd_pend || --cd_delay > 0) return;
+    {
+        u8 st = cd_stat, nxt = cd_pend;
+        cd_pend = 0;
+        if (nxt == 1) {                      /* un secteur est disponible */
+            cd_fetch(cd_lba, cd_sector);
+            cd_sector_ready = 1;
+        }
+        cd_reply(nxt, &st, 1);
+        if (cd_reading && nxt == 1) { cd_pend = 1; cd_delay = 1; }
     }
 }
 
@@ -329,6 +385,7 @@ done:;
     }
 }
 static u32 vblank_counter;
+unsigned long g_vblanks;
 static u32 irq_tick;
 
 
@@ -338,6 +395,7 @@ u32 hw_read32(u32 p)
 {
     hw_reads++;
     note(p, 0);
+    if (!in_irq_flag) cd_tick();
     /* Livrer ici, et pas seulement sur l'etat du GPU : la boucle d'attente du
        lecteur ne lit que son propre registre. Cadencer le temps sur le GPU
        revenait a arreter la montre pendant precisement le moment ou le jeu
@@ -352,7 +410,7 @@ u32 hw_read32(u32 p)
         /* Le retour de balayage, environ soixante fois par seconde sur la
            console. Ici on le cadence sur les lectures d'etat du GPU, faute
            d'horloge : ce qui compte est qu'il arrive regulierement. */
-        if (++irq_tick >= 20000) { irq_tick = 0; irq_raise(IRQ_VBLANK); }
+        
         /* GPUSTAT. Les bits qui comptent pour que le jeu avance : prêt à
            recevoir une commande, prêt pour un DMA, et le bit d'image qui
            bascule -- sans lui, toute attente de synchro tourne sans fin. */
@@ -364,6 +422,9 @@ u32 hw_read32(u32 p)
     case 0x1F8010B0: return dma3_madr;
     case 0x1F8010B4: return dma3_bcr;
     case 0x1F8010B8: return dma3_chcr;
+    case 0x1F8010E0: return dma6_madr;
+    case 0x1F8010E4: return dma6_bcr;
+    case 0x1F8010E8: return dma6_chcr;
     case 0x1F801800: case 0x1F801801:
     case 0x1F801802: case 0x1F801803: return cd_read(p);
     case 0x1F801070: return istat;
@@ -379,6 +440,7 @@ void hw_write32(u32 p, u32 v, int width)
     (void)width;
     hw_writes++;
     note(p, 1);
+    if (!in_irq_flag) cd_tick();
     switch (p) {
     case 0x1F801800: case 0x1F801801:
     case 0x1F801802: case 0x1F801803:
@@ -426,6 +488,27 @@ void hw_write32(u32 p, u32 v, int width)
             dma3_done++;
         }
         break;
+    /* Canal 6 : l'effaceur de table d'affichage. Il ecrit en RAM une liste
+       chainee a l'envers -- chaque entree pointe vers la precedente, la
+       derniere porte la marque de fin. Sans lui, la table reste a zero et le
+       canal 2 suit un chainage nul : il tourne dans le vide et le GPU recoit
+       des mots qui ne sont rien. */
+    case 0x1F8010E0: dma6_madr = v; break;
+    case 0x1F8010E4: dma6_bcr = v; break;
+    case 0x1F8010E8:
+        dma6_chcr = v;
+        if (v & 0x01000000u) {
+            u32 n = dma6_bcr & 0xFFFF, a = dma6_madr & 0x1FFFFC, i;
+            if (!n) n = 0x10000;
+            for (i = 0; i < n; i++) {
+                u32 prev = (i == n - 1) ? 0xFFFFFFu : ((a - 4 * (i + 1)) & 0xFFFFFC);
+                u32 w = prev;
+                __builtin_memcpy(RAM + ((a - 4 * i) & 0x1FFFFC), &w, 4);
+            }
+            dma6_chcr &= ~0x01000000u;
+            otc_runs++;
+        }
+        break;
     case 0x1F8010A0: dma2_madr = v; break;
     case 0x1F8010A4: dma2_bcr = v; break;
     case 0x1F8010A8:
@@ -434,4 +517,40 @@ void hw_write32(u32 p, u32 v, int width)
         break;
     default: break;
     }
+}
+
+/* Les fonctions que le traducteur refuse (COP0) sont remplacees par un
+   bouchon. On compte les passages : un bouchon souvent atteint est une piste,
+   un bouchon jamais atteint ne coute rien. */
+static const char *stub_names[64];
+static unsigned long stub_counts[64];
+static int stub_n;
+void stub_hit(const char *nm)
+{
+    int i;
+    for (i = 0; i < stub_n; i++)
+        if (stub_names[i] == nm) { stub_counts[i]++; return; }
+    if (stub_n < 64) { stub_names[stub_n] = nm; stub_counts[stub_n++] = 1; }
+}
+void stub_report(void)
+{
+    int i;
+    if (!stub_n) return;
+    printf("bouchons atteints :\n");
+    for (i = 0; i < stub_n; i++)
+        printf("   %-20s %lu fois\n", stub_names[i], stub_counts[i]);
+}
+
+unsigned long g_cycles;
+void psx_clock(void)
+{
+    void cd_tick(void);
+    cd_tick();
+    /* Le retour de balayage. Il etait cadence sur les lectures de l'etat du
+       GPU -- or l'attente de VSync ne lit que I_STAT, jamais le GPU : la
+       montre s'arretait exactement pendant qu'on la regardait. Il bat donc
+       ici, sur la meme base que tout le reste. */
+    g_vblanks++;
+    irq_raise(IRQ_VBLANK);
+    if ((istat & imask) && !in_irq_flag) deliver_irq();
 }

@@ -761,3 +761,53 @@ soit mon modèle du registre d'état est faux et le pilote acquitte autrement,
 soit son gestionnaire n'atteint pas le code qui acquitte. La trace des accès
 est en place ; ce qui manque est de la lire depuis l'intérieur du gestionnaire
 du jeu plutôt que depuis le contrôleur.
+
+## M1 franchi : le jeu lit son disque et dessine
+
+Sept défauts, trouvés dans cet ordre, chacun masquant le suivant.
+
+**1. Le `jr` d'un `switch` n'allait nulle part.** Le gestionnaire d'interruption
+du lecteur CD (0x80052504) trie ses six types d'interruption par une table de
+sauts. Le traducteur envoyait tout `jr` non-`$ra` au répartiteur global, qui ne
+connaît que des entrées de fonction : la cible, interne à la fonction, était
+introuvable. Le compteur le disait déjà — « sauts indirects sans cible : 8 » —
+et je ne l'avais pas lu. Tout ce qui suit le `switch` était perdu, y compris
+l'acquittement. `tools/recomp.py` donne désormais un aiguillage local à toute
+fonction contenant un tel saut, avec repli sur le répartiteur.
+
+**2. Le contrôleur répondait trop vite.** La seconde réponse (INT2, INT1) était
+émise dans l'acquittement même. Le pilote boucle tant qu'un drapeau est levé :
+il ne sortait jamais. Six millions de secteurs servis, aucun progrès.
+
+**3. La base de temps s'arrêtait quand on la regardait.** `CdSync` attend dans
+une boucle qui ne lit aucun registre et n'appelle aucune fonction — elle
+surveille un octet en RAM. Cadencer le temps sur le matériel ou sur les appels
+revenait à arrêter la montre exactement pendant l'attente. L'horloge bat
+maintenant sur les accès mémoire (`TICK()` dans `rt.h`) : la seule chose que du
+code qui tourne ne peut pas s'abstenir de faire.
+
+**4. L'interruption ne rendait pas la pile.** `$sp` remontait à chaque
+interruption. Au bout de quelques-unes, les tampons alloués sur la pile
+tombaient au-delà des deux mégaoctets et les écritures étaient jetées en
+silence. Le jeu lisait alors une position de disque nulle et concluait
+« File not found » — après avoir lu son PVD correctement. `deliver_irq` sauve
+et restaure `$sp`, ce que le matériel garantit et que la traduction ne
+garantit pas.
+
+**5. `strcpy` n'existait pas.** La bibliothèque remplace les fonctions de
+chaîne par des tremplins vers `0xA0`. Non implémentées, elles rendent zéro sans
+rien copier — et le défaut se manifeste très loin. Les seize fonctions de
+chaîne et de mémoire sont écrites.
+
+**6. `VSync` attendait un compteur absent.** Il ne compte pas les images
+lui-même : il demande au BIOS la différence depuis son dernier appel
+(`B0(03) GetRCnt`). Sans réponse, la différence est toujours nulle.
+
+**7. Le tableau d'affichage se lisait mal.** Un chaînage nul était suivi comme
+une adresse, et les données de texture d'un paquet `A0` étaient comptées comme
+des commandes. D'où un journal plein de codes impossibles.
+
+État : 907 secteurs servis, 1677 tables d'affichage déroulées, 99 541 commandes
+GPU dont 54 804 rectangles plats et 6 173 texturés. Le jeu imprime son propre
+diagnostic sonore (`ss_init error`). Reste à porter GP0 sur OpenGL pour voir
+l'image plutôt que la compter.

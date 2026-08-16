@@ -96,7 +96,20 @@ void deliver_irq(void)
        drapeau et la reponse avant que le gestionnaire du jeu puisse les lire.
        Rendre un service que personne n'a demande est une facon discrete de
        casser une chaine qui marchait. */
-    psx_irq_body(0, 0, 0, 0);
+    /* L'interruption emprunte la pile du code interrompu. Sur la console, le
+       gestionnaire d'exception travaille sur sa propre pile et rend le
+       contexte intact ; ici, la moindre asymetrie entre les prologues et les
+       epilogues traduits fait deriver $sp d'une interruption a l'autre. Elle
+       montait : au bout de quelques interruptions, les tampons alloues sur la
+       pile tombaient au-dela des deux megaoctets et les ecritures etaient
+       jetees en silence -- le jeu lisait alors une position de disque nulle et
+       concluait « File not found ». On rend donc la pile telle qu'on l'a
+       prise, ce que le materiel garantit et que la traduction ne garantit pas. */
+    {
+        u32 sp_sauve = g_sp;
+        psx_irq_body(0, 0, 0, 0);
+        g_sp = sp_sauve;
+    }
     in_irq_flag = 0;
     in_irq = 0;
 }
@@ -178,6 +191,96 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
         default: break;
         }
     }
+    /* Les fonctions de chaine et de memoire du BIOS.
+     *
+     * Le jeu ne les emporte pas : la bibliotheque les remplace par des
+     * tremplins qui sautent en 0xA0 avec le numero d'appel dans $t1. Ne pas
+     * les implementer ne provoque aucune erreur -- elles rendent zero et ne
+     * copient rien, et le defaut se manifeste tres loin de la : ici, un
+     * strcpy muet vidait le chemin du fichier et le jeu concluait
+     * « File not found » apres avoir correctement lu son disque. */
+    /* Les compteurs racine. VSync ne compte pas les images lui-meme : il
+       demande au BIOS la difference depuis son dernier appel. Sans reponse,
+       la difference est toujours nulle et l'attente ne finit jamais. */
+    if (vec == 0xB0 && (fn & 0xFF) >= 0x02 && (fn & 0xFF) <= 0x06) {
+        extern unsigned long g_vblanks;
+        if ((fn & 0xFF) == 0x03) return (u32)(g_vblanks & 0xFFFF);
+        return 1;
+    }
+    if (vec == 0xA0) {
+        u32 p = a0 & 0x1FFFFF, q = a1 & 0x1FFFFF;
+        u32 n = a2, i;
+        switch (fn & 0xFF) {
+        case 0x17:                                  /* strcmp  */
+            for (i = 0; ; i++) {
+                u8 x = RAM[(p + i) & 0x1FFFFF], y = RAM[(q + i) & 0x1FFFFF];
+                if (x != y) return (u32)(s32)((s32)x - (s32)y);
+                if (!x) return 0;
+            }
+        case 0x18:                                  /* strncmp */
+            for (i = 0; i < n; i++) {
+                u8 x = RAM[(p + i) & 0x1FFFFF], y = RAM[(q + i) & 0x1FFFFF];
+                if (x != y) return (u32)(s32)((s32)x - (s32)y);
+                if (!x) return 0;
+            }
+            return 0;
+        case 0x19:                                  /* strcpy  */
+            for (i = 0; ; i++) {
+                u8 c = RAM[(q + i) & 0x1FFFFF];
+                RAM[(p + i) & 0x1FFFFF] = c;
+                if (!c) break;
+            }
+            return a0;
+        case 0x1A:                                  /* strncpy */
+            for (i = 0; i < n; i++) {
+                u8 c = RAM[(q + i) & 0x1FFFFF];
+                RAM[(p + i) & 0x1FFFFF] = c;
+                if (!c) break;
+            }
+            for (; i < n; i++) RAM[(p + i) & 0x1FFFFF] = 0;
+            return a0;
+        case 0x1B:                                  /* strlen  */
+            for (i = 0; RAM[(p + i) & 0x1FFFFF]; i++) ;
+            return i;
+        case 0x1C:                                  /* index   */
+            for (i = 0; ; i++) {
+                u8 c = RAM[(p + i) & 0x1FFFFF];
+                if (c == (u8)a1) return a0 + i;
+                if (!c) return 0;
+            }
+        case 0x1D:                                  /* rindex  */
+        {
+            u32 last = 0;
+            for (i = 0; ; i++) {
+                u8 c = RAM[(p + i) & 0x1FFFFF];
+                if (c == (u8)a1) last = a0 + i;
+                if (!c) break;
+            }
+            return last;
+        }
+        case 0x27:                                  /* bcopy (src, dst, n) */
+            for (i = 0; i < n; i++) RAM[(q + i) & 0x1FFFFF] = RAM[(p + i) & 0x1FFFFF];
+            return 0;
+        case 0x28:                                  /* bzero  */
+            for (i = 0; i < a1; i++) RAM[(p + i) & 0x1FFFFF] = 0;
+            return 0;
+        case 0x2A:                                  /* memcpy (dst, src, n) */
+            for (i = 0; i < n; i++) RAM[(p + i) & 0x1FFFFF] = RAM[(q + i) & 0x1FFFFF];
+            return a0;
+        case 0x2B:                                  /* memset */
+            for (i = 0; i < n; i++) RAM[(p + i) & 0x1FFFFF] = (u8)a1;
+            return a0;
+        case 0x2C:                                  /* memmove */
+            if (p < q) { for (i = 0; i < n; i++) RAM[(p + i) & 0x1FFFFF] = RAM[(q + i) & 0x1FFFFF]; }
+            else { for (i = n; i-- > 0; ) RAM[(p + i) & 0x1FFFFF] = RAM[(q + i) & 0x1FFFFF]; }
+            return a0;
+        case 0x2E:                                  /* memchr */
+            for (i = 0; i < n; i++)
+                if (RAM[(p + i) & 0x1FFFFF] == (u8)a1) return a0 + i;
+            return 0;
+        default: break;
+        }
+    }
     if (vec == 0xA0 && (fn & 0xFF) == 0x13) {
         /* setjmp. Rend 0 a l'installation, 1 quand on rejoue le contexte. */
         return (u32)g_longjmp;
@@ -237,8 +340,14 @@ static unsigned long tick;
 u32 psx_dispatch(u32 addr, u32 a0, u32 a1, u32 a2, u32 a3, u32 t1)
 {
     int lo = 0, hi = PSX_NFUNCS - 1;
-    if ((++tick & 0xFF) == 0 && (g_istat_mirror & g_imask_mirror) && !in_irq)
-        deliver_irq();
+    /* Meme horloge pour les deux : le lecteur doit avancer sur la meme base
+       de temps que la livraison des interruptions, sinon sa seconde reponse
+       n'arrive jamais pendant que le jeu attend dans une boucle memoire. */
+    if ((++tick & 0xFF) == 0 && !in_irq) {
+        void cd_tick(void);
+        cd_tick();
+        if (g_istat_mirror & g_imask_mirror) deliver_irq();
+    }
     if (addr == 0xA0 || addr == 0xB0 || addr == 0xC0)
         return bios_call(addr, t1, a0, a1, a2, a3);
     while (lo <= hi) {
@@ -277,7 +386,13 @@ static void report(int sig)
                cd_sectors_served, cd_sectors_missing, dma3_done);
     }
     printf("commandes GP0 les plus frequentes :\n");
-    for (i = 0; i < 256; i++)
+    {   /* trier par frequence : montrer les douze plus courantes, pas les
+           douze premieres -- l'ordre numerique ne dit rien. */
+        int ord[256], a, b;
+        for (a = 0; a < 256; a++) ord[a] = a;
+        for (a = 0; a < 256; a++) for (b = a + 1; b < 256; b++)
+            if (prim_hist[ord[b]] > prim_hist[ord[a]]) { int t = ord[a]; ord[a] = ord[b]; ord[b] = t; }
+        for (a = 0; a < 256; a++) { i = ord[a];
         if (prim_hist[i] && n < 12) {
             const char *what =
                 ((i & 0xE0) == 0x20) ? "polygone" :
@@ -292,7 +407,8 @@ static void report(int sig)
                 (i == 0x02) ? "remplissage" : "?";
             printf("   %02X  %-20s %lu\n", i, what, prim_hist[i]);
             n++;
-        }
+        } }
+    }
     {
         extern u32 hw_addr[]; extern unsigned long hw_rcnt[], hw_wcnt[]; extern int hw_naddr;
         int k;

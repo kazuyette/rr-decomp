@@ -65,70 +65,14 @@ u8 RAM[0x200000];
 u8 SPAD[0x400];
 u32 g_sp;
 
-/* --- journal GPU ------------------------------------------------------- */
-unsigned long gp0_words, gp1_cmds, prim_count;
-unsigned long prim_hist[256];
-static int gp0_left;          /* mots restants du paquet en cours */
-static unsigned gp0_cmd;
-
-FILE *gpulog;
-
-static int gp0_img;          /* mots de donnees d'image restants */
-static int gp0_hdr;          /* mots d'en-tete restants avant les donnees */
-static u32 gp0_wh;
-
-void gp0_reset(void) { gp0_img = 0; gp0_hdr = 0; gp0_left = 0; }
-
-static void gp0_write(u32 v)
-{
-    gp0_words++;
-    if (gp0_img > 0) { gp0_img--; return; }
-    if (gp0_hdr > 0) {
-        /* En-tete d'un transfert vers la memoire video : destination puis
-           taille. La taille dit combien de mots de pixels suivent -- sans
-           quoi la texture elle-meme serait lue comme des commandes, et c'est
-           exactement ce qui remplissait le journal de codes impossibles. */
-        if (--gp0_hdr == 0) {
-            u32 w = v & 0xFFFF, h = v >> 16;
-            if (!w) w = 1024;
-            if (!h) h = 512;
-            gp0_img = (int)((w * h + 1) / 2);
-        }
-        return;
-    }
-    if (gp0_left == 0) {
-        gp0_cmd = v >> 24;
-        prim_hist[gp0_cmd]++;
-        prim_count++;
-        switch (gp0_cmd & 0xE0) {
-        case 0x20: {           /* polygones */
-            int quad = (gp0_cmd & 8) ? 4 : 3;
-            int tex  = (gp0_cmd & 4) ? 1 : 0;
-            int grad = (gp0_cmd & 0x10) ? 1 : 0;
-            gp0_left = quad * (1 + tex + grad) + (grad ? 0 : 1) - 1;
-            break;
-        }
-        case 0x60: {           /* rectangles */
-            int tex = (gp0_cmd & 4) ? 1 : 0;
-            int var = ((gp0_cmd >> 3) & 3) == 0 ? 1 : 0;   /* taille libre */
-            gp0_left = 1 + tex + var;
-            break;
-        }
-        case 0x40:             /* lignes */
-            gp0_left = (gp0_cmd & 0x10) ? 3 : 2;
-            break;
-        case 0xA0:             /* memoire principale -> memoire video */
-            gp0_hdr = 2; gp0_left = 0; return;
-        case 0xC0:             /* memoire video -> memoire principale */
-            gp0_left = 2; break;
-        default:   gp0_left = 0; break;
-        }
-        if (gpulog && prim_count < 200)
-            fprintf(gpulog, "GP0 %02X\n", gp0_cmd);
-    } else {
-        gp0_left--;
-    }
-}
+/* --- GPU ---------------------------------------------------------------- */
+void gpu_gp0(u32 v);
+void gpu_gp1(u32 v);
+void gpu_reset_fifo(void);
+void gpu_write_ppm(const char *path);
+void gpu_write_vram(const char *path);
+extern unsigned long gp0_words, gp1_cmds, prim_count, prim_hist[256], gpu_frames;
+#define gp0_write(v) gpu_gp0(v)
 
 /* --- DMA canal 2 : la table d'affichage ---------------------------------
  *
@@ -140,7 +84,8 @@ static u32 dma3_madr, dma3_bcr, dma3_chcr;
 static u32 dma6_madr, dma6_bcr, dma6_chcr;
 unsigned long otc_runs;
 unsigned long dma3_done;
-unsigned long ot_lists, ot_nodes, ot_broken;
+unsigned long ot_lists, ot_nodes, ot_broken, dma2_blocks;
+u32 g_ot_node, g_ot_n;
 
 static void dma2_run(void)
 {
@@ -155,7 +100,7 @@ static void dma2_run(void)
         /* Chaque noeud porte un paquet complet, sa longueur est dans l'entete.
            Repartir a zero a chaque noeud borne les degats d'une longueur mal
            lue : elle ne peut plus avaler la liste entiere. */
-        gp0_reset();
+        g_ot_node = addr; g_ot_n = n;
         for (i = 0; i < n; i++) {
             u32 w;
             __builtin_memcpy(&w, RAM + ((addr + 4 + i * 4) & 0x1FFFFC), 4);
@@ -169,6 +114,17 @@ static void dma2_run(void)
         addr = (header & 0x1FFFFC);
     }
     dma2_chcr &= ~0x01000000u;
+    /* Une liste deroulee = une image dessinee. On en garde quelques-unes,
+       espacees, plutot que toutes : ce qu'on veut voir est la progression. */
+    {
+        static unsigned long n;
+        if (++n % 100 == 0 && n / 100 <= 120) {
+            char p[64];
+            sprintf(p, "/tmp/recomp/f%03lu.ppm", n / 100);
+            gpu_write_ppm(p);
+            if ((n / 100) % 10 == 2) { sprintf(p, "/tmp/recomp/v%03lu.ppm", n / 100); gpu_write_vram(p); }
+        }
+    }
 }
 
 /* --- le lecteur CD -------------------------------------------------------
@@ -451,7 +407,7 @@ void hw_write32(u32 p, u32 v, int width)
         if ((istat & imask) && !in_irq_flag) deliver_irq();
         break;
     case 0x1F801810: gp0_write(v); break;
-    case 0x1F801814: gp1_cmds++; break;
+    case 0x1F801814: gpu_gp1(v); break;
     case 0x1F801070: istat &= v; break;    /* acquittement : les zeros effacent */
     case 0x1F801074: {
         /* Quel masque le jeu arme-t-il ? La reponse dit quelles sources il
@@ -513,7 +469,30 @@ void hw_write32(u32 p, u32 v, int width)
     case 0x1F8010A4: dma2_bcr = v; break;
     case 0x1F8010A8:
         dma2_chcr = v;
-        if (v & 0x01000000u) dma2_run();
+        if (v & 0x01000000u) {
+            /* Trois modes, et pas seulement la liste chainee.
+               LoadImage envoie l'en-tete a la main puis pousse les pixels par
+               bloc : traiter ce bloc comme une liste faisait suivre au canal
+               un chainage tire de la texture elle-meme -- d'ou un transfert
+               de 1024 par 256 a une adresse absurde, qui barbouillait toute
+               la memoire video. */
+            u32 sync = (v >> 9) & 3;
+            if (sync == 2) dma2_run();
+            else {
+                u32 words = (sync == 1)
+                    ? (dma2_bcr & 0xFFFF) * ((dma2_bcr >> 16) & 0xFFFF)
+                    : (dma2_bcr & 0xFFFF);
+                u32 a = dma2_madr & 0x1FFFFC, i;
+                if (!words) words = 0x10000;
+                for (i = 0; i < words; i++) {
+                    u32 w;
+                    __builtin_memcpy(&w, RAM + ((a + i * 4) & 0x1FFFFC), 4);
+                    gp0_write(w);
+                }
+                dma2_blocks++;
+            }
+            dma2_chcr &= ~0x01000000u;
+        }
         break;
     default: break;
     }

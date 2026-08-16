@@ -113,6 +113,7 @@ void deliver_irq(void)
     in_irq_flag = 0;
     in_irq = 0;
 }
+int g_seconds = 20;
 unsigned long dispatch_misses;
 unsigned long cdcb_hits;   /* entrees dans le rappel CD du jeu */
 
@@ -362,7 +363,7 @@ u32 psx_dispatch(u32 addr, u32 a0, u32 a1, u32 a2, u32 a3, u32 t1)
 static void report(int sig)
 {
     int i, n = 0;
-    if (sig) printf("\n--- interrompu apres %d s ---\n", 20);
+    if (sig) printf("\n--- interrompu apres %d s ---\n", g_seconds);
     printf("paquets GPU        : %lu commandes, %lu mots\n", prim_count, gp0_words);
     printf("tables d'affichage : %lu deroulees, %lu noeuds\n", ot_lists, ot_nodes);
     printf("registres          : %lu ecritures, %lu lectures, %lu GP1\n",
@@ -464,6 +465,7 @@ int main(int argc, char **argv)
 {
     FILE *f = fopen("/tmp/recomp/psx.img", "rb");
     int seconds = (argc > 1) ? atoi(argv[1]) : 20;
+    g_seconds = seconds;
     if (!f || fread(RAM + 0x10000, 423936, 1, f) != 1) {
         fprintf(stderr, "image introuvable\n");
         return 1;

@@ -811,3 +811,36 @@ des commandes. D'où un journal plein de codes impossibles.
 GPU dont 54 804 rectangles plats et 6 173 texturés. Le jeu imprime son propre
 diagnostic sonore (`ss_init error`). Reste à porter GP0 sur OpenGL pour voir
 l'image plutôt que la compter.
+
+## M2 : l'image
+
+Le journal GPU est remplacé par un vrai rastériseur (`tools/m0/gpu.c`) :
+mémoire vidéo 1024×512, polygones plats, dégradés et texturés, rectangles et
+sprites, traits, transferts, palettes 4 et 8 bits, fenêtre de texture, zone de
+dessin, décalage, semi-transparence dans ses quatre modes. Logiciel et non
+OpenGL : ce qu'on cherche à établir est la fidélité, pas la vitesse, et il
+tourne dans un conteneur sans écran.
+
+Quatre défauts se sont révélés en regardant l'image plutôt que les compteurs.
+
+**Le DMA 2 a trois modes, pas un.** `LoadImage` pousse les pixels par bloc.
+Les traiter comme une liste chaînée faisait suivre au canal un chaînage tiré
+de la texture elle-même — d'où un transfert fantôme de 1024 par 256 qui
+barbouillait toute la mémoire vidéo.
+
+**La fenêtre de texture s'applique avec le masque brut.** Je l'inversais, et
+la valeur par défaut devenait « ne garder que trois bits d'abscisse » : tous
+les texels venaient d'une seule colonne de huit pixels. Les glyphes étaient au
+bon endroit, tous identiques.
+
+**Sans dégradé, la couleur unique occupe le premier mot.** Je lisais le mot de
+commande comme une coordonnée : chaque polygone plat atterrissait ailleurs.
+
+**Une copie interne de taille nulle** n'est pas « toute la mémoire vidéo » : la
+suivre à la lettre revenait à barbouiller l'écran à partir d'un mot mal cadré.
+
+Résultat : l'écran de chargement (le Galaxian), puis l'écran-titre complet —
+drapeau à damier, logo, mentions légales, « PUSH START BUTTON » — puis la
+démonstration, où seul le fond se dessine. Deux minutes de fonctionnement sans
+incident : 751 855 commandes GPU, 4 104 tables d'affichage. Le jeu ne plante
+pas ; il lui manque encore la piste.

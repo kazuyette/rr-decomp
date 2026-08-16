@@ -35,6 +35,7 @@ u32 psx_dispatch(u32, u32, u32, u32, u32, u32);
 u32 g_irq_handler;
 unsigned long irq_delivered;
 static int in_irq;
+int in_irq_flag;
 int g_longjmp;          /* fait rendre 1 a setjmp, le temps d'une interruption */
 
 /* Le jeu n'installe pas une fonction : il sauvegarde un contexte.
@@ -54,10 +55,12 @@ void deliver_irq(void)
 {
     if (in_irq) return;
     in_irq = 1;
+    in_irq_flag = 1;
     irq_delivered++;
     g_longjmp = 1;
     psx_func_800492B0(0, 0, 0, 0);
     g_longjmp = 0;
+    in_irq_flag = 0;
     in_irq = 0;
 }
 unsigned long dispatch_misses;
@@ -225,6 +228,14 @@ static void report(int sig)
         extern u32 hw_addr[]; extern unsigned long hw_rcnt[], hw_wcnt[]; extern int hw_naddr;
         int k;
         extern unsigned long cd_cmds[256];
+        {
+            extern u32 hw_irq_addr[]; extern unsigned long hw_irq_cnt[]; extern int hw_irq_n;
+            int j;
+            printf("registres lus par le gestionnaire d'interruptions :\n");
+            for (j = 0; j < hw_irq_n; j++)
+                printf("   %08X  %lu fois\n", hw_irq_addr[j], hw_irq_cnt[j]);
+            if (!hw_irq_n) printf("   aucun -- le gestionnaire ne touche pas au materiel\n");
+        }
         printf("commandes CD recues :\n");
         for (k = 0; k < 256; k++)
             if (cd_cmds[k]) {

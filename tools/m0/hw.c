@@ -10,6 +10,18 @@
 #include <string.h>
 #include "rt.h"
 
+/* Les interruptions, pour de vrai.
+ *
+ * I_STAT porte les sources en attente, I_MASK celles qui sont armees. Ecrire
+ * dans I_STAT acquitte : les bits a zero dans la valeur ecrite sont effaces.
+ * Renvoyer une constante, comme je le faisais, laisse le drapeau leve pour
+ * toujours -- le gestionnaire retraite sans fin la meme source et n'atteint
+ * jamais les autres. */
+static u32 istat, imask;
+void irq_raise(u32 bit) { istat |= bit; }
+#define IRQ_VBLANK 0x0001
+#define IRQ_CDROM  0x0004
+
 u8 RAM[0x200000];
 u8 SPAD[0x400];
 u32 g_sp;
@@ -108,9 +120,10 @@ static void cd_reply(u8 irq, const u8 *b, int n)
     cd_nresp = 0; cd_rpos = 0;
     for (i = 0; i < n && i < 16; i++) cd_resp[cd_nresp++] = b[i];
     cd_irq = irq;
-    /* Le contrôleur a repondu : c'est maintenant que l'evenement doit partir,
-       sans quoi le pilote attend une reponse qu'il a pourtant recue. */
-    cd_event(0x0020);
+    /* Le contrôleur a repondu : lever la source d'interruption. C'est le
+       gestionnaire du jeu qui decidera quoi en faire -- notre travail s'arrete
+       a poser le drapeau, comme le materiel. */
+    irq_raise(IRQ_CDROM);
 }
 
 static void cd_command(u8 cmd)
@@ -179,9 +192,21 @@ unsigned long hw_writes, hw_reads;
    suite de quel materiel le jeu a besoin, et dans quelle proportion. */
 #define HWN 256
 u32 hw_addr[HWN]; unsigned long hw_rcnt[HWN], hw_wcnt[HWN]; int hw_naddr;
+/* Le gestionnaire d'interruptions et la boucle principale touchent le meme
+   materiel pour des raisons opposees. Les compter separement dit ce que le
+   gestionnaire cherche -- et donc ce qui lui manque. */
+extern int in_irq_flag;
+u32 hw_irq_addr[64]; unsigned long hw_irq_cnt[64]; int hw_irq_n;
+
 static void note(u32 p, int write)
 {
     int i;
+    if (in_irq_flag) {
+        for (i = 0; i < hw_irq_n; i++)
+            if (hw_irq_addr[i] == p) { hw_irq_cnt[i]++; goto done; }
+        if (hw_irq_n < 64) { hw_irq_addr[hw_irq_n] = p; hw_irq_cnt[hw_irq_n++] = 1; }
+    }
+done:;
     for (i = 0; i < hw_naddr; i++)
         if (hw_addr[i] == p) { if (write) hw_wcnt[i]++; else hw_rcnt[i]++; return; }
     if (hw_naddr < HWN) {
@@ -192,19 +217,29 @@ static void note(u32 p, int write)
 }
 static u32 vblank_counter;
 static u32 irq_tick;
+
+
 void deliver_irq(void);
 
 u32 hw_read32(u32 p)
 {
     hw_reads++;
     note(p, 0);
+    /* Livrer ici, et pas seulement sur l'etat du GPU : la boucle d'attente du
+       lecteur ne lit que son propre registre. Cadencer le temps sur le GPU
+       revenait a arreter la montre pendant precisement le moment ou le jeu
+       attend une interruption. */
+    if ((istat & imask) && !in_irq_flag) deliver_irq();
     switch (p) {
     case 0x1F801810: return 0;             /* GPUREAD */
     case 0x1F801814:
         /* Le jeu lit ce registre des millions de fois : c'est sa boucle
            d'attente, donc le meilleur endroit ou faire battre le temps.
            Toutes les mille lectures, on lui livre une interruption. */
-        if (++irq_tick >= 1000) { irq_tick = 0; deliver_irq(); }
+        /* Le retour de balayage, environ soixante fois par seconde sur la
+           console. Ici on le cadence sur les lectures d'etat du GPU, faute
+           d'horloge : ce qui compte est qu'il arrive regulierement. */
+        if (++irq_tick >= 20000) { irq_tick = 0; irq_raise(IRQ_VBLANK); }
         /* GPUSTAT. Les bits qui comptent pour que le jeu avance : prêt à
            recevoir une commande, prêt pour un DMA, et le bit d'image qui
            bascule -- sans lui, toute attente de synchro tourne sans fin. */
@@ -215,8 +250,8 @@ u32 hw_read32(u32 p)
     case 0x1F8010A8: return dma2_chcr;
     case 0x1F801800: case 0x1F801801:
     case 0x1F801802: case 0x1F801803: return cd_read(p);
-    case 0x1F801070: return 1 | (cd_irq ? 4 : 0);   /* VBlank, et le CD si arme */
-    case 0x1F801074: return 0xFFFF;        /* I_MASK */
+    case 0x1F801070: return istat;
+    case 0x1F801074: return imask;
     default: return 0;
     }
 }
@@ -231,6 +266,25 @@ void hw_write32(u32 p, u32 v, int width)
     case 0x1F801802: case 0x1F801803: cd_write(p, v); break;
     case 0x1F801810: gp0_write(v); break;
     case 0x1F801814: gp1_cmds++; break;
+    case 0x1F801070: istat &= v; break;    /* acquittement : les zeros effacent */
+    case 0x1F801074: {
+        /* Quel masque le jeu arme-t-il ? La reponse dit quelles sources il
+           attend, et donc lesquelles il faut lever. */
+        static u32 last; static int shown;
+        if (v != last && shown < 8) {
+            printf("[I_MASK = %04X : ", v);
+            if (v & 1) printf("vblank ");
+            if (v & 2) printf("gpu ");
+            if (v & 4) printf("cdrom ");
+            if (v & 8) printf("dma ");
+            if (v & 0x10) printf("timer0 ");
+            if (v & 0x70) printf("timers ");
+            if (v & 0x80) printf("carte ");
+            if (v & 0x100) printf("spu ");
+            printf("]\n"); fflush(stdout); last = v; shown++;
+        }
+        imask = v; break;
+    }
     case 0x1F8010A0: dma2_madr = v; break;
     case 0x1F8010A4: dma2_bcr = v; break;
     case 0x1F8010A8:

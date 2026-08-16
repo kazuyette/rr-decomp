@@ -474,3 +474,45 @@ l'acquittement : le gestionnaire tourne, lit l'état, et ne reconnaît pas encor
 l'interruption du lecteur comme la sienne. C'est là que reprendra le travail —
 et le prochain relevé à faire est celui des registres que le gestionnaire lit
 *pendant* qu'il tourne, par opposition à ceux que lit la boucle principale.
+
+## Les interruptions, pour de vrai
+
+Trois corrections, chacune trouvée en instrumentant plutôt qu'en devinant.
+
+**`I_STAT` était une constante.** Je renvoyais une valeur figée pour les
+sources en attente, et je perdais les acquittements — les écritures dans ce
+registre n'étaient traitées par aucun cas. Un drapeau qui ne s'efface jamais
+fait retraiter sans fin la même source, et les autres n'arrivent jamais. Le
+registre est maintenant réel : les écritures effacent les bits à zéro, comme le
+matériel.
+
+**Le masque, relevé plutôt que supposé.** Le jeu arme `0x0008` puis `0x000C` —
+DMA, puis DMA et lecteur CD. Il attend donc bien l'interruption du lecteur, ce
+qui écarte l'hypothèse d'un pilote purement scrutateur.
+
+**L'horloge s'arrêtait au mauvais moment.** Je livrais les interruptions en
+cadence sur les lectures d'état du GPU. Or la boucle d'attente du lecteur ne
+lit que son propre registre, trente-trois millions de fois — jamais le GPU.
+Autrement dit, ma montre s'arrêtait précisément pendant que le jeu attendait
+une interruption. La livraison se fait maintenant sur toute lecture matérielle.
+
+Le corps du gestionnaire se lit d'ailleurs sans peine une fois qu'on sait où
+regarder : il charge `I_STAT` et `I_MASK` **par pointeurs**, stockés en
+`D_80077440` et `D_80077444`, les combine, et teste d'abord le bit 3 — le DMA —
+avant de se brancher ailleurs pour le reste.
+
+## Ce qui résiste encore
+
+Trois millions d'interruptions livrées, le gestionnaire s'exécute, le masque
+est bon, le contrôleur répond — et les six compteurs du pilote restent à zéro.
+
+Le suspect principal est l'émulation du `setjmp`/`longjmp`. Rappeler la
+fonction en faisant rendre 1 au `setjmp` emprunte la bonne branche, mais **ne
+restaure pas les registres sauvegardés** au moment du `setjmp`. Si le corps du
+gestionnaire dépend de l'un d'eux, il travaille sur des valeurs qui ne sont pas
+celles que le matériel lui aurait rendues.
+
+C'est une limite de principe de la traduction par fonction, pas un oubli. La
+sortie propre serait de sauvegarder et restaurer explicitement les registres
+persistants dans la structure de contexte — ce que fait le vrai `setjmp` — et
+donc de traduire ces deux fonctions à la main plutôt que de les boucher.

@@ -577,6 +577,7 @@ void psx_clock(void)
        montre s'arretait exactement pendant qu'on la regardait. Il bat donc
        ici, sur la meme base que tout le reste. */
     g_vblanks++;
+    { void pad_ecrire(unsigned long); pad_ecrire(g_vblanks); }
     irq_raise(IRQ_VBLANK);
     if ((istat & imask) && !in_irq_flag) deliver_irq();
 }

@@ -114,6 +114,73 @@ void deliver_irq(void)
     in_irq = 0;
 }
 int g_seconds = 20;
+u32 g_pad_buf[2];
+int g_pad_on;
+u32 g_pad_boutons = 0xFFFF;   /* actifs a zero : rien d'enfonce */
+
+/* Le scenario. Une liste « instant:touches », l'instant compte en battements
+   de retour de balayage. Ecrit plutot qu'interactif, pour que deux executions
+   donnent la meme image. */
+static struct { unsigned long quand; u32 masque; } scenario[16];
+static int nscenario;
+
+void pad_ecrire(unsigned long tick)
+{
+    int i;
+    u32 m = 0xFFFF;
+    if (!g_pad_on) return;
+    for (i = 0; i < nscenario; i++)
+        if (tick >= scenario[i].quand) m = scenario[i].masque;
+    g_pad_boutons = m;
+    for (i = 0; i < 2; i++) {
+        u32 p = g_pad_buf[i] & 0x1FFFFF;
+        if (!p) continue;
+        RAM[p + 0] = (i == 0) ? 0x00 : 0xFF;   /* seul le premier port existe */
+        RAM[p + 1] = 0x41;                     /* manette numerique */
+        RAM[p + 2] = (u8)(m >> 8);
+        RAM[p + 3] = (u8)m;
+    }
+}
+
+static u32 touche(const char *nom)
+{
+    if (!strcmp(nom, "start"))    return 0x0800;
+    if (!strcmp(nom, "select"))   return 0x0100;
+    if (!strcmp(nom, "haut"))     return 0x1000;
+    if (!strcmp(nom, "droite"))   return 0x2000;
+    if (!strcmp(nom, "bas"))      return 0x4000;
+    if (!strcmp(nom, "gauche"))   return 0x8000;
+    if (!strcmp(nom, "croix"))    return 0x0040;
+    if (!strcmp(nom, "rond"))     return 0x0020;
+    if (!strcmp(nom, "triangle")) return 0x0010;
+    if (!strcmp(nom, "carre"))    return 0x0080;
+    if (!strcmp(nom, "l1"))       return 0x0004;
+    if (!strcmp(nom, "r1"))       return 0x0008;
+    return 0;
+}
+
+/* « 400:start 460: 900:croix » -- instant, deux-points, touches separees par
+   des virgules. Un instant sans touche relache tout. */
+void scenario_lire(const char *s)
+{
+    while (s && *s && nscenario < 16) {
+        char mot[64]; int o = 0; u32 m = 0xFFFF;
+        unsigned long quand = 0;
+        while (*s == ' ') s++;
+        while (*s >= '0' && *s <= '9') quand = quand * 10 + (unsigned)(*s++ - '0');
+        if (*s == ':') s++;
+        while (*s && *s != ' ') {
+            o = 0;
+            while (*s && *s != ' ' && *s != ',') { if (o < 63) mot[o++] = *s; s++; }
+            mot[o] = 0;
+            if (o) m &= ~touche(mot);
+            if (*s == ',') s++;
+        }
+        scenario[nscenario].quand = quand;
+        scenario[nscenario].masque = m;
+        nscenario++;
+    }
+}
 unsigned long dispatch_misses;
 unsigned long cdcb_hits;   /* entrees dans le rappel CD du jeu */
 
@@ -282,6 +349,28 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
         default: break;
         }
     }
+    /* La manette.
+     *
+     * Le BIOS ne la lit pas a la demande : il remplit un tampon que le jeu
+     * consulte quand il veut. InitPAD donne l'adresse des deux tampons,
+     * StartPAD arme le remplissage. Le format tient en quatre octets --
+     * un etat, un type, et seize boutons actifs a zero.
+     *
+     * Sans elle, le jeu reste sur « PUSH START BUTTON » et ne montre que sa
+     * demonstration. Avec elle, on peut le jouer -- ou, ici, lui jouer un
+     * scenario ecrit d'avance, ce qui rend le resultat reproductible. */
+    if (vec == 0xB0 && (fn & 0xFF) == 0x12) {   /* InitPAD  */
+        g_pad_buf[0] = a0; g_pad_buf[1] = a2;
+        return 0;
+    }
+    if (vec == 0xB0 && (fn & 0xFF) == 0x13) {   /* StartPAD */
+        g_pad_on = 1;
+        return 0;
+    }
+    if (vec == 0xB0 && (fn & 0xFF) == 0x14) {   /* StopPAD  */
+        g_pad_on = 0;
+        return 0;
+    }
     if (vec == 0xA0 && (fn & 0xFF) == 0x13) {
         /* setjmp. Rend 0 a l'installation, 1 quand on rejoue le contexte. */
         return (u32)g_longjmp;
@@ -386,7 +475,7 @@ static void report(int sig)
         printf("secteurs servis            : %lu (%lu introuvables), %lu transferts DMA\n",
                cd_sectors_served, cd_sectors_missing, dma3_done);
     }
-    { void cd_etat(void); cd_etat(); }
+    { extern unsigned long g_vblanks; printf("battements video : %lu\n", g_vblanks); }
     printf("commandes GP0 les plus frequentes :\n");
     {   /* trier par frequence : montrer les douze plus courantes, pas les
            douze premieres -- l'ordre numerique ne dit rien. */
@@ -479,7 +568,7 @@ int main(int argc, char **argv)
        console. On prend donc la pile par defaut du BIOS. */
     g_sp = 0x801FFF00u;
 
-    { extern int g_teinte; g_teinte = getenv("TEINTE") ? 1 : 0; }
+    { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
     signal(SIGALRM, report);
     alarm(seconds);
     printf("entree en %08X, %d fonctions dans la table\n", ENTRY, PSX_NFUNCS);

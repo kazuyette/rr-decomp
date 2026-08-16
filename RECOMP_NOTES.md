@@ -877,3 +877,33 @@ sous la forme d'une image sans route.
 Résultat : la démonstration tourne. La ligne droite de départ, le tunnel, le
 pont suspendu, les voitures. 908 064 commandes GPU en quatre-vingt-dix
 secondes, 3 236 images, aucun secteur manquant.
+
+## M4 : la manette
+
+Le BIOS ne lit pas la manette à la demande. `InitPAD` lui donne l'adresse de
+deux tampons, `StartPAD` arme le remplissage, et le jeu consulte ces quatre
+octets quand il veut : un état, un type, et seize boutons actifs à zéro. Trois
+appels BIOS de plus, et le jeu cesse d'être une démonstration.
+
+L'entrée vient d'un **scénario** écrit d'avance plutôt que d'un clavier —
+`MANETTE="60000:start 63000: 90000:start 93000: 140000:start"` — pour que deux
+exécutions donnent exactement la même image. Une session interactive viendra
+avec le portage OpenGL ; en attendant, un scénario est ce qui rend un défaut
+reproductible, et donc trouvable.
+
+Ce scénario-là traverse l'écran-titre, ouvre le menu (`COURSE SELECT`,
+`MISSION SELECT`, `CAR SELECT`, `SOUND SELECT`) et lance la course. Le tableau
+de bord s'affiche entier : tour, position, temps au tour, record, total, la
+carte du circuit, le compte-tours et le rapport engagé.
+
+## Ce qui reste
+
+- **Le son.** `ss_init error / 3312 > 3264` est le diagnostic du jeu lui-même :
+  le banc SPU n'est pas modélisé du tout, et les 24 voix ne sont que des
+  registres qu'on compte.
+- **La vitesse.** Le rastériseur logiciel tient quelques images par seconde. Le
+  flux GP0 est déjà exactement ce qu'il faut donner à OpenGL ; c'est la
+  prochaine étape naturelle, et elle rendra le jeu interactif.
+- **Les fonctions décompilées.** L'intérêt de tout ceci est là : chaque
+  fonction byte-matched remplace sa jumelle traduite dans `table.c`, et le jeu
+  continue de tourner à chaque remplacement.

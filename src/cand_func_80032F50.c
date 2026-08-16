@@ -14,7 +14,7 @@
 
 s32 func_80019C6C(s32, s32);
 s32 func_8002721C(s32);
-s32 func_800497C8();
+s32 rand();
 extern s32 D_8012D8F8;
 extern s32 D_8012D900;
 extern s32 D_801E91D0;
@@ -38,7 +38,7 @@ void func_80032F50(s32 arg0, void *arg1) {
         }
         D_8012D8F8 = (s32) ((s32) (var_v1 * M2C_FIELD(arg1, s32 *, 0xA0)) / 2048) / 2;
         D_801E91D0 = 0x1E;
-        if (func_800497C8() & 0x80) {
+        if (rand() & 0x80) {
             D_8012D8F8 = -D_8012D8F8;
             return;
         }

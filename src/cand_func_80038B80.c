@@ -12,9 +12,9 @@
  */
 #include "m2c_macros.h"
 
-s32 func_800497C8();
+s32 rand();
 extern s32 D_801D3588;
 
 void func_80038B80(void) {
-    D_801D3588 = func_800497C8() & 0x3FF;
+    D_801D3588 = rand() & 0x3FF;
 }

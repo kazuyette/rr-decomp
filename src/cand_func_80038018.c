@@ -12,7 +12,7 @@
  */
 #include "m2c_macros.h"
 
-s32 func_800497C8(s16 *, u16);
+s32 rand(s16 *, u16);
 extern M2C_UNK D_80074D94;
 extern s16 D_8007C210;
 
@@ -123,7 +123,7 @@ void func_80038018(void *arg0) {
         M2C_FIELD(arg0, s32 *, 0x5C) = (s32) temp_v0_7;
         break;
     case 9:
-        temp_v0_8 = *(&D_80074D94 + ((func_800497C8(var_a2, temp_a3) & 1) * 4));
+        temp_v0_8 = *(&D_80074D94 + ((rand(var_a2, temp_a3) & 1) * 4));
         M2C_FIELD(arg0, s32 *, 0x78) = 0;
         M2C_FIELD(arg0, s16 **, 0) = temp_v0_8;
         var_a2 = temp_v0_8;

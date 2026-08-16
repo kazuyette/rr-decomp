@@ -62,10 +62,10 @@ void func_8002D240(void) {
     void *var_s0;
 
     if (D_801D35AA != 0) {
-        func_800497C8();
+        rand();
     }
     if (D_801D35AA & 0x40) {
-        func_800497C8();
+        rand();
     }
     temp_v1 = M2C_FIELD(D_80173148, s32 *, 0) + 1;
     M2C_FIELD(D_80173148, s32 *, 0) = temp_v1;
@@ -182,7 +182,7 @@ block_43:
                     snd_play_se(var_a0, (void *) temp_a1, temp_a2, D_80173148);
                 }
             }
-            if ((M2C_FIELD(D_80173148, s16 *, 0xC14) != -2) && (var_v1_2 = 0, ((func_800497C8() & 0x17C2) == 0))) {
+            if ((M2C_FIELD(D_80173148, s16 *, 0xC14) != -2) && (var_v1_2 = 0, ((rand() & 0x17C2) == 0))) {
                 var_a0_2 = D_80173148;
 loop_61:
                 var_v1_2 += 3;

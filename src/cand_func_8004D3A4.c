@@ -15,11 +15,12 @@
 
 
 s32 func_8004D3A4(s32 arg0) {
-    s32 var_v0;
-
-    var_v0 = -1;
+    /* Written as two returns rather than m2c's "initialise then overwrite
+     * under a condition". GCC 2.7.2 if-converts the latter into xori/negu
+     * -- branchless arithmetic -- while the retail code branches. Same
+     * meaning, different shape; this is the experiment. */
     if ((u32) (arg0 & 0xFFFF) < 0x18U) {
-        var_v0 = 0;
+        return 0;
     }
-    return var_v0;
+    return -1;
 }

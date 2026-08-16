@@ -77,7 +77,7 @@ s32 *func_80035638(s32 *arg0, void *arg1, s32 arg2, s32 arg3, s32 arg4, s32 arg5
                     M2C_FIELD(var_s0, s32 *, 0x14) = (s32) M2C_FIELD(sp18, s32 *, 0x1C);
                     M2C_FIELD(var_s0, u16 *, 0x1C) = (u16) M2C_FIELD(sp18, u16 *, 0x20);
                     M2C_FIELD(var_s0, u16 *, 0x24) = (u16) M2C_FIELD(sp18, u16 *, 0x24);
-                    func_80043C80(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), var_s3_2 + 4);
+                    gte_dpcs(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), var_s3_2 + 4);
                     *var_s3_2 = 0x09000000;
                     M2C_FIELD(var_s0, s8 *, 7) = 0x2C;
                     temp_a1 = var_s0;
@@ -143,7 +143,7 @@ block_34:
                         M2C_FIELD(temp_s6, s32 *, 4) = (s32) (M2C_FIELD(arg1, s32 *, 0) - (((temp_s0 + M2C_FIELD(sp18, s16 *, 0x22)) * 4) + 0x200));
                         M2C_FIELD(arg1, u16 *, 0xA4) = (u16) M2C_FIELD(sp18, u16 *, 0x1A);
                         M2C_FIELD(temp_s6, u16 *, 2) = (u16) M2C_FIELD(sp18, u16 *, 0x1E);
-                        func_80043C80(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), temp_s6 + 0x70, temp_a3);
+                        gte_dpcs(arg1 + 0x10, M2C_FIELD(arg1, s32 *, 0x28), temp_s6 + 0x70, temp_a3);
                         func_8004617C(var_s3_2, 0, 1, 0, &D_80077128);
                         AddPrim(M2C_FIELD(temp_s6, s32 *, 4), var_s3_2);
                         temp_v0_3 = func_80044098(var_s3_2 + 0xC, temp_s6, var_s5, var_s2);
@@ -170,7 +170,7 @@ block_34:
                     M2C_FIELD(var_s0_2, s32 *, 0xC) = (s32) M2C_FIELD(arg1, s32 *, 0x38);
                     M2C_FIELD(var_s0_2, s32 *, 0x10) = (s32) M2C_FIELD(arg1, s32 *, 0x3C);
                     M2C_FIELD(var_s0_2, s32 *, 0x14) = (s32) M2C_FIELD(arg1, s32 *, 0x40);
-                    func_80043C80(sp18 + 0x18, M2C_FIELD(arg1, s32 *, 0x28), var_s3_2 + 4);
+                    gte_dpcs(sp18 + 0x18, M2C_FIELD(arg1, s32 *, 0x28), var_s3_2 + 4);
                     *var_s3_2 = 0x05000000;
                     temp_a1_2 = var_s0_2;
                     var_s0_2 += 0x18;

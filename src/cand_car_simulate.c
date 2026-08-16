@@ -17,7 +17,7 @@ M2C_UNK func_80026E7C(void *);
 M2C_UNK func_80027734(void *);
 M2C_UNK func_80027F60(void *);
 M2C_UNK func_80028294(void *);
-s32 func_800497C8();
+s32 rand();
 extern s32 D_80077140;
 extern s32 D_8007B1A8;
 extern s32 D_8007B1F8;
@@ -420,7 +420,7 @@ block_83:
                 var_v1_7 += 0x7FF;
             }
             if (M2C_FIELD(temp_s1, s32 *, 0x48) < (var_v1_7 >> 0xB)) {
-                temp_lo_2 = (s32) ((func_800497C8() & 0x7F) * 0x28) / 100;
+                temp_lo_2 = (s32) ((rand() & 0x7F) * 0x28) / 100;
                 D_801D3572 = (s16) temp_lo_2;
                 var_v0_16 = (temp_lo_2 * 0xC) + 0x1800;
                 goto block_153;
@@ -437,7 +437,7 @@ block_153:
     }
     if (D_8012CFC0 > 0) {
         D_801D3572 = 0x37;
-        D_801D3574 = ((func_800497C8() & 3) + 0x38) << 7;
+        D_801D3574 = ((rand() & 3) + 0x38) << 7;
     }
     if (M2C_FIELD(temp_s1, s16 *, 0x60) != 0) {
         D_801D3572 = 0;

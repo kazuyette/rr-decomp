@@ -14,6 +14,8 @@ typedef int8_t s8; typedef int16_t s16; typedef int32_t s32; typedef int64_t s64
 extern u8 RAM[0x200000];      /* 2 Mo de memoire principale */
 extern u8 SPAD[0x400];        /* le bloc-notes, 1 Ko de RAM rapide dans le CPU */
 extern u32 g_sp;
+extern u32 COP0[32];
+u32 psx_syscall(u32, u32, u32, u32);
 
 u32  hw_read32(u32 phys);
 void hw_write32(u32 phys, u32 v, int width);

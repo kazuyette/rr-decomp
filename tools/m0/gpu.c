@@ -32,7 +32,9 @@ static int mask_set, mask_test;
 
 /* --- affichage ---------------------------------------------------------- */
 static int disp_x, disp_y, disp_w = 320, disp_h = 240;
-unsigned long gpu_frames, copies_nulles, tex_vides, tex_pleins;
+unsigned long pixels_avant;
+int g_teinte;
+unsigned long gpu_frames, copies_nulles, tex_vides, tex_pleins, transferts_tampon, copies_tampon;
 
 static inline u16 vram_get(int x, int y)
 {
@@ -170,12 +172,13 @@ static void tri(struct vtx a, struct vtx b, struct vtx c,
     }
 }
 
-extern u32 g_ot_node, g_ot_n;
+
 
 /* --- la file de commandes ----------------------------------------------- */
 static u32 fifo[16];
 static int nfifo, want;
 static int img_left, img_x, img_y, img_w, img_h, img_cx, img_cy;
+static int rd_left, rd_x, rd_y, rd_w, rd_h, rd_cx, rd_cy;
 unsigned long gp0_words, gp1_cmds, prim_count;
 unsigned long prim_hist[256];
 
@@ -321,6 +324,12 @@ static void execute(void)
         if (!img_h) img_h = 512;
         img_cx = img_cy = 0;
         img_left = (img_w * img_h + 1) / 2;
+    } else if (op >= 0xC0 && op <= 0xDF) {   /* memoire video -> memoire principale */
+        rd_x = (int)(fifo[1] & 0x3FF); rd_y = (int)((fifo[1] >> 16) & 0x1FF);
+        rd_w = (int)(fifo[2] & 0x3FF); rd_h = (int)((fifo[2] >> 16) & 0x1FF);
+        if (!rd_w) rd_w = 1024;
+        if (!rd_h) rd_h = 512;
+        rd_cx = rd_cy = 0; rd_left = (rd_w * rd_h + 1) / 2;
     } else if (op == 0xE1) {
         texpage = fifo[0] & 0x3FFF;
     } else if (op == 0xE2) {
@@ -360,6 +369,25 @@ void gpu_gp0(u32 v)
     if (nfifo < 16) fifo[nfifo] = v;
     nfifo++;
     if (nfifo >= want) { execute(); nfifo = 0; }
+}
+
+/* La lecture de la memoire video. Le canal peut aussi tirer du GPU vers la
+   memoire principale : ignorer le bit de sens revenait a pousser dans le GPU
+   le contenu de la pile, que le materiel lisait ensuite comme des commandes.
+   D'ou des copies internes tirees de nulle part, qui barbouillaient le tampon
+   d'affichage avec de la texture. */
+u32 gpu_read_word(void)
+{
+    u32 v = 0;
+    int k;
+    if (rd_left <= 0) return 0;
+    for (k = 0; k < 2; k++) {
+        u16 h = (rd_cy < rd_h) ? vram_get(rd_x + rd_cx, rd_y + rd_cy) : 0;
+        v |= (u32)h << (16 * k);
+        if (++rd_cx >= rd_w) { rd_cx = 0; rd_cy++; }
+    }
+    rd_left--;
+    return v;
 }
 
 void gpu_reset_fifo(void) { nfifo = 0; }

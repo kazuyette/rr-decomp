@@ -844,3 +844,36 @@ drapeau à damier, logo, mentions légales, « PUSH START BUTTON » — puis la
 démonstration, où seul le fond se dessine. Deux minutes de fonctionnement sans
 incident : 751 855 commandes GPU, 4 104 tables d'affichage. Le jeu ne plante
 pas ; il lui manque encore la piste.
+
+## M3 : la piste
+
+Trois défauts, et le troisième explique tous les autres symptômes.
+
+**Le canal DMA a un sens.** Le bit 0 du registre de contrôle dit qui alimente
+qui. Je le supposais toujours « la mémoire vers le GPU » ; `StoreImage` fait
+l'inverse. Résultat : le contenu de la pile était poussé dans le GPU, qui le
+lisait comme des commandes — d'où des copies internes tirées de nulle part qui
+barbouillaient le tampon d'affichage avec de la texture.
+
+**Les commandes du lecteur qui font bouger le mécanisme répondent deux fois.**
+J'en avais implémenté quelques-unes ; `SetSession` manquait, et c'est celle que
+le jeu envoie juste après avoir chargé ses données, au moment où il passe à la
+piste audio. Le pilote attendait un achèvement qui ne venait pas et déclarait
+un délai dépassé — le chargement s'arrêtait là.
+
+**`InitGeom` était un bouchon.** La fonction qui arme le GTE dans le registre
+d'état du coprocesseur système règle aussi ZSF3 et ZSF4, les facteurs qui
+convertissent une profondeur en indice de table d'affichage. Le traducteur
+refusait la fonction pour son unique instruction COP0, je l'avais remplacée par
+un bouchon silencieux — et sans ZSF3/ZSF4, `avsz4` rendait zéro pour tous les
+polygones. Le jeu, qui jette ce qui tombe à l'indice zéro, jetait la piste
+entière : seul le ciel se dessinait. Le traducteur modélise désormais le COP0
+par un tableau de registres, et `syscall` par un appel.
+
+La leçon est la même que celle du chapitre précédent : un bouchon silencieux ne
+casse pas là où il est. Celui-ci se manifestait à cinq fonctions de distance,
+sous la forme d'une image sans route.
+
+Résultat : la démonstration tourne. La ligne droite de départ, le tunnel, le
+pont suspendu, les voitures. 908 064 commandes GPU en quatre-vingt-dix
+secondes, 3 236 images, aucun secteur manquant.

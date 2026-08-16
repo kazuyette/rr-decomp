@@ -116,6 +116,8 @@ def _decode(w, pc):
         # de ce genre etaient traduits en retours avant qu'on les compte.
         if fn == 0x08:
             return ("JR" if rs == 31 else f"JRIND {r(rs)}"), None, True
+        if fn == 0x0C:
+            return "r_v0 = psx_syscall(r_a0, r_a1, r_a2, r_a3);", None, False
         if fn == 0x09:
             return f"JALR {r(rs)} {r(rd)}", None, True
         if fn == 0x10: return f"{r(rd)} = r_hi;", None, False
@@ -203,6 +205,16 @@ def _decode(w, pc):
     # commandes un appel avec leur encodage brut -- c'est l'implementation qui
     # decode les champs sf, lm, mx, v et cv, pas le traducteur, pour que les
     # deux restent verifiables separement.
+    # COP0 : le coprocesseur systeme. Le jeu ne s'en sert que pour armer le
+    # GTE dans le registre d'etat et pour les sections critiques. Le modeliser
+    # par un tableau de registres suffit -- et l'ignorer coutait cher : la
+    # fonction qui arme le GTE regle aussi ZSF3 et ZSF4, sans lesquels toute
+    # profondeur vaut zero et le jeu jette chacun de ses polygones.
+    if op == 16:
+        if rs == 0: return f"{r(rt)} = COP0[{rd}];", None, False
+        if rs == 4: return f"COP0[{rd}] = {r(rt)};", None, False
+        if rs & 0x10: return "/* rfe */", None, False
+        raise Unsupported(f"COP0 rs={rs} en {pc:08X}")
     if op == 18:
         if rs & 0x10:
             return f"gte_command(0x{w & 0x1FFFFFF:07X}u);", None, False

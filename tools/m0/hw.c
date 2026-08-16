@@ -69,6 +69,8 @@ u32 g_sp;
 void gpu_gp0(u32 v);
 void gpu_gp1(u32 v);
 void gpu_reset_fifo(void);
+void gpu_check_sync(const char *);
+u32 gpu_read_word(void);
 void gpu_write_ppm(const char *path);
 void gpu_write_vram(const char *path);
 extern unsigned long gp0_words, gp1_cmds, prim_count, prim_hist[256], gpu_frames;
@@ -100,7 +102,6 @@ static void dma2_run(void)
         /* Chaque noeud porte un paquet complet, sa longueur est dans l'entete.
            Repartir a zero a chaque noeud borne les degats d'une longueur mal
            lue : elle ne peut plus avaler la liste entiere. */
-        g_ot_node = addr; g_ot_n = n;
         for (i = 0; i < n; i++) {
             u32 w;
             __builtin_memcpy(&w, RAM + ((addr + 4 + i * 4) & 0x1FFFFC), 4);
@@ -151,6 +152,7 @@ static u8 cd_pending_cmd;
    compte les deux separement -- ses compteurs Acknowledge et Complete -- et
    n'avance pas tant qu'il n'a pas eu le second. */
 static u8 cd_second;
+static u8 cd_id_pending;
 static u8 cd_pend;           /* seconde reponse en attente d'echeance */
 static int cd_delay;
 static u32 cd_lba;           /* position courante, en secteurs */
@@ -196,7 +198,34 @@ static void cd_command(u8 cmd)
         cd_second = 1;      /* INT1 : un secteur est pret */
         break;
     case 0x0A: cd_stat = 0x02; cd_reply(3, one, 1); cd_second = 2; break; /* Init  */
-    case 0x09: cd_reply(3, one, 1); cd_second = 2; break;  /* Pause   */
+    /* Les commandes qui font bouger le mecanisme repondent deux fois : un
+       accuse immediat, puis un achevement. En omettre une seule suffit a
+       bloquer le pilote -- il attend l'achevement et finit par declarer un
+       delai depasse. C'est ce qui arrivait a SetSession, juste apres le
+       chargement des donnees, au moment ou le jeu passe a la piste audio. */
+    case 0x12: cd_reply(3, one, 1); cd_second = 2; break;  /* SetSession */
+    case 0x08: cd_reading = 0; cd_reply(3, one, 1); cd_second = 2; break; /* Stop */
+    case 0x07: cd_reply(3, one, 1); cd_second = 2; break;  /* MotorOn */
+    case 0x0B: cd_reply(3, one, 1); break;                 /* Mute */
+    case 0x03: cd_reply(3, one, 1); break;                 /* Play  */
+    case 0x1A: {                                           /* GetID */
+        /* Un disque de donnees, licencie, region libre. */
+        static const u8 id[8] = { 0x02, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A' };
+        cd_reply(3, one, 1);
+        cd_id_pending = 1;
+        cd_second = 2;
+        (void)id;
+        break;
+    }
+    case 0x13: {                                           /* GetTN */
+        u8 r[3]; r[0] = cd_stat; r[1] = 0x01; r[2] = 0x01;
+        cd_reply(3, r, 3); break;
+    }
+    case 0x14: {                                           /* GetTD */
+        u8 r[3]; r[0] = cd_stat; r[1] = 0x00; r[2] = 0x02;
+        cd_reply(3, r, 3); break;
+    }
+    case 0x09: cd_reading = 0; cd_reply(3, one, 1); cd_second = 2; break;  /* Pause */
     case 0x15: case 0x16: cd_reply(3, one, 1); cd_second = 2; break; /* Seek */
     case 0x0C: cd_reply(3, one, 1); break;                 /* Demute  */
     case 0x0E: cd_reply(3, one, 1); break;                 /* Setmode */
@@ -280,12 +309,24 @@ static void cd_write(u32 p, u32 v)
 /* Le battement du lecteur. Appele depuis la boucle d'attente du jeu, et de la
    seulement : c'est ce qui garantit que le gestionnaire d'interruption puisse
    se terminer avant que la reponse suivante n'arrive. */
+void cd_etat(void)
+{
+    printf("etat lecteur : irq=%u pend=%u delai=%d lecture=%d second=%u nresp=%u rpos=%u ie=%02X index=%u istat=%04X imask=%04X\n",
+           cd_irq, cd_pend, cd_delay, cd_reading, cd_second, cd_nresp, cd_rpos, cd_ie, cd_index, istat, imask);
+}
+
 void cd_tick(void)
 {
     if (!cd_pend || --cd_delay > 0) return;
     {
         u8 st = cd_stat, nxt = cd_pend;
         cd_pend = 0;
+        if (cd_id_pending) {
+            static const u8 id[8] = { 0x02, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A' };
+            cd_id_pending = 0;
+            cd_reply(2, id, 8);
+            return;
+        }
         if (nxt == 1) {                      /* un secteur est disponible */
             cd_fetch(cd_lba, cd_sector);
             cd_sector_ready = 1;
@@ -477,6 +518,7 @@ void hw_write32(u32 p, u32 v, int width)
                de 1024 par 256 a une adresse absurde, qui barbouillait toute
                la memoire video. */
             u32 sync = (v >> 9) & 3;
+            int vers_gpu = (int)(v & 1);   /* 1 : la memoire alimente le GPU */
             if (sync == 2) dma2_run();
             else {
                 u32 words = (sync == 1)
@@ -486,6 +528,11 @@ void hw_write32(u32 p, u32 v, int width)
                 if (!words) words = 0x10000;
                 for (i = 0; i < words; i++) {
                     u32 w;
+                    if (!vers_gpu) {          /* le GPU alimente la memoire */
+                        w = gpu_read_word();
+                        __builtin_memcpy(RAM + ((a + i * 4) & 0x1FFFFC), &w, 4);
+                        continue;
+                    }
                     __builtin_memcpy(&w, RAM + ((a + i * 4) & 0x1FFFFC), 4);
                     gp0_write(w);
                 }
@@ -532,4 +579,16 @@ void psx_clock(void)
     g_vblanks++;
     irq_raise(IRQ_VBLANK);
     if ((istat & imask) && !in_irq_flag) deliver_irq();
+}
+
+/* Le coprocesseur systeme, reduit a ses registres. Le jeu n'y touche que pour
+   armer le GTE dans le registre d'etat et pour ses sections critiques. */
+u32 COP0[32];
+u32 psx_syscall(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a1; (void)a2; (void)a3;
+    /* 1 : entrer en section critique, 2 : en sortir. Sans ordonnanceur, il n'y
+       a rien a faire de plus que de le noter. */
+    (void)a0;
+    return 0;
 }

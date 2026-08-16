@@ -386,6 +386,7 @@ static void report(int sig)
         printf("secteurs servis            : %lu (%lu introuvables), %lu transferts DMA\n",
                cd_sectors_served, cd_sectors_missing, dma3_done);
     }
+    { void cd_etat(void); cd_etat(); }
     printf("commandes GP0 les plus frequentes :\n");
     {   /* trier par frequence : montrer les douze plus courantes, pas les
            douze premieres -- l'ordre numerique ne dit rien. */
@@ -478,6 +479,7 @@ int main(int argc, char **argv)
        console. On prend donc la pile par defaut du BIOS. */
     g_sp = 0x801FFF00u;
 
+    { extern int g_teinte; g_teinte = getenv("TEINTE") ? 1 : 0; }
     signal(SIGALRM, report);
     alarm(seconds);
     printf("entree en %08X, %d fonctions dans la table\n", ENTRY, PSX_NFUNCS);

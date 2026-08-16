@@ -315,7 +315,6 @@ INCLUDE_ASM("asm/nonmatchings/29E8", func_80030F30);
 
 
 
-INCLUDE_ASM("asm/nonmatchings/29E8", func_80031378);
 
 
 

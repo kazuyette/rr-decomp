@@ -8,7 +8,7 @@ SECTIONS
     {
         FILL(0x00000000);
         header_DATA_START = .;
-        build/assets/header.o(.data);
+        build/asm/header.o(.data);
         header_DATA_END = .;
         header_DATA_SIZE = ABSOLUTE(header_DATA_END - header_DATA_START);
     }
@@ -24,17 +24,20 @@ SECTIONS
         main_RODATA_START = .;
         build/asm/data/800.rodata.o(.rodata);
         build/src/29E8.o(.rodata);
+        build/src/psyq.o(.rodata);
         . = ALIGN(., 16);
         main_RODATA_END = .;
         main_RODATA_SIZE = ABSOLUTE(main_RODATA_END - main_RODATA_START);
         main_TEXT_START = .;
         build/src/29E8.o(.text);
+        build/src/psyq.o(.text);
         . = ALIGN(., 16);
         main_TEXT_END = .;
         main_TEXT_SIZE = ABSOLUTE(main_TEXT_END - main_TEXT_START);
         main_DATA_START = .;
         build/asm/data/800.rodata.o(.data);
         build/src/29E8.o(.data);
+        build/src/psyq.o(.data);
         build/asm/data/49A30.data.o(.data);
         . = ALIGN(., 16);
         main_DATA_END = .;
@@ -42,6 +45,7 @@ SECTIONS
         main_BSS_START = .;
         build/asm/data/800.rodata.o(.bss);
         build/src/29E8.o(.bss);
+        build/src/psyq.o(.bss);
         . = ALIGN(., 16);
         main_BSS_END = .;
         main_BSS_SIZE = ABSOLUTE(main_BSS_END - main_BSS_START);

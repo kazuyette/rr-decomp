@@ -22,6 +22,12 @@ typedef s8  M2C_UNK8;
 typedef s16 M2C_UNK16;
 typedef s32 M2C_UNK32;
 
+/* m2c emits NULL for a zero pointer, and GCC 2.7.2 sees no header that
+ * defines it here. */
+#ifndef NULL
+#define NULL 0
+#endif
+
 #define M2C_FIELD(expr, type_ptr, offset) (*(type_ptr)((s8 *)(expr) + (offset)))
 
 #endif

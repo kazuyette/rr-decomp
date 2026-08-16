@@ -179,3 +179,20 @@ produirait exactement une couverture excellente sur une moitié de la carte et
 trouée sur l'autre. Une réflexion globale appliquée aux deux jeux de données à
 la fois est inobservable par ce test ; il faudra la lire dans le code qui écrit
 `D_801D9068`, pas la mesurer.
+
+## Une note d'orientation, pour les rendus de contrôle
+
+Les premières images de contrôle de cette page étaient dessinées avec `+Z` vers
+le haut de l'image. C'est faux, et c'est une réflexion, pas un cadrage.
+
+Le PSX travaille en **Y descendant** : X à droite, Y vers le bas, Z vers
+l'avant. Une vue de dessus regarde dans la direction `+Y` ; en posant la droite
+de l'écran sur `+X`, le haut de l'écran vaut `Y × X = −Z`, donc **`+Z` descend
+à l'écran**. Dessiner `hauteur − z` donne la carte vue de dessous, soit son
+miroir.
+
+Ça ne change aucune des mesures de cette page — une réflexion globale préserve
+la bijection, la couverture et les distances — et ça ne résout pas la question
+d'axe restée ouverte, qui porte sur X et non sur Z. Mais toute image de
+contrôle produite ici doit sortir avec `+Z` vers le bas, sans quoi on compare
+une carte à son reflet.

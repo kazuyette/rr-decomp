@@ -399,3 +399,59 @@ C'est la deuxième fois sur cette page qu'un chiffre trop flatteur venait d'un
 facteur d'échelle et non du sujet étudié. Le garde-fou qui manquait est simple :
 quand une image et une métrique divergent sur le même objet, c'est la métrique
 qu'il faut relire.
+
+---
+
+# La convention correcte
+
+```
+x_monde = cellule_x * 2048  −  localX / 4
+z_monde = cellule_z * 2048  +  localZ / 4
+```
+
+**X nié, Z non nié, aucun décalage.** C'est tout.
+
+Le X nié vient de `D_801733A0 = 0xF000 = 30 × 2048` lu dans `func_80015CD4` :
+le repère de rendu est celui de la polyligne réfléchi en X, et rien ne réfléchit
+Z. La dérivation le disait déjà ; je l'ai perdue en route en niant aussi Z sur
+la foi d'une métrique fausse.
+
+## La preuve
+
+Intervalle occupé par les sommets de type B autour de la longue droite sud,
+en distance signée à la polyligne, pour une demi-largeur de nœud de 655 :
+
+| convention | n | bande | médiane |
+|---|---|---|---|
+| `(−X, −Z)`, décalage `+1024` en Z | 353 | `[−815 .. −65]` | −428 |
+| `(+X, −Z)`, décalage `+1024` en Z | 506 | `[−788 .. +514]` | −262 |
+| `(+X, +Z)`, aucun décalage | 532 | `[−1587 .. +885]` | +4 |
+| **`(−X, +Z)`, aucun décalage** | **352** | **`[−359 .. +392]`** | **+4** |
+
+La bonne se reconnaît à deux choses ensemble : une médiane nulle **et** une
+bande étroite. `(+X, +Z)` a aussi une médiane nulle, mais sur une bande trois
+fois trop large — c'est du décor réparti symétriquement, pas une route. Seule
+`(−X, +Z)` donne une bande de 750 unités centrée, à comparer aux 1310 de
+largeur de route : le revêtement, centré sur son axe.
+
+## Ce que ça retire de cette page
+
+**La polyligne est bien l'axe de la route**, et non un bord. La section
+précédente concluait l'inverse à partir d'un intervalle `[−800, 0]` — cet
+intervalle était l'artefact du signe de Z. À retirer.
+
+**Les décalages `+1024` sont des artefacts** de la même erreur. Il n'y a aucun
+décalage.
+
+**Le demi-tour est faux** : c'est une réflexion en X seule.
+
+Trois conclusions successives invalidées par la même cause, et la cause n'a été
+trouvée qu'en changeant de question — non plus « quelle transformation minimise
+une distance », mais « quel intervalle occupe la route autour de son axe ». La
+première question a un optimum pour n'importe quelle convention ; la seconde
+n'a de réponse étroite que pour la bonne.
+
+Le signalement extérieur qui a débloqué ça — « la géométrie est du même côté,
+il faut la retourner en miroir » — portait sur trois portions différentes et
+était exact. Aucune de mes métriques agrégées ne le voyait, parce qu'elles
+moyennaient sur un décor réparti des deux côtés.

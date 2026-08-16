@@ -7,6 +7,7 @@
 typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef uint64_t u64;
 typedef int8_t s8; typedef int16_t s16; typedef int32_t s32; typedef int64_t s64;
 extern u8 RAM[0x200000];
+extern u32 g_sp;          /* le pointeur de pile : un global, comme sur la machine */
 #define AD(a) ((a) & 0x1FFFFF)
 static inline u32 LW(u32 a){ u32 v; __builtin_memcpy(&v, RAM+AD(a), 4); return v; }
 static inline u32 LH(u32 a){ u16 v; __builtin_memcpy(&v, RAM+AD(a), 2); return v; }

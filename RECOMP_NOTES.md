@@ -106,3 +106,86 @@ sont traduisibles en l'état — sans GTE, sans appel externe, sans global absol
 Le harnais, lui, tient désormais la charge : 2,8 secondes pour construire et
 exécuter la référence sur cent quinze fonctions, 1,2 seconde pour la
 traduction.
+
+---
+
+# Étape 2 : les appels et les globals
+
+## Le changement de méthode
+
+Le premier banc recopiait chaque fonction à son adresse masquée, une par une.
+Tant qu'elles étaient isolées cela suffisait ; dès qu'elles s'appellent entre
+elles et lisent des variables globales, il faut le programme entier.
+
+La correction simplifie tout : **on charge l'image complète de l'exécutable**
+— 423 936 octets à `0x80010000`, soit `0x00010000` une fois masqué sur 28 bits
+— dans une section de la référence, et on déclare chaque fonction comme un
+symbole à son adresse dans cette image. Les appels et les adresses absolues
+retombent alors justes sans une seule ligne de relocation, parce qu'ils sont
+déjà justes.
+
+Au passage, l'en-tête donne le point d'entrée : **`0x8003FA9C`**, huit octets
+après `func_8003FA94`, la fonction vide de la frontière jeu/bibliothèque. La
+frontière calculée il y a plusieurs sessions par le graphe d'appels tombe donc
+exactement sur le début du runtime.
+
+## Ce que le traducteur sait faire maintenant
+
+| | avant | après |
+|---|---|---|
+| fonctions traduisibles | 115 | **836 sur 948** |
+
+Trois ajouts l'ont permis :
+
+**Les appels.** `jal` devient un appel C vers la fonction traduite
+correspondante, résolu par une table de symboles construite depuis le
+désassemblage.
+
+**Le pointeur de pile comme global.** `$sp` ne peut pas être une variable
+locale : un appelé doit voir celui de son appelant, sinon les cadres se
+recouvrent et les arguments passés au-delà du quatrième se lisent dans le vide.
+En faire un global rend l'imbrication et les arguments sur pile corrects sans
+code particulier — parce que c'est exactement ce qu'il est sur la machine.
+
+**Les globals ne demandent rien.** Les mots du retail contiennent déjà les
+adresses absolues ; la traduction les calcule et les accesseurs les ramènent
+dans le tableau RAM. Il suffit d'y avoir chargé l'image.
+
+Restent 112 fonctions : le GTE (109), deux `syscall` et un accès COP0.
+
+## Le résultat
+
+**1 856 cas sur 116 fonctions. 114 identiques au bit près, 2 divergentes.**
+
+Les 116 ne sont pas les 836 : le banc écarte 540 fonctions que la référence
+elle-même ne peut pas exécuter sur des entrées quelconques, et 180 qui
+atteignent — directement ou par transitivité — un appelé non traduisible. Ces
+dernières sont écartées par un calcul de point fixe sur le graphe d'appels,
+parce qu'un bouchon ne doit jamais passer pour une vérification.
+
+## Quatre défauts de plus, tous dans le banc
+
+**Les écritures dans `$zero`.** Le retail en contient — des `nop` encodés
+autrement, des résultats calculés puis abandonnés. Traduites telles quelles
+elles donnent `0 = 0 & 0;`, que le C refuse. Le registre est câblé à zéro sur
+la machine : l'écriture se jette.
+
+**Les arguments sur la pile.** `func_80028A0C` lit jusqu'à `0x54($sp)`,
+`func_80029278` jusqu'à `0x58($sp)` — le neuvième argument. Chaque argument
+manquant se lisait dans de la pile non initialisée, différente des deux côtés.
+Le harnais en passe douze. Cela seul a fait tomber les divergences de 160 à 32.
+
+**Les appelés non traduisibles**, traités plus haut.
+
+**Le chevauchement de sections**, trivial mais instructif : l'éditeur de liens
+a refusé de placer le tampon d'essai dans la zone non initialisée, ce qu'il
+avait parfaitement raison de faire.
+
+## Les deux qui restent
+
+`func_80040690` et `rsin_quadrant` divergent sur leur valeur de retour, pas sur
+la mémoire. La première teste son argument contre `0x400` — un quadrant
+d'angle — et rend une valeur que la référence tire d'un appel dont ma
+détection d'écriture de `$v0` ne rend pas compte. Ce sont deux cas à instruire,
+pas deux erreurs établies ; et le fait qu'il n'en reste que deux sur 116 dit où
+en est le traducteur.

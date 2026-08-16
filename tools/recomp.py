@@ -46,15 +46,52 @@ REG = ["zero", "at", "v0", "v1", "a0", "a1", "a2", "a3",
 
 
 def r(n):
-    return "0" if n == 0 else "r_" + REG[n]
+    """$zero est la constante 0 ; $sp est un global.
+
+    Le pointeur de pile ne peut pas être une variable locale : un appelé doit
+    voir celui de son appelant, sinon les cadres se recouvrent et les
+    arguments passés sur la pile -- ceux au-delà du quatrième -- se lisent
+    dans le vide. En faire un global rend les deux corrects sans code
+    particulier, parce que c'est exactement ce qu'il est sur la machine."""
+    if n == 0:
+        return "0"
+    if n == 29:
+        return "g_sp"
+    return "r_" + REG[n]
 
 
 class Unsupported(Exception):
     pass
 
 
+SYMS = {}   # adresse -> nom, rempli par load_symbols()
+
+
+def load_symbols(*asm_paths):
+    """Toutes les fonctions des unites desassemblees, par adresse."""
+    for path in asm_paths:
+        txt = open(path, encoding="utf-8", errors="replace").read()
+        for f in re.split(r"^glabel ", txt, flags=re.M)[1:]:
+            nm = f.split("\n", 1)[0].strip()
+            m = re.search(r"/\* [0-9A-F]+ ([0-9A-F]{8}) ", f)
+            if m:
+                SYMS[int(m.group(1), 16)] = nm
+    return SYMS
+
+
 def decode(w, pc):
     """Rend (texte C, cible de branchement ou None, a_un_creneau)."""
+    txt, tgt, dly = _decode(w, pc)
+    # $zero est cable a zero : une ecriture dedans est jetee par le materiel.
+    # Le retail en contient -- les nop encodes autrement, et les resultats
+    # calcules puis abandonnes. Traduites telles quelles, elles donnent une
+    # affectation a une constante, que le C refuse.
+    if txt.startswith("0 = "):
+        return "", None, False
+    return txt, tgt, dly
+
+
+def _decode(w, pc):
     op = w >> 26
     rs, rt, rd = (w >> 21) & 31, (w >> 16) & 31, (w >> 11) & 31
     sa = (w >> 6) & 31
@@ -95,6 +132,11 @@ def decode(w, pc):
         if fn == 0x27: return f"{r(rd)} = ~({r(rs)} | {r(rt)});", None, False
         if fn == 0x2A: return f"{r(rd)} = ((s32){r(rs)} < (s32){r(rt)});", None, False
         if fn == 0x2B: return f"{r(rd)} = ({r(rs)} < {r(rt)});", None, False
+        # break : GCC en pose un derriere chaque division, sur le chemin pris
+        # quand le diviseur est nul. Nos divisions sont deja gardees, donc ce
+        # chemin ne s'atteint pas ; on garde la trace plutot que de refuser la
+        # fonction entiere pour une instruction qui ne s'execute jamais.
+        if fn == 0x0D: return "/* break */", None, False
         raise Unsupported(f"special fn 0x{fn:02X} en {pc:08X}")
 
     if op == 1:
@@ -119,6 +161,30 @@ def decode(w, pc):
     if op == 13: return f"{r(rt)} = {r(rs)} | {imm}u;", None, False
     if op == 14: return f"{r(rt)} = {r(rs)} ^ {imm}u;", None, False
     if op == 15: return f"{r(rt)} = {imm}u << 16;", None, False
+    # Chargements et rangements non alignes. Sur MIPS on les ecrit par paires
+    # lwl/lwr et swl/swr, chaque moitie prenant la part du mot qui tombe de son
+    # cote de la frontiere. En petit-boutiste, lwl prend les octets hauts.
+    if op == 34:   # lwl
+        return (f"{{ u32 a = {r(rs)} + {simm}; int n = (int)(a & 3);"
+                f" u32 w = LW(a & ~3u);"
+                f" {r(rt)} = ({r(rt)} & (u32)((1u << (24 - 8 * n)) - 1u))"
+                f" | (w << (24 - 8 * n)); }}"), None, False
+    if op == 38:   # lwr
+        return (f"{{ u32 a = {r(rs)} + {simm}; int n = (int)(a & 3);"
+                f" u32 w = LW(a & ~3u);"
+                f" u32 m = (n == 0) ? 0u : (0xFFFFFFFFu << (32 - 8 * n));"
+                f" {r(rt)} = ({r(rt)} & m) | (w >> (8 * n)); }}"), None, False
+    if op == 42:   # swl
+        return (f"{{ u32 a = {r(rs)} + {simm}; int n = (int)(a & 3);"
+                f" u32 b = a & ~3u; u32 w = LW(b);"
+                f" u32 m = (0xFFFFFFFFu << (8 * (3 - n) + 8)) & 0xFFFFFFFFu;"
+                f" if (n == 3) m = 0u;"
+                f" SW(b, (w & m) | ({r(rt)} >> (24 - 8 * n))); }}"), None, False
+    if op == 46:   # swr
+        return (f"{{ u32 a = {r(rs)} + {simm}; int n = (int)(a & 3);"
+                f" u32 b = a & ~3u; u32 w = LW(b);"
+                f" u32 m = (n == 0) ? 0u : ((1u << (8 * n)) - 1u);"
+                f" SW(b, (w & m) | ({r(rt)} << (8 * n))); }}"), None, False
     if op == 32: return f"{r(rt)} = (u32)(s32)(s8)LB({r(rs)} + {simm});", None, False
     if op == 33: return f"{r(rt)} = (u32)(s32)(s16)LH({r(rs)} + {simm});", None, False
     if op == 35: return f"{r(rt)} = LW({r(rs)} + {simm});", None, False
@@ -146,16 +212,20 @@ def translate(name, base, words):
         if t is not None and base <= t < end:
             labels.add(t)
 
-    out = [f"u32 {name}(u32 r_a0, u32 r_a1, u32 r_a2, u32 r_a3)", "{"]
+    protos = []
+    for i, w in enumerate(words):
+        if (w >> 26) == 3:
+            t = (base + 4 * i) & 0xF0000000 | ((w & 0x3FFFFFF) << 2)
+            if t in SYMS:
+                protos.append(f"u32 psx_{SYMS[t]}(u32, u32, u32, u32);")
+    out = sorted(set(protos))
+    out += [f"u32 {name}(u32 r_a0, u32 r_a1, u32 r_a2, u32 r_a3)", "{"]
     used = sorted({REG[k] for k in range(1, 32)})
     out.append("    u32 " + ", ".join(
-        f"r_{x} = 0" for x in used if x not in ("a0", "a1", "a2", "a3")) + ";")
+        f"r_{x} = 0" for x in used
+        if x not in ("a0", "a1", "a2", "a3", "sp")) + ";")
     out.append("    u32 r_hi = 0, r_lo = 0, cond = 0, pc_next = 0;")
-    # Une pile. Les fonctions qui sauvegardent $ra ou débordent y écrivent ;
-    # sans adresse valide elles écraseraient le début de la RAM, et la
-    # comparaison échouerait pour une raison qui n'a rien à voir avec la
-    # traduction.
-    out.append("    r_sp = 0x001FFF00;")
+
     out.append("    (void)r_hi; (void)r_lo; (void)cond; (void)pc_next;")
 
     i = 0
@@ -196,7 +266,16 @@ def translate(name, base, words):
             else:
                 raise Unsupported(f"saut hors fonction vers {tgt:08X}")
         elif txt == "JAL":
-            raise Unsupported(f"appel externe vers {tgt:08X} -- non gere a ce stade")
+            callee = SYMS.get(tgt)
+            if callee is None:
+                raise Unsupported(f"appel vers {tgt:08X}, sans symbole connu")
+            if dtxt:
+                out.append("    " + dtxt)
+            # L'appele reçoit $a0-$a3 et rend $v0. Les registres temporaires de
+            # l'appelant sont declares detruits par la convention d'appel, donc
+            # les laisser tels quels ne peut pas etre observe par du code qui la
+            # respecte -- et le retail la respecte, il a ete compile avec.
+            out.append(f"    r_v0 = psx_{callee}(r_a0, r_a1, r_a2, r_a3);")
         elif txt.endswith("JR"):
             pre = txt[:-2].strip()
             if pre:

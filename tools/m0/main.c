@@ -49,7 +49,16 @@ int g_longjmp;          /* fait rendre 1 a setjmp, le temps d'une interruption *
  * Une traduction par fonction ne peut pas sauter au milieu d'un cadre mort --
  * mais elle peut rappeler la fonction en faisant rendre 1 au setjmp, ce qui
  * emprunte exactement la meme branche. */
-u32 psx_func_800492B0(u32, u32, u32, u32);
+/* Rappeler func_800492B0 depuis le debut rejouait tout son prologue a chaque
+ * interruption : elle rearme le masque, remet a zero deux tableaux et rappelle
+ * func_800495DC. Autrement dit, chaque interruption effaçait l'etat que le
+ * pilote venait d'etablir -- ce qui explique qu'aucune sequence n'aboutissait.
+ *
+ * Le corps du gestionnaire commence a 0x8004934C, juste apres le test qui suit
+ * le setjmp. Traduit comme une fonction a part entiere, il s'execute sans
+ * toucher au prologue. C'est la bonne facon de rendre un longjmp dans une
+ * traduction par fonction : ne pas rejouer, entrer au bon endroit. */
+u32 psx_irq_body(u32, u32, u32, u32);
 
 void deliver_irq(void)
 {
@@ -57,9 +66,7 @@ void deliver_irq(void)
     in_irq = 1;
     in_irq_flag = 1;
     irq_delivered++;
-    g_longjmp = 1;
-    psx_func_800492B0(0, 0, 0, 0);
-    g_longjmp = 0;
+    psx_irq_body(0, 0, 0, 0);
     in_irq_flag = 0;
     in_irq = 0;
 }

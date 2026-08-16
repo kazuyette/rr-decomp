@@ -111,6 +111,11 @@ static u8 cd_ie;                 /* masque */
 static u8 cd_stat = 0x02;        /* 0x02 : moteur en rotation */
 unsigned long cd_cmds[256];
 static u8 cd_pending_cmd;
+/* La plupart des commandes repondent DEUX fois : un accuse immediat (INT3),
+   puis un achevement (INT2) quand le mecanisme a fini de bouger. Le pilote
+   compte les deux separement -- ses compteurs Acknowledge et Complete -- et
+   n'avance pas tant qu'il n'a pas eu le second. */
+static u8 cd_second;
 
 void cd_event(u32 spec);
 
@@ -135,8 +140,9 @@ static void cd_command(u8 cmd)
     switch (cmd) {
     case 0x01: cd_reply(3, one, 1); break;                 /* Nop     */
     case 0x02: cd_reply(3, one, 1); break;                 /* Setloc  */
-    case 0x0A: cd_stat = 0x02; cd_reply(3, one, 1); break; /* Init    */
-    case 0x09: cd_reply(3, one, 1); break;                 /* Pause   */
+    case 0x0A: cd_stat = 0x02; cd_reply(3, one, 1); cd_second = 2; break; /* Init  */
+    case 0x09: cd_reply(3, one, 1); cd_second = 2; break;  /* Pause   */
+    case 0x15: case 0x16: cd_reply(3, one, 1); cd_second = 2; break; /* Seek */
     case 0x0C: cd_reply(3, one, 1); break;                 /* Demute  */
     case 0x0E: cd_reply(3, one, 1); break;                 /* Setmode */
     case 0x19: {                                           /* Test    */
@@ -179,7 +185,17 @@ static void cd_write(u32 p, u32 v)
     case 3:
         /* Index 1 : ecrire ici acquitte l'interruption. C'est ce que le pilote
            fait apres avoir lu sa reponse, et sans quoi il ne redemande rien. */
-        if (cd_index == 1) { if (b & 0x07) cd_irq = 0; }
+        if (cd_index == 1) {
+            if (b & 0x07) {
+                cd_irq = 0;
+                if (cd_second) {
+                    /* L'accuse a ete releve : on enchaine sur l'achevement. */
+                    u8 st = cd_stat;
+                    cd_reply(cd_second, &st, 1);
+                    cd_second = 0;
+                }
+            }
+        }
         break;
     }
 }

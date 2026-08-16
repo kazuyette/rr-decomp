@@ -516,3 +516,43 @@ C'est une limite de principe de la traduction par fonction, pas un oubli. La
 sortie propre serait de sauvegarder et restaurer explicitement les registres
 persistants dans la structure de contexte — ce que fait le vrai `setjmp` — et
 donc de traduire ces deux fonctions à la main plutôt que de les boucher.
+
+## Ne pas rejouer : entrer au bon endroit
+
+Le diagnostic du `setjmp` était juste sur le principe et faux sur la cause.
+
+Rappeler `func_800492B0` depuis son début empruntait bien la bonne branche —
+mais **rejouait tout son prologue à chaque interruption**. Or ce prologue
+réarme le masque, remet à zéro deux tableaux et rappelle `func_800495DC`.
+Autrement dit, chaque interruption effaçait l'état que le pilote venait
+d'établir. Aucune séquence ne pouvait aboutir.
+
+La sortie ne demandait pas de restaurer des registres : elle demandait
+d'**entrer au bon endroit**. Le corps du gestionnaire commence à `0x8004934C`,
+juste après le test qui suit le `setjmp`. Traduit comme une fonction à part
+entière — il l'accepte sans broncher, 141 instructions — il s'exécute sans
+toucher au prologue.
+
+C'est la bonne façon de rendre un `longjmp` dans une traduction par fonction :
+ne pas rejouer, entrer au point de reprise.
+
+**Résultat : `Acknowledge: 1`.** Le premier compteur non nul du pilote. Le
+gestionnaire atteint sa branche CD, reconnaît l'interruption du lecteur et
+l'acquitte.
+
+Le contrôleur sait aussi répondre deux fois maintenant — un accusé `INT3` puis
+un achèvement `INT2` quand le pilote a relevé le premier —, ce que la console
+fait pour `Init`, `Pause` et les recherches.
+
+## L'état, sans arrondir
+
+Un compteur sur six a bougé, et une fois. Le dialogue s'amorce mais ne se
+poursuit pas : le pilote reçoit son accusé, puis retombe en timeout. Il manque
+encore quelque chose entre l'accusé et la suite — vraisemblablement la
+séquence exacte que `CdlReset` attend, ou un état du contrôleur que je rends
+faux.
+
+C'est peu, mais c'est la première fois que le pilote reconnaît quelque chose
+qui vient de nous. Jusqu'ici, ses six compteurs étaient à zéro parce qu'aucune
+interruption ne lui parvenait ; maintenant qu'une lui parvient, ce qui reste à
+corriger est du détail de protocole, pas d'architecture.

@@ -46,7 +46,10 @@ REQS = [
     "intervaltree==3.1.0",
     "tqdm==4.67.1",
     "colorama",
-    "pyyaml",
+    # splat64 0.50.0 exige cette version exacte ; la laisser libre fait
+    # afficher a pip un conflit de dependances a chaque installation, qui
+    # n'empeche rien mais qu'on finit par ne plus lire.
+    "pyyaml==6.0.3",
     # Nothing below is used by a PSX project. splat imports its N64
     # segment types eagerly, so pygfxd (display lists) and crunch64
     # (MIO0/Yay0) have to be importable even though nothing here will ever

@@ -19,7 +19,7 @@ extern unsigned long gp0_words, gp1_cmds, prim_count, prim_hist[256];
 extern unsigned long ot_lists, ot_nodes, hw_writes, hw_reads;
 extern FILE *gpulog;
 
-#define ENTRY 0x8003FA9Cu
+static u32 ENTRY;   /* lu dans l'en-tete de l'executable */
 
 static unsigned long bios_calls[3][256];
 
@@ -553,15 +553,42 @@ static void report(int sig)
 
 int main(int argc, char **argv)
 {
-    FILE *f = fopen("/tmp/recomp/psx.img", "rb");
+    /* L'executable PlayStation porte son propre en-tete : le point d'entree,
+       l'adresse de chargement et la taille y sont ecrits. Les lire evite de
+       coder en dur trois nombres qui changent d'un jeu -- et d'une region -- a
+       l'autre, et fait de ce banc autre chose qu'un montage local. */
+    const char *exe = getenv("PSX_EXE");
+    unsigned char en_tete[0x800];
+    u32 charge, taille;
+    FILE *f;
     int seconds = (argc > 1) ? atoi(argv[1]) : 20;
+    if (argc > 2) exe = argv[2];
+    if (!exe) exe = "PSX.EXE";
     g_seconds = seconds;
-    if (!f || fread(RAM + 0x10000, 423936, 1, f) != 1) {
-        fprintf(stderr, "image introuvable\n");
+    f = fopen(exe, "rb");
+    if (!f || fread(en_tete, sizeof en_tete, 1, f) != 1) {
+        fprintf(stderr, "executable introuvable : %s\n"
+                        "  usage : ./m0 [secondes] [chemin/PSX.EXE]\n"
+                        "  ou    : PSX_EXE=chemin/PSX.EXE ./m0 [secondes]\n", exe);
+        return 1;
+    }
+    if (memcmp(en_tete, "PS-X EXE", 8) != 0) {
+        fprintf(stderr, "%s n'est pas un executable PlayStation\n", exe);
+        return 1;
+    }
+    __builtin_memcpy(&ENTRY, en_tete + 0x10, 4);
+    __builtin_memcpy(&charge, en_tete + 0x18, 4);
+    __builtin_memcpy(&taille, en_tete + 0x1C, 4);
+    if ((charge & 0x1FFFFFFF) + taille > 0x200000) {
+        fprintf(stderr, "l'image ne tient pas en memoire\n");
+        return 1;
+    }
+    if (fread(RAM + (charge & 0x1FFFFFFF), taille, 1, f) != 1) {
+        fprintf(stderr, "image tronquee\n");
         return 1;
     }
     fclose(f);
-    gpulog = fopen("/tmp/recomp/gpu.log", "w");
+    { const char *j = getenv("JOURNAL_GPU"); if (j) gpulog = fopen(j, "w"); }
 
     /* L'en-tete de ce jeu ne donne pas de pile utilisable -- gp0 et s_addr y
        sont du bruit, ce qui n'etonne pas pour le tout premier titre de la
@@ -571,7 +598,8 @@ int main(int argc, char **argv)
     { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
     signal(SIGALRM, report);
     alarm(seconds);
-    printf("entree en %08X, %d fonctions dans la table\n", ENTRY, PSX_NFUNCS);
+    printf("%s : entree en %08X, %u octets, %d fonctions dans la table\n",
+           exe, ENTRY, taille, PSX_NFUNCS);
     fflush(stdout);
     psx_dispatch(ENTRY, 0, 0, 0, 0, 0);
     printf("--- le point d'entree est revenu ---\n");

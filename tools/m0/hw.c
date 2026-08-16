@@ -8,6 +8,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "rt.h"
 
 /* Les interruptions, pour de vrai.
@@ -120,10 +121,10 @@ static void dma2_run(void)
     {
         static unsigned long n;
         if (++n % 100 == 0 && n / 100 <= 120) {
-            char p[64];
-            sprintf(p, "/tmp/recomp/f%03lu.ppm", n / 100);
+            char p[256];
+            const char *d = getenv("IMAGES");
+            sprintf(p, "%s/f%03lu.ppm", d ? d : ".", n / 100);
             gpu_write_ppm(p);
-            if ((n / 100) % 10 == 2) { sprintf(p, "/tmp/recomp/v%03lu.ppm", n / 100); gpu_write_vram(p); }
         }
     }
 }

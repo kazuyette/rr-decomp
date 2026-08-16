@@ -20,6 +20,13 @@ make setup                     # runs splat, writes asm/
 make all
 ```
 
+The native runtime is generated the same way, from the same copy:
+
+```sh
+python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
+./build/m0/m0 90 PSX.EXE
+```
+
 `make setup --clean` (or `python3 tools/setup.py --clean`) removes `asm/`
 first, which is required after renaming a symbol: splat never overwrites a
 file that already exists, so a rename otherwise appears to do nothing.
@@ -27,11 +34,11 @@ file that already exists, so a rename otherwise appears to do nothing.
 
 ## Status
 
-Run `python3 tools/progress.py`. As of the restructuring commit:
+Run `python3 tools/progress.py`.
 
 ```
-functions        72 /   971     7.4%  real C
-instructions    718 / 72854     1.0%  real C
+functions       219 /   949    23.1%  real C
+instructions   4062 / 72034     5.6%  real C
 ```
 
 The instruction figure is the one that matters — every large function is still assembly.

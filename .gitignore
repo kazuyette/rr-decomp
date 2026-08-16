@@ -13,6 +13,8 @@ PSX.EXE
 *.VB
 *.gpr
 *.rep
+# Les images sorties par le banc natif sont des images du jeu.
+*.ppm
 build/
 dist/
 

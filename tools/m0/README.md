@@ -14,19 +14,27 @@ n'est pas versionné, comme le reste du désassemblage.
 
 ```sh
 cp /path/to/PSX.EXE .
-make setup                                    # splat -> asm/
-python3 tools/m0/regen.py.example             # -> game.c  (adapter les chemins)
-gcc -O1 -w -fcommon -o m0 \
-    tools/m0/main.c tools/m0/hw.c tools/m0/gpu.c tools/m0/gte.c \
-    game.c table.c cdfiles.c
-./m0 90                                       # 90 secondes
+make setup                                          # splat -> asm/
+python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
+./build/m0/m0 90 PSX.EXE
 ```
 
-`cdfiles.c` décrit ton disque : le fichier image pour les métadonnées ISO et
-un fichier extrait par entrée du répertoire. Voir `cdfiles.c.example`.
+`data.iso` est l'image de la piste de données de ton disque : elle sert les
+secteurs tels quels, le jeu y trouve son descripteur de volume, son répertoire
+et ses fichiers. Sans `--iso`, le jeu démarre puis s'arrête au chargement.
 
-Les images sont écrites en PPM dans le dossier courant, une toutes les cent
-tables d'affichage.
+`build.py` recalcule la liste des fonctions à chaque construction, à partir du
+désassemblage — rien n'est figé dans un fichier qui se périmerait au premier
+symbole renommé. Il annonce le nombre de fonctions traduites et, s'il en reste,
+les **bouchons**, avec leur motif.
+
+Les images sortent en PPM, une toutes les cent tables d'affichage, dans le
+dossier `IMAGES` (le dossier courant par défaut) :
+
+```sh
+IMAGES=/tmp/images ./build/m0/m0 90 PSX.EXE
+python3 tools/m0/ppm2png.py /tmp/images/*.ppm
+```
 
 ## Les fichiers
 

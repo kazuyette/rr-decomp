@@ -278,7 +278,19 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
        la difference est toujours nulle et l'attente ne finit jamais. */
     if (vec == 0xB0 && (fn & 0xFF) >= 0x02 && (fn & 0xFF) <= 0x06) {
         extern unsigned long g_vblanks;
-        if ((fn & 0xFF) == 0x03) return (u32)(g_vblanks & 0xFFFF);
+        if ((fn & 0xFF) == 0x03) {
+            /* Demander l'heure en boucle est le signe qu'on n'a rien d'autre
+               a faire. VSync attend ici, et rien dans cette attente ne fait
+               avancer une horloge cadencee sur les acces memoire : le jeu y
+               brulait trois milliards d'appels pour cent quatre-vingts
+               secondes. On fait donc avancer le temps a chaque demande --
+               c'est la meme idee que la detection de boucle d'attente des
+               emulateurs, sous sa forme la plus simple : le code dit lui-meme
+               qu'il attend. */
+            void psx_clock(void);
+            psx_clock();
+            return (u32)(g_vblanks & 0xFFFF);
+        }
         return 1;
     }
     if (vec == 0xA0) {

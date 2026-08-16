@@ -55,6 +55,27 @@ appels BIOS et le dialogue avec le lecteur — c'est un outil de mise au point,
 qui servait à trouver où le démarrage s'arrêtait. Maintenant qu'il ne s'arrête
 plus, il ne fait que cacher le reste.
 
+## Le temps
+
+Une recompilation statique n'a pas d'horloge. Le code traduit n'est plus
+cadencé par rien : il s'exécute à la vitesse de la machine hôte, et rien ne
+relie une instruction à un cycle. Il faut donc en fabriquer une, et le choix
+n'est pas neutre.
+
+Elle bat ici sur les **accès mémoire** (`TICK()` dans `rt.h`), parce que c'est
+la seule chose que du code qui tourne ne peut pas s'abstenir de faire — une
+horloge cadencée sur les accès matériel ou sur les appels s'arrête précisément
+pendant qu'une boucle d'attente tourne en mémoire.
+
+Restait un cas que ça ne couvre pas : `VSync` attend en interrogeant le
+compteur du BIOS, encore et encore, sans rien faire d'autre. Cette attente ne
+fait presque pas avancer une horloge cadencée sur le travail — le jeu y brûlait
+**3,2 milliards d'appels pour trois minutes**. Demander l'heure en boucle est
+pourtant l'aveu qu'on n'a rien à faire : le temps avance donc à chaque
+demande. C'est la détection de boucle d'attente des émulateurs sous sa forme la
+plus simple, celle où le code le dit lui-même. Dix fois plus d'images par
+seconde, sans toucher à la base de temps du reste.
+
 ## Les fichiers
 
 | | |

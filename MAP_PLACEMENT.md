@@ -196,3 +196,47 @@ la bijection, la couverture et les distances — et ça ne résout pas la questi
 d'axe restée ouverte, qui porte sur X et non sur Z. Mais toute image de
 contrôle produite ici doit sortir avec `+Z` vers le bas, sans quoi on compare
 une carte à son reflet.
+
+## Correction : le type C est un tunnel
+
+Le paragraphe ci-dessus décrivait le type C comme « des surfaces plates, un
+élément de circuit particulier à trancher ». C'était insuffisant, et il a fallu
+lire les quads bruts plutôt que leurs statistiques. La section 156, quatre
+enregistrements :
+
+```
+(-8195,-655,6763)(-6128,-655,6763)(-8195,-655,8930)(-6128,-655,8930)   Y constant -655
+(-6128,   0,7857)(-6128,   0,6774)(-8195,   0,7857)(-8195,   0,6774)   Y constant 0
+(-6148,-661,8930)(-6148,-661,6763)(-6148,   6,8930)(-6148,   6,6763)   X constant -6148
+(-8175,-661,6763)(-8175,-661,8930)(-8175,   6,6763)(-8175,   6,8930)   X constant -8175
+```
+
+Un sol, un plafond 655 unités plus haut, deux parois verticales. **Une boîte.**
+Les 23 sections de type C forment deux couloirs de cellules contiguës —
+`x = 3..6` sur `z = 13..19`, et `x = 11..13` sur `z = 13..16` — et l'axe du
+circuit traverse **16 de ces 23 cellules**. Ce sont les tunnels.
+
+Ce qui invalide aussi la phrase « aucun des trois n'est un mur » écrite plus
+haut : 10,8 % des quads de type C sont verticaux, contre 6,2 % pour B. Le test
+d'empreinte fine en plan était dilué par les 57,7 % de sols et de plafonds, qui
+sont horizontaux par construction. Une proportion agrégée sur un type qui
+mélange trois rôles géométriques ne mesure rien ; c'est en lisant quatre
+enregistrements consécutifs d'une même section que la structure apparaît.
+
+Le type A reste sans lecture équivalente : 5,8 % de verticales, 6,1 %
+d'horizontales, donc presque tout est incliné. Talus et dévers restent
+l'hypothèse, cette fois sans réfutation à opposer.
+
+## Ce que le décalage d'une cellule veut dire exactement
+
+Deux tests semblaient se contredire : la couverture de l'axe préfère un
+décalage de `+8192` en X, tandis que l'appartenance des cellules de tunnel à
+l'axe préfère l'absence de décalage (16 contre 12). Ils ne portent pas sur la
+même chose et ils s'accordent.
+
+L'indexation `z*32 + x` est correcte **sans décalage** : la cellule `(3,13)`
+est bien celle que l'axe traverse. Et l'origine géométrique de la section
+assignée à cette cellule doit être posée à `(x+1) * 2048`, puisque ses sommets
+s'étendent de `−8192` à `0` en X. Les deux énoncés disent la même chose : la
+section couvre sa propre cellule, son origine étant sur le bord `+X` de
+celle-ci.

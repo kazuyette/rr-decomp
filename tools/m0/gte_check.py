@@ -15,15 +15,25 @@ dans ce genre de code. Ça n'attrape pas une lecture fausse partagée. Le seul
 contrôle qui le ferait serait la console.
 """
 import ctypes
+import os
 import random
 import struct
 import subprocess
 import sys
+import tempfile
 
-D = "/tmp/recomp"
-subprocess.run(["gcc", "-O1", "-w", "-shared", "-fPIC", "-I" + D,
-                "-o", D + "/libgte.so", D + "/gte.c", D + "/ram.c"], check=True)
-lib = ctypes.CDLL(D + "/libgte.so")
+# Le contrôle ne demande rien du jeu : il compare deux transcriptions d'une
+# documentation matérielle. Il tourne donc partout, y compris en intégration
+# continue, ce qui n'est vrai d'aucune autre étape de ce dépôt.
+D = os.path.dirname(os.path.abspath(__file__))
+_tmp = tempfile.mkdtemp(prefix="gte-")
+_lib = os.path.join(_tmp, "libgte.so")
+_ram = os.path.join(_tmp, "ram.c")
+open(_ram, "w").write("unsigned char RAM[0x200000];\nunsigned int g_sp;\n")
+subprocess.run([os.environ.get("CC", "gcc"), "-O1", "-w", "-shared", "-fPIC",
+                "-I" + D, "-o", _lib, os.path.join(D, "gte.c"), _ram],
+               check=True)
+lib = ctypes.CDLL(_lib)
 
 
 def s16(v):

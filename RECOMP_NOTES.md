@@ -313,3 +313,75 @@ pas une lecture fausse partagée. Si la documentation que j'ai suivie se trompe,
 mes deux versions se trompent ensemble. Seule la console trancherait — et ce
 n'est pas une réserve de style : les émulateurs PSX ont mis des années à
 converger sur certains coins du GTE.
+
+---
+
+# M0 : le jeu démarre
+
+## Ce qui tourne
+
+L'image de `PSX.EXE` est chargée en RAM, l'exécution part de `0x8003FA9C`, et
+`_start` appelle `InitHeap` puis `main`. Le jeu configure le GPU — mode de
+dessin, fenêtre de texture, zone de dessin, décalage, masque : la sortie exacte
+de `SetDrawEnv` — puis entre dans sa boucle.
+
+**946 fonctions traduites, trois bouchons** (deux `syscall` et un accès COP0).
+
+## La preuve n'est pas un compteur
+
+Le BIOS `A0(3F)` est le `printf` du noyau. L'implémenter coûte dix lignes et
+rend au jeu sa propre voix :
+
+```
+ResetCallback: _96_remove ..
+CdlReset: timeout
+NoIntr: 0
+DataReady: 0
+Complete: 0
+Acknowledge: 0
+DataEnd: 0
+DiskError: 0
+CdlSetloc: timeout
+...
+```
+
+C'est le pilote CD de Ridge Racer. Il tente `CdlReset`, attend ses drapeaux
+d'interruption, n'en reçoit aucun — puisqu'il n'y a pas de lecteur — et
+imprime son diagnostic, exactement comme il le ferait sur une console dont le
+tiroir serait vide.
+
+Aucune métrique extérieure ne dirait ça aussi bien. Le jeu exécute son vrai
+code, atteint son vrai pilote, et rapporte son vrai échec.
+
+## Trois bugs silencieux trouvés en chemin
+
+Aucun n'aurait empêché la compilation.
+
+**Les sauts indirects.** `jr $ra` est un retour ; `jr` sur tout autre registre
+est un saut calculé — une table de branchement, ou un trampoline BIOS. Je les
+traduisais tous en retours : **54 sauts** partaient à l'envers, en silence.
+
+**Les appels indirects.** `jalr` était traduit en retour lui aussi. **59
+appels** ne se faisaient jamais. Ils passent maintenant par une table adresse →
+fonction, qui sert aussi à reconnaître les vecteurs BIOS `0xA0`, `0xB0`, `0xC0`.
+
+**Les branchements vers un créneau de retard.** Comme le créneau est déplacé
+devant son branchement, l'adresse ne porte plus d'étiquette. Le C refusait le
+`goto`, ce qui l'a révélé — le seul des trois que le compilateur ait attrapé.
+La correction remet l'étiquette après un saut par-dessus, pour ne pas rejouer
+l'instruction en tombant dedans.
+
+Les deux premiers n'existaient que parce que rien ne les avait comptés : le
+banc de vérification, lui, n'exerçait aucune fonction qui en contienne.
+
+## Ce que M0 n'est pas
+
+Il n'y a pas d'image. Le GPU journalise au lieu de dessiner, les interruptions
+n'existent pas, et le jeu tourne donc en rond dans son attente de CD —
+`B0(03)` trois cents millions de fois en vingt secondes, ce qui est très
+exactement ce qu'une boucle d'attente sans matériel doit faire.
+
+La suite est M1 : le lecteur CD et les interruptions pour que le jeu dépasse
+son chargement, puis le flux GP0 vers OpenGL. Et pour ce dernier, tout le
+travail de nommage de libgpu — `SetPolyFT4`, les tpage, les CLUT, la VRAM 4
+bits — est déjà fait.

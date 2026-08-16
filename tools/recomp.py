@@ -110,8 +110,14 @@ def _decode(w, pc):
         if fn == 0x04: return f"{r(rd)} = {r(rt)} << ({r(rs)} & 31);", None, False
         if fn == 0x06: return f"{r(rd)} = {r(rt)} >> ({r(rs)} & 31);", None, False
         if fn == 0x07: return f"{r(rd)} = (u32)((s32){r(rt)} >> ({r(rs)} & 31));", None, False
-        if fn == 0x08: return "JR", None, True
-        if fn == 0x09: return f"{r(rd)} = pc_next; JR", None, True
+        # jr $ra est un retour ; jr sur tout autre registre est un saut
+        # indirect -- une table de branchement, ou un trampoline BIOS. Les
+        # confondre compile et s'execute, et se trompe en silence : 54 sauts
+        # de ce genre etaient traduits en retours avant qu'on les compte.
+        if fn == 0x08:
+            return ("JR" if rs == 31 else f"JRIND {r(rs)}"), None, True
+        if fn == 0x09:
+            return f"JALR {r(rs)} {r(rd)}", None, True
         if fn == 0x10: return f"{r(rd)} = r_hi;", None, False
         if fn == 0x11: return f"r_hi = {r(rs)};", None, False
         if fn == 0x12: return f"{r(rd)} = r_lo;", None, False
@@ -288,6 +294,18 @@ def translate(name, base, words):
             # les laisser tels quels ne peut pas etre observe par du code qui la
             # respecte -- et le retail la respecte, il a ete compile avec.
             out.append(f"    r_v0 = psx_{callee}(r_a0, r_a1, r_a2, r_a3);")
+        elif txt.startswith("JRIND "):
+            reg = txt.split()[1]
+            if dtxt:
+                out.append("    " + dtxt)
+            out.append(f"    return psx_dispatch({reg}, r_a0, r_a1, r_a2, r_a3, r_t1);")
+        elif txt.startswith("JALR "):
+            _, reg, link = txt.split()
+            if dtxt:
+                out.append("    " + dtxt)
+            if link != "0":
+                out.append(f"    {link} = 0;   /* adresse de retour, jamais relue */")
+            out.append(f"    r_v0 = psx_dispatch({reg}, r_a0, r_a1, r_a2, r_a3, r_t1);")
         elif txt.endswith("JR"):
             pre = txt[:-2].strip()
             if pre:
@@ -295,6 +313,18 @@ def translate(name, base, words):
             if dtxt:
                 out.append("    " + dtxt)
             out.append("    return r_v0;")
+        # Un branchement peut viser le creneau de retard d'un autre. Comme le
+        # creneau a ete deplace devant son branchement, l'adresse ne porte plus
+        # d'etiquette et le C refuse le goto. On la remet ici, apres un saut
+        # par-dessus pour ne pas rejouer l'instruction en tombant dedans.
+        dpc = pc + 4
+        if dpc in labels:
+            after = f"A_{dpc:08X}"
+            out.append(f"    goto {after};")
+            out.append(f"L_{dpc:08X}:;")
+            if dtxt:
+                out.append("    " + dtxt)
+            out.append(f"{after}:;")
         i += 2
 
     out.append("    return r_v0;")
@@ -323,6 +353,7 @@ if __name__ == "__main__":
     print("/* genere par tools/recomp.py -- ne pas editer */")
     print('#include "rt.h"')
     print('#include "gte.h"')
+    print("u32 psx_dispatch(u32, u32, u32, u32, u32, u32);")
     for nm in names:
         a, c = func_length(asm, nm)
         if a is None:

@@ -19,7 +19,14 @@ SYNC = b"\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00"
 
 
 def convertir(source, destination):
-    brut = open(source, "rb").read()
+    try:
+        brut = open(source, "rb").read()
+    except FileNotFoundError:
+        sys.exit("introuvable : %s\n"
+                 "  Ce nom n'est qu'un exemple -- donne le chemin de TON image.\n"
+                 "  Sur un disque decoupe piste par piste, c'est la piste 01 :\n"
+                 "  la piste de donnees est toujours la premiere, les suivantes\n"
+                 "  sont la musique." % source)
     if len(brut) % 2352 != 0:
         if len(brut) % 2048 == 0:
             sys.exit("%s est deja en secteurs de 2048 octets -- rien a faire"

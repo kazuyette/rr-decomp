@@ -385,3 +385,63 @@ La suite est M1 : le lecteur CD et les interruptions pour que le jeu dépasse
 son chargement, puis le flux GP0 vers OpenGL. Et pour ce dernier, tout le
 travail de nommage de libgpu — `SetPolyFT4`, les tpage, les CLUT, la VRAM 4
 bits — est déjà fait.
+
+---
+
+# M1, premier temps : le matériel que le jeu réclame
+
+## Le relevé, plutôt que le grep
+
+Le pilote CD passe par un pointeur global, donc invisible au désassemblage. Je
+l'ai pris par l'autre bout : un histogramme des adresses matérielles touchées
+pendant l'exécution.
+
+| registre | lectures | écritures | |
+|---|---|---|---|
+| `0x1F801814` | 63 432 514 | 7 | état du GPU |
+| `0x1F801800` | 33 554 437 | 3 | **lecteur CD** |
+| `0x1F801D80`–`0x1F801DB8` | quelques-unes | ~50 | processeur sonore |
+| `0x1F8010A8` | 6 | 3 | DMA du GPU |
+
+Trente-trois millions de lectures sur un seul registre : c'est une boucle
+d'attente, et elle dit exactement où le jeu est coincé.
+
+## Ce qui a été construit
+
+**Le contrôleur CD** — index, files de paramètres et de réponses, drapeaux
+d'interruption, et les commandes du démarrage. Il fonctionne : le jeu envoie
+`Init` une fois et `Setloc` quatre fois, et le contrôleur répond.
+
+**Le système d'événements du BIOS** — `OpenEvent`, `EnableEvent`,
+`TestEvent`, `DeliverEvent`. Le jeu ouvre un événement pour la classe
+`0xF0000009` dès le démarrage.
+
+**La séquence d'appels BIOS**, tracée dans l'ordre. Elle se lit comme un
+journal de démarrage : `InitHeap`, `SetMem(2)` pour deux mégaoctets,
+`_96_remove`, l'installation du gestionnaire d'exceptions, `InitPAD2` et
+`StartPAD2` pour les manettes, `InitCARD2` et `StartCARD2` pour la carte
+mémoire, `_bu_init`, puis l'ouverture de l'événement CD.
+
+## Où ça bloque, précisément
+
+`B0(19) HookEntryInt` installe le gestionnaire d'exceptions **du jeu** : il ne
+scrute pas le matériel, il attend d'être appelé. Mais l'adresse lue dans sa
+structure vaut zéro, parce que `A0(13)` — qui la remplit — est encore un
+bouchon.
+
+C'est un chaînon, pas un mur : tant que le gestionnaire n'a pas d'adresse,
+aucune interruption ne peut lui être livrée, et le pilote compte zéro rappel
+sur ses six compteurs — `NoIntr`, `DataReady`, `Complete`, `Acknowledge`,
+`DataEnd`, `DiskError` — avant de conclure au timeout. Exactement ce qu'il
+ferait sur une console dont le lecteur ne répondrait pas.
+
+## Une simplification qui vient du jeu lui-même
+
+Le lecteur ne sert qu'à deux moments : **au chargement initial**, et ensuite
+**pour les pistes audio**. Entre les deux, tout est en mémoire — le jeu tient
+dans les deux mégaoctets et ne retourne jamais au disque.
+
+Ça change l'ordre du travail. Émuler le lecteur au niveau du secteur, avec sa
+table des matières et son ISO 9660, n'est pas nécessaire pour voir une image :
+il suffit de servir le chargement initial. Et la lecture audio, qui n'a rien à
+voir avec les données, se traite séparément et plus tard.

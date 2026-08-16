@@ -44,6 +44,9 @@ static inline u32 LB(u32 a)
     u32 p = PHYS(a);
     if (p < 0x200000) return RAM[p];
     if (p >= 0x1F800000 && p < 0x1F800400) return SPAD[p & 0x3FF];
+    /* Les quatre registres du lecteur CD s'adressent a l'octet et changent de
+       sens selon l'index : les lire par mot decale donnerait n'importe quoi. */
+    if (p >= 0x1F801800 && p <= 0x1F801803) return hw_read32(p) & 0xFF;
     if (p >= 0x1F801000) return (hw_read32(p & ~3u) >> (8 * (p & 3))) & 0xFF;
     return 0;
 }

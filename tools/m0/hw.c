@@ -80,16 +80,131 @@ static void dma2_run(void)
     dma2_chcr &= ~0x01000000u;
 }
 
+/* --- le lecteur CD -------------------------------------------------------
+ *
+ * Le pilote du jeu ecrit une commande en 0x1F801801, puis attend dans une
+ * boucle que le bit 5 du registre d'etat annonce une reponse. Sans reponse, il
+ * boucle -- 33 millions de lectures en dix secondes, puis « CdlReset: timeout ».
+ *
+ * Ce qui est implemente ici est le strict necessaire pour que ce dialogue
+ * aboutisse : l'index, les deux files de parametres et de reponses, les
+ * drapeaux d'interruption, et les commandes que le demarrage utilise. Les
+ * donnees ne sont pas encore servies ; c'est l'etape suivante.
+ */
+static u8 cd_index;              /* les registres changent de sens selon lui */
+static u8 cd_param[16], cd_nparam;
+static u8 cd_resp[16], cd_nresp, cd_rpos;
+static u8 cd_irq;                /* drapeau d'interruption en attente */
+static u8 cd_ie;                 /* masque */
+static u8 cd_stat = 0x02;        /* 0x02 : moteur en rotation */
+unsigned long cd_cmds[256];
+static u8 cd_pending_cmd;
+
+void cd_event(u32 spec);
+
+static void cd_reply(u8 irq, const u8 *b, int n)
+{
+    int i;
+    cd_nresp = 0; cd_rpos = 0;
+    for (i = 0; i < n && i < 16; i++) cd_resp[cd_nresp++] = b[i];
+    cd_irq = irq;
+    /* Le contrôleur a repondu : c'est maintenant que l'evenement doit partir,
+       sans quoi le pilote attend une reponse qu'il a pourtant recue. */
+    cd_event(0x0020);
+}
+
+static void cd_command(u8 cmd)
+{
+    u8 one[1];
+    cd_cmds[cmd]++;
+    cd_pending_cmd = cmd;
+    one[0] = cd_stat;
+    switch (cmd) {
+    case 0x01: cd_reply(3, one, 1); break;                 /* Nop     */
+    case 0x02: cd_reply(3, one, 1); break;                 /* Setloc  */
+    case 0x0A: cd_stat = 0x02; cd_reply(3, one, 1); break; /* Init    */
+    case 0x09: cd_reply(3, one, 1); break;                 /* Pause   */
+    case 0x0C: cd_reply(3, one, 1); break;                 /* Demute  */
+    case 0x0E: cd_reply(3, one, 1); break;                 /* Setmode */
+    case 0x19: {                                           /* Test    */
+        static const u8 ver[4] = { 0x94, 0x09, 0x19, 0xC0 };
+        cd_reply(3, ver, 4); break;
+    }
+    default:   cd_reply(3, one, 1); break;
+    }
+    cd_nparam = 0;
+}
+
+static u32 cd_read(u32 p)
+{
+    switch (p & 3) {
+    case 0: {
+        u32 st = cd_index & 3;
+        st |= 0x18;                          /* file de parametres prete et vide */
+        if (cd_nresp > cd_rpos) st |= 0x20;  /* une reponse attend */
+        return st;
+    }
+    case 1: return (cd_rpos < cd_nresp) ? cd_resp[cd_rpos++] : 0;
+    case 2: return 0;
+    case 3: return (cd_index & 1) ? (0xE0 | cd_irq) : (0xE0 | cd_ie);
+    }
+    return 0;
+}
+
+static void cd_write(u32 p, u32 v)
+{
+    u8 b = (u8)v;
+    switch (p & 3) {
+    case 0: cd_index = b & 3; break;
+    case 1:
+        if (cd_index == 0) cd_command(b);
+        break;
+    case 2:
+        if (cd_index == 0) { if (cd_nparam < 16) cd_param[cd_nparam++] = b; }
+        else if (cd_index == 1) cd_ie = b;
+        break;
+    case 3:
+        /* Index 1 : ecrire ici acquitte l'interruption. C'est ce que le pilote
+           fait apres avoir lu sa reponse, et sans quoi il ne redemande rien. */
+        if (cd_index == 1) { if (b & 0x07) cd_irq = 0; }
+        break;
+    }
+}
+
 /* --- registres ---------------------------------------------------------- */
 unsigned long hw_writes, hw_reads;
+
+/* Un histogramme des adresses touchees. Le pilote CD passe par un pointeur
+   global, donc invisible au desassemblage ; le releve empirique dit tout de
+   suite de quel materiel le jeu a besoin, et dans quelle proportion. */
+#define HWN 256
+u32 hw_addr[HWN]; unsigned long hw_rcnt[HWN], hw_wcnt[HWN]; int hw_naddr;
+static void note(u32 p, int write)
+{
+    int i;
+    for (i = 0; i < hw_naddr; i++)
+        if (hw_addr[i] == p) { if (write) hw_wcnt[i]++; else hw_rcnt[i]++; return; }
+    if (hw_naddr < HWN) {
+        hw_addr[hw_naddr] = p;
+        if (write) hw_wcnt[hw_naddr]++; else hw_rcnt[hw_naddr]++;
+        hw_naddr++;
+    }
+}
 static u32 vblank_counter;
+static u32 irq_tick;
+void deliver_irq(void);
 
 u32 hw_read32(u32 p)
 {
     hw_reads++;
+    note(p, 0);
     switch (p) {
     case 0x1F801810: return 0;             /* GPUREAD */
     case 0x1F801814:
+        /* Le jeu lit ce registre des millions de fois : c'est sa boucle
+           d'attente, donc le meilleur endroit ou faire battre le temps.
+           Toutes les mille lectures, on lui livre une interruption. */
+        if (++irq_tick >= 1000) { irq_tick = 0; deliver_irq(); }
         /* GPUSTAT. Les bits qui comptent pour que le jeu avance : prêt à
            recevoir une commande, prêt pour un DMA, et le bit d'image qui
            bascule -- sans lui, toute attente de synchro tourne sans fin. */
@@ -98,7 +213,9 @@ u32 hw_read32(u32 p)
     case 0x1F8010A0: return dma2_madr;
     case 0x1F8010A4: return dma2_bcr;
     case 0x1F8010A8: return dma2_chcr;
-    case 0x1F801070: return 1;             /* I_STAT : VBlank en attente */
+    case 0x1F801800: case 0x1F801801:
+    case 0x1F801802: case 0x1F801803: return cd_read(p);
+    case 0x1F801070: return 1 | (cd_irq ? 4 : 0);   /* VBlank, et le CD si arme */
     case 0x1F801074: return 0xFFFF;        /* I_MASK */
     default: return 0;
     }
@@ -108,7 +225,10 @@ void hw_write32(u32 p, u32 v, int width)
 {
     (void)width;
     hw_writes++;
+    note(p, 1);
     switch (p) {
+    case 0x1F801800: case 0x1F801801:
+    case 0x1F801802: case 0x1F801803: cd_write(p, v); break;
     case 0x1F801810: gp0_write(v); break;
     case 0x1F801814: gp1_cmds++; break;
     case 0x1F8010A0: dma2_madr = v; break;

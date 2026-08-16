@@ -125,22 +125,87 @@ def disassemble(path):
     return funcs
 
 
-def classify(target, base, i):
-    """Name the shape of the disagreement at index i."""
+
+SAVED = re.compile(r"^s[0-7]$|^ra$|^fp$|^s8$")
+
+
+def frame(ins):
+    """(frame size, {saved regs}, index after the prologue).
+
+    A prologue is the stack adjustment plus the register saves that follow
+    it. It is worth isolating because the compiler emits it *from* the body:
+    how much stack, and which callee-saved registers, are decided by what
+    the body needs. So a difference here is a symptom whose cause is
+    somewhere later, and reporting it as "the first divergence" points at
+    the least informative instruction in the whole function.
+    """
+    size, saved, i = None, set(), 0
+    while i < len(ins):
+        m = re.match(r"sp,sp,(-?\d+)$", ins[i].args)
+        if ins[i].mnem == "addiu" and m and size is None:
+            size = -int(m.group(1))
+            i += 1
+            continue
+        m = re.match(r"(\w+),\d+\(sp\)$", ins[i].args)
+        if ins[i].mnem in ("sw", "swc1", "sdc1") and m and SAVED.match(m.group(1)):
+            saved.add(m.group(1))
+            i += 1
+            continue
+        break
+    return size, saved, i
+
+
+def body_end(ins, saved):
+    """Index just past the last body instruction, i.e. before the epilogue.
+
+    The epilogue restores exactly what the prologue saved and undoes the
+    stack adjustment, so it differs whenever the frame does -- for the same
+    reason and with the same lack of information. Trimming it stops a frame
+    difference from being reported twice, once at each end.
+    """
+    i = len(ins)
+    while i > 0:
+        a = ins[i - 1]
+        if a.mnem == "jr" and a.args == "ra":
+            i -= 1
+            continue
+        if a.mnem == "addiu" and re.match(r"sp,sp,\d+$", a.args):
+            i -= 1
+            continue
+        m = re.match(r"(\w+),\d+\(sp\)$", a.args)
+        if a.mnem in ("lw", "lwc1", "ldc1") and m and m.group(1) in saved:
+            i -= 1
+            continue
+        if a.mnem == "nop":
+            i -= 1
+            continue
+        break
+    return i
+
+
+def classify(target, base, i, k=None):
+    """Name the disagreement between target[i] and base[k].
+
+    The two indices are separate because prologues of different lengths
+    shift the bodies against each other; using one index for both sides
+    reads past the end of the shorter one and reports every such case as a
+    length mismatch.
+    """
+    k = i if k is None else k
     t = target[i] if i < len(target) else None
-    b = base[i] if i < len(base) else None
+    b = base[k] if k < len(base) else None
     if t is None or b is None:
         return "length"
     if t.word == b.word and (t.rtype, t.rsym) != (b.rtype, b.rsym):
         return "relocation"
     if INVERSE.get(t.mnem) == b.mnem:
         return "branch-inverted"
-    if (i + 1 < len(target) and i + 1 < len(base)
-            and target[i].key() == base[i + 1].key()
-            and target[i + 1].key() == base[i].key()):
+    if (i + 1 < len(target) and k + 1 < len(base)
+            and target[i].key() == base[k + 1].key()
+            and target[i + 1].key() == base[k].key()):
         return "swapped-pair"
     # one side skipped an instruction the other kept
-    if i + 1 < len(base) and t.key() == base[i + 1].key():
+    if k + 1 < len(base) and t.key() == base[k + 1].key():
         return "extra"          # base emitted one instruction too many
     if i + 1 < len(target) and b.key() == target[i + 1].key():
         return "missing"        # base is short of one instruction
@@ -151,12 +216,14 @@ def classify(target, base, i):
     return "other"
 
 
-def first_divergence(target, base):
-    for i in range(min(len(target), len(base))):
-        if target[i].key() != base[i].key():
+def first_divergence(target, base, skip_t=0, skip_b=0):
+    """First index (relative to each side's start offset) that differs."""
+    n = min(len(target) - skip_t, len(base) - skip_b)
+    for i in range(n):
+        if target[skip_t + i].key() != base[skip_b + i].key():
             return i
-    if len(target) != len(base):
-        return min(len(target), len(base))
+    if len(target) - skip_t != len(base) - skip_b:
+        return n
     return None
 
 
@@ -188,14 +255,35 @@ def main():
         if name not in target or name not in base:
             continue
         t, b = target[name], base[name]
-        i = first_divergence(t, b)
-        if i is None:
-            if args:
-                print(f"{name}: matches ({len(t)} instructions)")
-            continue
-        kind = classify(t, b, i)
+        ft, fb = frame(t), frame(b)
+        prologue_differs = (ft[0], ft[1]) != (fb[0], fb[1])
+
+        if prologue_differs:
+            # Compare the bodies past the prologue. The prologue itself is
+            # a summary of the body's needs, so the informative question is
+            # where the bodies part company, not that the frames do.
+            et, eb = body_end(t, ft[1]), body_end(b, fb[1])
+            j = first_divergence(t[:et], b[:eb], ft[2], fb[2])
+            note = f"frame {ft[0]} vs {fb[0]}"
+            extra = (ft[1] | fb[1]) - (ft[1] & fb[1])
+            if extra:
+                note += ", saved " + "/".join(sorted(extra))
+            if j is None:
+                kind, i, k = "frame-only", ft[2], fb[2]
+                note += " -- bodies identical"
+            else:
+                i, k = ft[2] + j, fb[2] + j
+                kind = "frame+" + classify(t[:et], b[:eb], i, k)
+        else:
+            i = k = first_divergence(t, b)
+            if i is None:
+                if args:
+                    print(f"{name}: matches ({len(t)} instructions)")
+                continue
+            kind, note = classify(t, b, i), ""
+
         counts[kind] = counts.get(kind, 0) + 1
-        findings.append((kind, name, i, t, b))
+        findings.append((kind, name, i, k, t, b, note))
 
     if not findings:
         print("nothing differs")
@@ -207,22 +295,25 @@ def main():
         # dominant pattern has a dominant cause, instead of theorising
         # from three examples -- which has now produced one refuted rule.
         findings.sort(key=lambda f: (f[0], f[1]))
-        for kind, name, i, t_, b_ in findings:
+        for kind, name, i, k, t_, b_, note in findings:
             tv = str(t_[i]) if i < len(t_) else "(end)"
-            bv = str(b_[i]) if i < len(b_) else "(end)"
-            print(f"{kind:16s} {name:24s} {i:4d}  {tv:38s} | {bv}")
+            bv = str(b_[k]) if k < len(b_) else "(end)"
+            print(f"{kind:22s} {name:24s} {i:4d}  {tv:36s} | {bv:28s} {note}")
         print()
     elif not summary:
         findings.sort(key=lambda f: (f[0], f[1]))
-        for kind, name, i, t, b in findings:
+        for kind, name, i, k, t, b, note in findings:
             print(f"\n=== {name}: {kind} at instruction {i} "
-                  f"(target {len(t)}, base {len(b)})")
-            for j in range(max(0, i - ctx), min(max(len(t), len(b)), i + ctx + 1)):
+                  f"(target {len(t)}, base {len(b)})"
+                  + (f"  [{note}]" if note else ""))
+            shift = k - i
+            for j in range(max(0, i - ctx), min(len(t), i + ctx + 1)):
                 mark = ">>" if j == i else "  "
+                jb = j + shift
                 tv = str(t[j]) if j < len(t) else ""
-                bv = str(b[j]) if j < len(b) else ""
-                flag = " " if (j < len(t) and j < len(b)
-                               and t[j].key() == b[j].key()) else "*"
+                bv = str(b[jb]) if 0 <= jb < len(b) else ""
+                flag = " " if (0 <= jb < len(b)
+                               and t[j].key() == b[jb].key()) else "*"
                 print(f" {mark}{flag} {j:4d}  {tv:44s} | {bv}")
 
     print("\npattern summary:")

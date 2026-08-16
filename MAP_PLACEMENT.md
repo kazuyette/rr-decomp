@@ -113,3 +113,69 @@ antérieure comme « éliminée quantitativement ». Elle était juste. L'élimi
 portait sur une lecture des seules données de `MAP.RRM` ; la grille n'y est pas.
 C'est le troisième cas de ce projet où lire la fonction consommatrice donne en
 dix minutes ce que l'analyse statistique du fichier avait déclaré impossible.
+
+---
+
+# Les trois types d'enregistrement, et les trous
+
+*Suite directe de ce qui précède : l'image de contrôle laissait des trous noirs
+sous l'axe du circuit, et `MAP_RRM_FORMAT.md` portait les types A et C comme
+« candidat murs de dévers, non confirmé ».*
+
+## Le décalage d'une cellule
+
+Premier acquis, et il corrige le rendu précédent. Les sommets locaux ne sont pas
+centrés sur l'origine de la section : X va de −8192 à 0, Z de 0 à +8192
+(médianes −4211 et +3827, largeur médiane 9140 pour une cellule de 8192).
+L'origine d'une section est donc le **coin +X/−Z de sa cellule**, pas son
+centre.
+
+La prédiction est vérifiable : il faut décaler la géométrie d'une cellule
+entière en X pour qu'elle s'aligne sur la polyligne. Mesuré — la couverture de
+l'axe passe de **165/256 à 200/256**, et l'optimum tombe exactement sur
+`+8192`, la valeur prédite. Ce n'est pas un ajustement libre : le décalage
+n'avait qu'une valeur admissible et c'est celle-là.
+
+## Ce que sont les trois types
+
+| type | n | sections | ΔY médian | empreinte fine en plan | tpages |
+|---|---|---|---|---|---|
+| A | 622 | 79 | 475 | 7 % | 8 |
+| B | 5 420 | 207 | 116 | 12 % | 12 |
+| C | 695 | 23 | 24 | 3 | 3 |
+
+**Aucun des trois n'est un mur.** L'hypothèse « murs de dévers » portée par
+`MAP_RRM_FORMAT.md` pour le type A est réfutée : un mur vertical se projette en
+plan comme un trait, et seuls 7 % des quads de type A ont une empreinte fine.
+Ce sont des surfaces inclinées — ΔY médian 475 contre 116 pour le type B —,
+donc des talus et des dévers, pas des parois.
+
+Le type C est l'élément le plus localisé du fichier : **23 sections sur 258,
+trois pages de texture**, et un ΔY médian de 24 qui en fait la plus plate des
+trois. Sur la carte, il n'apparaît qu'aux sorties de courbe du quart
+nord-ouest. Un élément de circuit particulier à cet endroit — dégagement,
+sable, ou surface du tunnel — reste à trancher en lisant `func_80034050`, la
+seconde passe de dessin, qui prend le même tableau de placements.
+
+## Et les trous
+
+Ils ne sont pas ce qu'ils avaient l'air d'être. Après correction du décalage,
+**199 des 256 nœuds** de l'axe du circuit 0 tombent sur un quad de type B. Pour
+les 57 restants, le quad le plus proche est à **9 % d'une demi-largeur de route**
+(médiane, mesurée perpendiculairement au cap du nœud).
+
+C'est décisif dans un sens qui n'était pas celui attendu : si le revêtement
+n'était pas dans `MAP.RRM` — s'il était habillé le long de la polyligne au
+moment du rendu, comme le supposait `TRACK_SPINE_FORMAT.md` — le couloir libre
+autour de l'axe ferait une demi-largeur, pas neuf pour cent. **Les trous sont
+des lacunes ponctuelles, pas un couloir.** Le revêtement est bien dans le
+fichier.
+
+Ce qui reste à expliquer, c'est ces 57 lacunes elles-mêmes. La piste la plus
+probable est la convention d'axe X restée ouverte plus haut : le code indexe en
+`30 − x`, une **réflexion**, là où l'empirique donne `x`, une translation. Les
+deux coïncident sur une plage de X limitée et divergent ailleurs — ce qui
+produirait exactement une couverture excellente sur une moitié de la carte et
+trouée sur l'autre. Une réflexion globale appliquée aux deux jeux de données à
+la fois est inobservable par ce test ; il faudra la lire dans le code qui écrit
+`D_801D9068`, pas la mesurer.

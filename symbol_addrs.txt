@@ -189,3 +189,7 @@ gte_avsz4 = 0x80043F84;
 gte_avsz4_2 = 0x80043FAC;
 gte_op = 0x80043FC0;
 gte_op_2 = 0x8004401C;
+SetDrawMode = 0x8004617C;
+_get_mode = 0x80046430;
+_get_tw = 0x800465DC;
+negate_rot_row0 = 0x80043738;

@@ -43,9 +43,31 @@ void func_80021BE0(void) {
     s32 pos;
     s32 dist;
     s32 mark;
+    s32 shortTrack;
     s16 phase;
 
-    lap = (D_8007C210 < 3) ? 0x10000 : 0x17000;
+    /* Second reading, from the o2 diff of the first.
+     *
+     * Two things the target says and the first attempt did not. The lap
+     * length is built as 0x17000 and overwritten with 0x10000 when the
+     * test passes, rather than chosen by a conditional expression -- the
+     * constant is assembled across the load and branch delay slots, which
+     * only happens when the assignment precedes the test. And the
+     * comparison against 3 is evaluated once and reused for the marker
+     * further down; the first version recomputed it.
+     *
+     * Worth recording: this is the "initialise then overwrite under a
+     * condition" shape that was declared refuted earlier today on
+     * func_8004D388. It was refuted there. The conclusion drawn from it --
+     * that the shape never matters -- was too broad. Which form is right
+     * is a property of the function, not a rule.
+     */
+    shortTrack = (D_8007C210 < 3);
+
+    lap = 0x17000;
+    if (shortTrack) {
+        lap = 0x10000;
+    }
 
     phase = D_801D77B8;
     if (phase == 0) {
@@ -56,7 +78,10 @@ void func_80021BE0(void) {
             dist = (lap + 0x2800) - pos;
         }
     } else if (phase == 1) {
-        mark = (D_8007C210 < 3) ? 0xB900 : 0x12900;
+        mark = 0xB900;
+        if (!shortTrack) {
+            mark = 0x12900;
+        }
         pos = D_8007C260;
         if (pos < mark) {
             dist = (lap - mark) + pos;

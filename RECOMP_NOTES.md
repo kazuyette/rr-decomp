@@ -236,15 +236,18 @@ réécrire les opérations **une seconde fois**, dans un autre langage, depuis l
 même documentation, puis de comparer sur des états de registres tirés au
 hasard.
 
-**11 200 comparaisons — quatre cents états, vingt-huit encodages — et aucun
-écart.** C'est-à-dire les vingt-neuf encodages relevés dans le binaire moins
-`dpct`, qui répète `dpcs` trois fois sur la pile des couleurs.
+**11 600 comparaisons — quatre cents états, les vingt-neuf encodages relevés
+dans le binaire — et aucun écart, registre `FLAG` compris.**
 
 La liste : `mvmva` en quatre variantes de matrice, de vecteur et de décalage ;
 `nclip` ; `avsz3` et `avsz4` ; `sqr` et `op` en deux décalages chacun ; `rtps`
 et `rtpt`, donc la projection avec sa division par table ; `gpf`, `gpl`,
-`intpl`, `dpcs`, `dcpl` ; et toute la famille éclairage — `ncs`, `nct`,
-`nccs`, `ncct`, `ncds`, `ncdt`, `cc`, `cdp`.
+`intpl`, `dpcs`, `dpct`, `dcpl` ; et toute la famille éclairage — `ncs`,
+`nct`, `nccs`, `ncct`, `ncds`, `ncdt`, `cc`, `cdp`.
+
+Chaque comparaison porte sur les trois accumulateurs, les trois registres
+intermédiaires, la couleur produite, et **les dix-neuf drapeaux de saturation
+et de débordement**.
 
 Ce que ça vaut, précisément : deux transcriptions indépendantes ne se trompent
 pas au même endroit, sauf si la documentation elle-même est ambiguë. Ça attrape
@@ -292,12 +295,21 @@ Deux bugs, tous deux dans la manipulation d'échelle, tous deux invisibles à un
 test d'invariant, tous deux attrapés au premier état tiré. C'est exactement ce
 pour quoi la méthode existe.
 
-## Ce qui n'est pas encore contrôlé
+## Ce que les drapeaux ont révélé
 
-`dpct`, qui répète `dpcs` sur la pile des couleurs — une occurrence dans le
-binaire. Les drapeaux de `FLAG` ne sont pas comparés non plus : la référence
-Python les accumule mais le banc ne les lit pas. Le jeu les consulte rarement,
-mais « rarement » n'est pas « jamais ».
+Comparer `FLAG` a fait apparaître un troisième écart — cette fois **dans la
+référence Python**, pas dans le C. `sqr` et `op` écrivent aussi IR1-3 avec
+saturation, donc posent des drapeaux ; ma transcription omettait cette étape.
+Tant qu'on ne comparait que les accumulateurs, l'omission était invisible : les
+valeurs comparées étaient justes des deux côtés.
 
-Et la limite de fond ne bouge pas : deux transcriptions indépendantes
-n'attrapent pas une lecture fausse partagée. Seule la console le ferait.
+C'est le contrôle qui fonctionne dans l'autre sens, et c'est rassurant : une
+méthode qui ne trouverait jamais de défaut chez elle-même serait suspecte.
+
+## Ce qui n'est pas contrôlé
+
+La limite de fond ne bouge pas : deux transcriptions indépendantes n'attrapent
+pas une lecture fausse partagée. Si la documentation que j'ai suivie se trompe,
+mes deux versions se trompent ensemble. Seule la console trancherait — et ce
+n'est pas une réserve de style : les émulateurs PSX ont mis des années à
+converger sur certains coins du GTE.

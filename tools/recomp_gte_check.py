@@ -76,6 +76,12 @@ class Ref:
         m.append(s16(self.c[base + 4] & 0xFFFF))
         return m
 
+    def flag_end(self):
+        """Le bit 31 resume : il vaut 1 si l'un des bits 30..23 ou 18..13 l'est."""
+        if self.flag & 0x7F87E000:
+            self.flag |= 0x80000000
+        return self.flag & 0xFFFFF000
+
     # --- saturations
     def mac(self, n, v):
         v = s64(v)
@@ -127,32 +133,77 @@ class Ref:
         sx = [s16(self.d[12] & 0xFFFF), s16(self.d[13] & 0xFFFF), s16(self.d[14] & 0xFFFF)]
         sy = [s16(self.d[12] >> 16), s16(self.d[13] >> 16), s16(self.d[14] >> 16)]
         v = (sx[0] * (sy[1] - sy[2]) + sx[1] * (sy[2] - sy[0]) + sx[2] * (sy[0] - sy[1]))
-        return s32(v)
+        return self.mac0(v)
 
     def avsz(self, four):
         zsf = s16(self.c[30] & 0xFFFF) if four else s16(self.c[29] & 0xFFFF)
         z = [self.d[16 + i] & 0xFFFF for i in range(4)]
         tot = sum(z) if four else sum(z[1:])
-        mac0 = s32(zsf * tot)
-        otz = mac0 >> 12
-        otz = 0 if otz < 0 else (0xFFFF if otz > 0xFFFF else otz)
+        mac0 = self.mac0(zsf * tot)
+        otz = self.sz3(mac0 >> 12)
         return mac0, otz
 
-    def sqr(self, sf):
+    def sqr(self, sf, lm):
+        """sqr ecrit aussi IR1-3, avec saturation -- donc avec drapeaux.
+
+        Omettre cette etape ne changeait aucun resultat tant qu'on ne comparait
+        que les MAC ; comparer FLAG l'a fait apparaitre aussitot. C'etait un
+        trou dans la reference, pas dans l'implementation.
+        """
         sh = 12 if sf else 0
         ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
-        return [self.mac(i + 1, (ir[i] * ir[i]) >> sh) for i in range(3)]
+        out = [self.mac(i + 1, (ir[i] * ir[i]) >> sh) for i in range(3)]
+        for i in range(3):
+            self.ir(i + 1, out[i], lm)
+        return out
 
-    def op(self, sf):
+    def op(self, sf, lm):
         sh = 12 if sf else 0
         m = self.RT()
         ir1, ir2, ir3 = s16(self.d[9]), s16(self.d[10]), s16(self.d[11])
-        return [self.mac(1, (m[4] * ir3 - m[8] * ir2) >> sh),
-                self.mac(2, (m[8] * ir1 - m[0] * ir3) >> sh),
-                self.mac(3, (m[0] * ir2 - m[4] * ir1) >> sh)]
+        out = [self.mac(1, (m[4] * ir3 - m[8] * ir2) >> sh),
+               self.mac(2, (m[8] * ir1 - m[0] * ir3) >> sh),
+               self.mac(3, (m[0] * ir2 - m[4] * ir1) >> sh)]
+        for i in range(3):
+            self.ir(i + 1, out[i], lm)
+        return out
 
 
     # --- couleur et brume
+    def sz3(self, v):
+        if v > 0xFFFF:
+            self.flag |= 1 << 18
+            return 0xFFFF
+        if v < 0:
+            self.flag |= 1 << 18
+            return 0
+        return v
+
+    def sxy(self, y, v):
+        if v > 0x3FF:
+            self.flag |= (1 << 13) if y else (1 << 14)
+            return 0x3FF
+        if v < -0x400:
+            self.flag |= (1 << 13) if y else (1 << 14)
+            return -0x400
+        return v
+
+    def mac0(self, v):
+        if v > 0x7FFFFFFF:
+            self.flag |= 1 << 16
+        if v < -0x80000000:
+            self.flag |= 1 << 15
+        return s32(v)
+
+    def ir0(self, v):
+        if v > 0x1000:
+            self.flag |= 1 << 12
+            return 0x1000
+        if v < 0:
+            self.flag |= 1 << 12
+            return 0
+        return v
+
     def col(self, v, n):
         if v > 0xFF:
             self.flag |= (1 << 21) >> (n - 1)
@@ -258,6 +309,22 @@ class Ref:
         firs = [self.ir(i + 1, out[i], lm) for i in range(3)]
         return out, firs, [self.col(out[i] >> 4, i + 1) for i in range(3)]
 
+    def dpct(self, sf, lm):
+        """Trois brumes de suite, chacune prenant le bas de la pile de couleurs.
+
+        La pile avance a chaque tour : la deuxieme iteration lit ce que la
+        premiere y a laisse glisser. C'est ce chainage qui rend l'operation
+        distincte de trois dpcs successifs.
+        """
+        fifo = [self.d[20], self.d[21], self.d[22]]
+        out = irs = rgb = None
+        for _ in range(3):
+            c0 = fifo[0]
+            out, irs, rgb = self.interp([(c0 & 0xFF) << 16, ((c0 >> 8) & 0xFF) << 16,
+                                         ((c0 >> 16) & 0xFF) << 16], sf, lm)
+            fifo = fifo[1:] + [rgb[0] | (rgb[1] << 8) | (rgb[2] << 16)]
+        return out, irs, rgb
+
     def dcpl(self, sf, lm):
         rgbc = self.d[6]
         ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
@@ -309,29 +376,26 @@ class Ref:
             self.flag |= 1 << 22
         lo = 0 if lm else -0x8000
         ir3 = 0x7FFF if mac[2] > 0x7FFF else (lo if mac[2] < lo else mac[2])
-        z = unshifted
-        sz3 = 0 if z < 0 else (0xFFFF if z > 0xFFFF else z)
+        sz3 = self.sz3(unshifted)
         st["sz"] = st["sz"][1:] + [sz3]
         h = self.c[26] & 0xFFFF
         q = self.unr(h, sz3)
         ofx, ofy = s32(self.c[24]), s32(self.c[25])
         sx = q * ir1 + ofx
         sy = q * ir2 + ofy
-        cx = sx >> 16
-        cy = sy >> 16
-        cx = 0x3FF if cx > 0x3FF else (-0x400 if cx < -0x400 else cx)
-        cy = 0x3FF if cy > 0x3FF else (-0x400 if cy < -0x400 else cy)
+        self.mac0(sx)
+        cx = self.sxy(0, sx >> 16)
+        cy = self.sxy(1, sy >> 16)
         st["sxy"] = st["sxy"][1:] + [(cx, cy)]
         st["mac"] = mac
         st["ir"] = [ir1, ir2, ir3]
-        st["mac0"] = s32(sy)
+        st["mac0"] = self.mac0(sy)
         if last:
             dqa = s16(self.c[27] & 0xFFFF)
             dqb = s32(self.c[28])
             dq = q * dqa + dqb
-            st["mac0"] = s32(dq)
-            v = dq >> 12
-            st["ir0"] = 0x1000 if v > 0x1000 else (0 if v < 0 else v)
+            st["mac0"] = self.mac0(dq)
+            st["ir0"] = self.ir0(dq >> 12)
         return st
 
     def rtps(self, sf, lm, three):
@@ -389,7 +453,7 @@ CASES = [
     ("nccs",        0x108041B), ("ncct",        0x118043F),
     ("ncds",        0x0E80413), ("ncdt",        0x0F80416),
     ("cc",          0x138041C), ("cdp",         0x1280414),
-    ("dcpl",        0x0680029),
+    ("dcpl",        0x0680029), ("dpct",        0x0F8002A),
 ]
 
 rnd = random.Random(20260816)
@@ -399,6 +463,7 @@ for k in range(ROUNDS):
     for name, code in CASES:
         ref = Ref(rnd)
         load(ref)
+        ref.flag = 0
         lib.gte_command(code)
         fn = code & 0x3F
         got = None
@@ -416,7 +481,7 @@ for k in range(ROUNDS):
             want = (m, o)
             got = (s32(lib.gte_read_data(24)), lib.gte_read_data(7))
         elif fn == 0x28:
-            want = tuple(ref.sqr((code >> 19) & 1))
+            want = tuple(ref.sqr((code >> 19) & 1, (code >> 10) & 1))
             got = tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27))
         elif fn in (0x01, 0x30):
             st = ref.rtps((code >> 19) & 1, (code >> 10) & 1, fn == 0x30)
@@ -436,10 +501,12 @@ for k in range(ROUNDS):
             got = (tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27)),
                    tuple(s16(lib.gte_read_data(i)) for i in (9, 10, 11)),
                    (c2 & 0xFF, (c2 >> 8) & 0xFF, (c2 >> 16) & 0xFF))
-        elif fn in (0x1E, 0x20, 0x1B, 0x3F, 0x13, 0x16, 0x1C, 0x14, 0x29):
+        elif fn in (0x1E, 0x20, 0x1B, 0x3F, 0x13, 0x16, 0x1C, 0x14, 0x29, 0x2A):
             sf = (code >> 19) & 1; lm = (code >> 10) & 1
             if fn == 0x29:
                 macs, irs, rgb = ref.dcpl(sf, lm)
+            elif fn == 0x2A:
+                macs, irs, rgb = ref.dpct(sf, lm)
             elif fn in (0x1C, 0x14):
                 macs, irs, rgb = ref.cc_op(sf, lm, fn == 0x14)
             else:
@@ -454,8 +521,11 @@ for k in range(ROUNDS):
                    tuple(s16(lib.gte_read_data(i)) for i in (9, 10, 11)),
                    (c2 & 0xFF, (c2 >> 8) & 0xFF, (c2 >> 16) & 0xFF))
         elif fn == 0x0C:
-            want = tuple(ref.op((code >> 19) & 1))
+            want = tuple(ref.op((code >> 19) & 1, (code >> 10) & 1))
             got = tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27))
+        if want is not None:
+            want = want + (ref.flag_end(),)
+            got = got + (lib.gte_read_ctrl(31) & 0xFFFFF000,)
         if want != got:
             if name not in bad:
                 bad[name] = (want, got)

@@ -242,3 +242,5 @@ MargePrim = 0x80047D24;
 EnterCriticalSection = 0x80049638;
 ExitCriticalSection = 0x800497D8;
 gte_dpcl = 0x80043C54;
+CdSyncCallback = 0x80051CE4;
+cd_sync_callback_game = 0x8005497C;

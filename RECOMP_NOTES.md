@@ -605,3 +605,29 @@ que le gestionnaire général appelle et que ma traduction n'atteint pas encore.
 C'est ce chaînon-là qu'il faut suivre, et la trace donne maintenant de quoi le
 faire : on connaît l'ordre exact des échanges et l'endroit précis où la chaîne
 se rompt.
+
+## La chaîne du rappel CD, cartographiée
+
+En cherchant l'adresse du lecteur dans l'image plutôt que dans le code — elle
+est rangée en `0x800774D8` et `0x80077520` — on remonte toute la chaîne.
+
+**`D_8005497C` est une fonction, pas une donnée.** Six cent vingt et une
+instructions, étiquetées `D_` par splat faute de référence directe, et elle
+manipule la base du lecteur, `I_STAT` et `I_MASK`. C'est le rappel CD du jeu.
+Elle figure d'ailleurs depuis le début en tête des plus grosses « fonctions »
+restées en assembleur, sous ce nom trompeur.
+
+**`func_80051CE4` est `CdSyncCallback`** : trois instructions qui rangent leur
+argument dans `D_801E9170` et rendent l'ancien. Le jeu l'appelle avec
+`D_8005497C` au démarrage, juste après avoir enregistré `func_80054664` par
+`func_800490B0`.
+
+**Cinq fonctions lisent `D_801E9170`** pour invoquer le rappel :
+`func_80052504`, `func_80052854`, `func_800532C8`, `func_80053390`, plus
+l'enregistreur lui-même.
+
+Deux noms de plus au passage — et surtout la certitude que la fonction manquante
+dans la chaîne d'interruption est identifiée, traduite, et présente dans le
+binaire natif. Ce qui reste est de comprendre par quel chemin elle devrait être
+atteinte depuis le gestionnaire général, puisque celui-ci ne touche jamais au
+lecteur.

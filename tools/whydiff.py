@@ -99,7 +99,16 @@ def disassemble(path):
         h = HEADER.match(line)
         if h:
             name = h.group(1)
-            cur = None if DEBUG_LABEL.match(name) else funcs.setdefault(name, [])
+            # A -gcoff debug label (LM1, $L3, .L7) appears *inside* a
+            # function. Treating it as a new symbol truncates everything
+            # after it: the first version of this tool did, and reported
+            # 189 length mismatches where verify.py -- which skips these
+            # and keeps filling the enclosing function -- reported one.
+            # When two tools disagree about the same objects, the newer
+            # one is the suspect.
+            if DEBUG_LABEL.match(name):
+                continue
+            cur = funcs.setdefault(name, [])
             continue
         r = RELOC.match(line)
         if r and cur:

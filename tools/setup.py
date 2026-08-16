@@ -87,12 +87,45 @@ def ensure_splat():
     else:
         print("splat is not installed in this image; installing it now.")
 
+    # Ou peut-on ecrire ? Le conteneur de la chaine d'outils tourne en root et
+    # ecrit donc dans le site systeme ; une machine ordinaire, non. Supposer
+    # l'un des deux cas est la faute la plus banale de ce genre de script, et
+    # elle ne se voit pas chez celui qui l'ecrit.
+    import site
+    en_root = hasattr(os, "geteuid") and os.geteuid() == 0
+    candidats = []
+    try:
+        perso = site.getusersitepackages()
+        if isinstance(perso, str):
+            candidats.append(perso)
+    except Exception:
+        pass
+    systeme = list(site.getsitepackages() or [])
+    candidats = (systeme + candidats) if en_root else (candidats + systeme)
+
+    def ecrivable(dossier):
+        try:
+            os.makedirs(dossier, exist_ok=True)
+            essai = os.path.join(dossier, ".essai-ecriture")
+            open(essai, "w").close()
+            os.remove(essai)
+            return True
+        except OSError:
+            return False
+
+    target = next((c for c in candidats if ecrivable(c)), None)
+    if target is None:
+        print("aucun dossier de paquets Python n'est accessible en ecriture :")
+        for c in candidats:
+            print("   " + c)
+        print("installe splat toi-meme, puis relance :")
+        print("   python3 -m pip install --user " + " ".join(REQS))
+        return False
+
     # pylibyaml is only a C-loader accelerator for PyYAML and has no wheel
     # for this platform -- pip would try to build it and fail. splat merely
     # imports it, so a no-op module satisfies the import at no cost beyond
     # slower YAML parsing.
-    import site
-    target = (site.getsitepackages() or [site.getusersitepackages()])[0]
     shim = os.path.join(target, "pylibyaml.py")
     if not os.path.exists(shim):
         with open(shim, "w") as fh:
@@ -101,9 +134,13 @@ def ensure_splat():
 
     # --break-system-packages only exists from pip 23; the toolchain image
     # is Ubuntu 22.04 and ships an older one, which rejects the flag
-    # outright. Try with it, fall back without.
+    # outright. Try with it, fall back without. --user quand on n'est pas
+    # root : le site personnel precede le site systeme dans sys.path, donc la
+    # version epinglee masque celle de la distribution sans y toucher.
     def pip_install(args):
         base = [sys.executable, "-m", "pip", "install"]
+        if not en_root:
+            base.append("--user")
         r = subprocess.run(base + ["--break-system-packages"] + args,
                            capture_output=True, text=True)
         if r.returncode != 0 and "break-system-packages" in r.stderr:

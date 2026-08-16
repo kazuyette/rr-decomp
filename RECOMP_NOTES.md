@@ -445,3 +445,32 @@ dans les deux mégaoctets et ne retourne jamais au disque.
 table des matières et son ISO 9660, n'est pas nécessaire pour voir une image :
 il suffit de servir le chargement initial. Et la lecture audio, qui n'a rien à
 voir avec les données, se traite séparément et plus tard.
+
+## Le chaînon réparé — et le suivant
+
+`A0(13)` est **`setjmp`**, déjà nommé dans le dépôt. Le motif se lit alors sans
+ambiguïté dans `func_800492B0` :
+
+```
+setjmp(&contexte);
+if (v0 == 0) { HookEntryInt(&contexte); return; }
+... corps du gestionnaire ...
+```
+
+Le jeu n'installe pas une fonction : il **sauvegarde un contexte**. Sur la
+console, le BIOS y revient par `longjmp` à chaque interruption, et l'exécution
+reprend juste après le `setjmp`, avec une valeur non nulle.
+
+Une traduction par fonction ne peut pas sauter au milieu d'un cadre mort — le
+`longjmp` de l'hôte viserait une pile qui n'existe plus. Mais elle peut
+**rappeler la fonction en faisant rendre 1 au `setjmp`**, ce qui emprunte
+exactement la même branche. C'est ce que fait `deliver_irq`.
+
+Résultat : **70 265 interruptions livrées** en dix secondes, et quatre
+événements BIOS délivrés. Le gestionnaire du jeu s'exécute.
+
+Mais ses six compteurs restent à zéro. Le chaînon suivant est donc dans
+l'acquittement : le gestionnaire tourne, lit l'état, et ne reconnaît pas encore
+l'interruption du lecteur comme la sienne. C'est là que reprendra le travail —
+et le prochain relevé à faire est celui des registres que le gestionnaire lit
+*pendant* qu'il tourne, par opposition à ceux que lit la boucle principale.

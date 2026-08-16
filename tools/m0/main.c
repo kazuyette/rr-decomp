@@ -35,13 +35,29 @@ u32 psx_dispatch(u32, u32, u32, u32, u32, u32);
 u32 g_irq_handler;
 unsigned long irq_delivered;
 static int in_irq;
+int g_longjmp;          /* fait rendre 1 a setjmp, le temps d'une interruption */
+
+/* Le jeu n'installe pas une fonction : il sauvegarde un contexte.
+ *
+ *     setjmp(&contexte);
+ *     if (v0 == 0) { HookEntryInt(&contexte); return; }
+ *     ... corps du gestionnaire ...
+ *
+ * Sur la console, le BIOS revient dans ce contexte par longjmp a chaque
+ * interruption, et l'execution reprend juste apres le setjmp, avec v0 non nul.
+ * Une traduction par fonction ne peut pas sauter au milieu d'un cadre mort --
+ * mais elle peut rappeler la fonction en faisant rendre 1 au setjmp, ce qui
+ * emprunte exactement la meme branche. */
+u32 psx_func_800492B0(u32, u32, u32, u32);
 
 void deliver_irq(void)
 {
-    if (!g_irq_handler || in_irq) return;
+    if (in_irq) return;
     in_irq = 1;
     irq_delivered++;
-    psx_dispatch(g_irq_handler, 0, 0, 0, 0, 0);
+    g_longjmp = 1;
+    psx_func_800492B0(0, 0, 0, 0);
+    g_longjmp = 0;
     in_irq = 0;
 }
 unsigned long dispatch_misses;
@@ -120,6 +136,10 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
         case 0x07: ev_deliver(a0, a1); return 0;
         default: break;
         }
+    }
+    if (vec == 0xA0 && (fn & 0xFF) == 0x13) {
+        /* setjmp. Rend 0 a l'installation, 1 quand on rejoue le contexte. */
+        return (u32)g_longjmp;
     }
     if (vec == 0xB0 && (fn & 0xFF) == 0x19) {
         /* HookEntryInt : le premier mot de la structure est l'adresse du

@@ -42,6 +42,26 @@ def asm_sizes():
     return out
 
 
+ASM_DEF = re.compile(r'"\s*\.global\s+(\w+)\\n"')
+
+
+def asm_definitions(text):
+    """Functions written as a top-level __asm__ block naming their symbol.
+
+    The COP2 accessors and the BIOS trampolines live this way because
+    GCC 2.7.2 has no intrinsic for either, and PSY-Q's own headers wrapped
+    the same instructions in macros. They are legitimately part of the
+    tree -- but they are not recovered C, and counting them as such would
+    repeat the mistake this repository was restarted to undo.
+
+    They are reported separately and, crucially, kept in the denominator.
+    Leaving them out of both sides would make the percentage rise every
+    time one was written, which is progress measured by deleting the
+    problem.
+    """
+    return set(ASM_DEF.findall(text))
+
+
 def c_definitions(text):
     """Top-level function definitions in a translation unit."""
     stripped = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
@@ -72,30 +92,35 @@ def c_definitions(text):
 
 def main():
     sizes = asm_sizes()
-    asm_refs, c_funcs = set(), set()
+    asm_refs, c_funcs, asm_funcs = set(), set(), set()
     for path in sorted(glob.glob(os.path.join(ROOT, "src", "*.c"))):
         text = open(path).read()
         refs = {name for _, name in INCLUDE_ASM_RE.findall(text)}
         asm_refs |= refs
         c_funcs |= c_definitions(text) - refs
+        asm_funcs |= asm_definitions(text)
 
-    # only count C functions that correspond to a real disassembled function
+    # only count functions that correspond to a real disassembled function
     c_funcs &= set(sizes)
-    total = len(asm_refs) + len(c_funcs)
+    asm_funcs = (asm_funcs & set(sizes)) - c_funcs
+    total = len(asm_refs) + len(c_funcs) + len(asm_funcs)
     if not total:
         print("nothing to report -- build/asm/*.o missing, run `make all` first")
         return 1
 
     c_insns = sum(sizes.get(n, 0) for n in c_funcs)
+    inline_insns = sum(sizes.get(n, 0) for n in asm_funcs)
     asm_insns = sum(sizes.get(n, 0) for n in asm_refs)
-    tot_insns = c_insns + asm_insns
+    tot_insns = c_insns + inline_insns + asm_insns
 
     if "--json" in sys.argv:
         print(json.dumps({
             "functions_total": total,
             "functions_c": len(c_funcs),
+            "functions_inline_asm": len(asm_funcs),
             "instructions_total": tot_insns,
             "instructions_c": c_insns,
+            "instructions_inline_asm": inline_insns,
         }, indent=2))
         return 0
 
@@ -103,6 +128,8 @@ def main():
           f"{100.0 * len(c_funcs) / total:5.1f}%  real C")
     print(f"instructions  {c_insns:5d} / {tot_insns:5d}   "
           f"{100.0 * c_insns / tot_insns:5.1f}%  real C")
+    print(f"              {len(asm_funcs):5d} function(s) / {inline_insns} instruction(s) "
+          f"are __asm__ blocks -- counted apart, kept in the denominator")
     print()
     print("Remaining largest functions still on INCLUDE_ASM:")
     for name in sorted(asm_refs, key=lambda n: -sizes.get(n, 0))[:10]:

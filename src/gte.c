@@ -157,3 +157,150 @@ __asm__(
     "nop\n"
     ".set reorder\n"
 );
+
+/* ---------------------------------------------------------------------
+ * GTE data-register accessors, added after the control-register ones
+ * above. Same rationale, same certainty: each is two or three COP2
+ * instructions and the register number is written in the instruction, so
+ * the identification needs no SDK -- only the documented hardware table.
+ *
+ * These stay as __asm__ because GCC 2.7.2 has no COP2 intrinsics; PSY-Q's
+ * own headers wrapped exactly these instructions in macros for the same
+ * reason. That makes this the authentic shape of the original source
+ * rather than a transcription dressed up as C -- a distinction the
+ * repository paid for once already, and one tools/progress.py now counts
+ * separately so the figure cannot flatter itself.
+ * --------------------------------------------------------------------- */
+
+/* Writes GTE data registers IR1, IR2, IR3 (vector accumulator X). */
+__asm__(
+    ".global func_8003FBC8\n"
+    "func_8003FBC8:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $9\n"
+    "mtc2 $a1, $10\n"
+    "mtc2 $a2, $11\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes GTE data register IR0 (interpolation accumulator). */
+__asm__(
+    ".global func_8003FBDC\n"
+    "func_8003FBDC:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $8\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes GTE data registers SZ1, SZ2, SZ3 (screen Z FIFO). */
+__asm__(
+    ".global func_8003FC28\n"
+    "func_8003FC28:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $17\n"
+    "mtc2 $a1, $18\n"
+    "mtc2 $a2, $19\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes GTE data registers SZ0, SZ1, SZ2, SZ3 (screen Z FIFO). */
+__asm__(
+    ".global func_8003FC3C\n"
+    "func_8003FC3C:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $16\n"
+    "mtc2 $a1, $17\n"
+    "mtc2 $a2, $18\n"
+    "mtc2 $a3, $19\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes GTE data registers SXY0, SXY1, SXY2 (screen XY FIFO). */
+__asm__(
+    ".global func_8003FC54\n"
+    "func_8003FC54:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $12\n"
+    "mtc2 $a1, $13\n"
+    "mtc2 $a2, $14\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes GTE data registers MAC1, MAC2, MAC3 (vector X accumulator). */
+__asm__(
+    ".global func_8003FC7C\n"
+    "func_8003FC7C:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $25\n"
+    "mtc2 $a1, $26\n"
+    "mtc2 $a2, $27\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Writes GTE data register LZCS (leading-zero count source). */
+__asm__(
+    ".global func_8003FC90\n"
+    "func_8003FC90:\n"
+    ".set noreorder\n"
+    "mtc2 $a0, $30\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads GTE data register OTZ (average Z for the ordering table). */
+__asm__(
+    ".global func_8003FCD8\n"
+    "func_8003FCD8:\n"
+    ".set noreorder\n"
+    "mfc2 $v0, $7\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads GTE data register IR0 (interpolation accumulator). */
+__asm__(
+    ".global func_8003FCE4\n"
+    "func_8003FCE4:\n"
+    ".set noreorder\n"
+    "mfc2 $v0, $8\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads GTE data register MAC0 (sum-of-products accumulator). */
+__asm__(
+    ".global func_8003FD64\n"
+    "func_8003FD64:\n"
+    ".set noreorder\n"
+    "mfc2 $v0, $24\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+
+/* Reads GTE data register LZCR (leading-zero count result). */
+__asm__(
+    ".global func_8003FDB4\n"
+    "func_8003FDB4:\n"
+    ".set noreorder\n"
+    "mfc2 $v0, $31\n"
+    "jr $ra\n"
+    "nop\n"
+    ".set reorder\n"
+);
+

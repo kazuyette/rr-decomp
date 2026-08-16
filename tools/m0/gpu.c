@@ -33,6 +33,7 @@ static int mask_set, mask_test;
 /* --- affichage ---------------------------------------------------------- */
 static int disp_x, disp_y, disp_w = 320, disp_h = 240;
 unsigned long pixels_avant;
+unsigned long long g_pixels;
 int g_teinte;
 unsigned long gpu_frames, copies_nulles, tex_vides, tex_pleins, transferts_tampon, copies_tampon;
 
@@ -72,6 +73,7 @@ static void put_pixel(int x, int y, u16 c, int semi, int mode)
     if (mask_test && (old & 0x8000)) return;
     if (semi) c = blend(old, c, mode);
     if (mask_set) c |= 0x8000;
+    g_pixels++;
     vram_put(x, y, c);
 }
 

@@ -290,6 +290,20 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
     if (vec == 0xB0 && (fn & 0xFF) >= 0x02 && (fn & 0xFF) <= 0x06) {
         extern unsigned long g_vblanks;
         if ((fn & 0xFF) == 0x03) {
+            /* Le jeu demande l'heure en boucle : c'est VSync qui attend, et le
+               processeur y tournerait a vide jusqu'au balayage suivant. Plutot
+               que de simuler cette attente instruction par instruction, on la
+               FACTURE -- on avance l'horloge jusqu'a l'echeance, ce que ces
+               cycles auraient fait de toute facon. Le modele ne change pas ;
+               seul le temps qu'on met a l'executer change.
+
+               La difference avec ce qu'on faisait avant est entiere : on ne
+               fabrique plus un balayage de nulle part, on constate que les
+               cycles qui menent au prochain sont depenses. */
+            extern unsigned long long g_cycles, g_echeance;
+            void psx_horloge(void);
+            if (g_cycles < g_echeance) g_cycles = g_echeance;
+            psx_horloge();
             /* Demander l'heure en boucle est le signe qu'on n'a rien d'autre
                a faire. VSync attend ici, et rien dans cette attente ne fait
                avancer une horloge cadencee sur les acces memoire : le jeu y
@@ -298,8 +312,6 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
                c'est la meme idee que la detection de boucle d'attente des
                emulateurs, sous sa forme la plus simple : le code dit lui-meme
                qu'il attend. */
-            void psx_clock(void);
-            psx_clock();
             return (u32)(g_vblanks & 0xFFFF);
         }
         return 1;
@@ -510,7 +522,15 @@ void report(int sig)
         printf("secteurs servis            : %lu (%lu introuvables), %lu transferts DMA\n",
                cd_sectors_served, cd_sectors_missing, dma3_done);
     }
-    { extern unsigned long g_vblanks; printf("battements video : %lu\n", g_vblanks); }
+    {   extern unsigned long g_vblanks;
+        extern unsigned long long g_pixels, g_cycles;
+        printf("balayages          : %lu\n", g_vblanks);
+        printf("instructions       : %llu\n", g_cycles);
+        printf("pixels dessines    : %llu", g_pixels);
+        if (ot_lists) printf("  (%llu par image, le materiel en tenait 887000)",
+                             g_pixels / ot_lists);
+        printf("\n");
+    }
     printf("commandes GP0 les plus frequentes :\n");
     {   /* trier par frequence : montrer les douze plus courantes, pas les
            douze premieres -- l'ordre numerique ne dit rien. */
@@ -631,6 +651,16 @@ int main(int argc, char **argv)
     g_sp = 0x801FFF00u;
 
     g_verbeux = getenv("VERBEUX") ? 1 : 0;
+    {   /* L'etalonnage de l'horloge : combien d'instructions le processeur
+           executait entre deux balayages. Il se regle sans recompiler, parce
+           que c'est une valeur qu'on ajuste en regardant le jeu tourner. */
+        extern unsigned long g_instr_par_image;
+        const char *e = getenv("INSTR_PAR_IMAGE");
+        if (e) g_instr_par_image = strtoul(e, 0, 0);
+        printf("horloge : %lu instructions par balayage\n", g_instr_par_image);
+        { extern int g_cout_dessin;
+          if (getenv("SANS_COUT_DESSIN")) g_cout_dessin = 0; }
+    }
     {   /* La fenetre s'ouvre si SDL est la et qu'on ne l'a pas refusee. Sans
            elle, images sur disque et scenario, comme avant. */
         int video_init(void);

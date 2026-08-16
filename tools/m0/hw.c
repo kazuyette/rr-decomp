@@ -91,6 +91,12 @@ unsigned long dma3_done;
 unsigned long ot_lists, ot_nodes, ot_broken, dma2_blocks;
 u32 g_ot_node, g_ot_n;
 
+unsigned long g_instr_par_image = 376000;
+int g_cout_dessin = 1;
+extern unsigned long long g_pixels, g_cycles, g_echeance;
+void psx_horloge(void);
+static unsigned long long pixels_vus;
+
 static void dma2_run(void)
 {
     u32 addr = dma2_madr & 0x1FFFFC;
@@ -115,6 +121,25 @@ static void dma2_run(void)
            a tourner jusqu'a la garde -- deux millions de noeuds pour rien. */
         if ((header & 0xFFFFFF) == 0) { ot_broken++; break; }
         addr = (header & 0x1FFFFC);
+    }
+    /* Facturer le dessin.
+     *
+     * Le processeur n'etait pas seul a consommer du temps : le GPU remplissait
+     * environ un pixel par cycle a 53,2 MHz, soit quelque 887 000 pixels entre
+     * deux balayages. Une scene qui en demande plus ne tient pas dans une
+     * image, et la console tombait alors a trente par seconde -- non par
+     * decision, mais par depassement. C'est cette lenteur-la qu'on retrouve
+     * ici, en convertissant les pixels ecrits dans la meme monnaie que les
+     * instructions.
+     *
+     * Sans ce compte, une scene chargee coute chez nous le meme temps qu'une
+     * scene vide, et le jeu tourne trop vite exactement la ou il ralentissait.
+     */
+    if (g_cout_dessin) {
+        unsigned long long p = g_pixels - pixels_vus;
+        pixels_vus = g_pixels;
+        g_cycles += p * (unsigned long long)g_instr_par_image / 887000ull;
+        if (g_cycles >= g_echeance && !in_irq_flag) psx_horloge();
     }
     dma2_chcr &= ~0x01000000u;
     /* La manette se lit une fois par image, comme sur la console -- et c'est
@@ -225,7 +250,7 @@ static void cd_command(u8 cmd)
         break;
     }
     case 0x13: {                                           /* GetTN */
-        u8 r[3]; r[0] = cd_stat; r[1] = 0x01; r[2] = 0x01;
+        u8 r[3]; r[0] = cd_stat; r[1] = 0x01; r[2] = 0x13;
         cd_reply(3, r, 3); break;
     }
     case 0x14: {                                           /* GetTD */
@@ -575,7 +600,13 @@ void stub_report(void)
         printf("   %-20s %lu fois\n", stub_names[i], stub_counts[i]);
 }
 
-unsigned long g_cycles;
+unsigned long long g_cycles, g_echeance;
+void psx_horloge(void)
+{
+    g_echeance = g_cycles + g_instr_par_image;
+    psx_clock();
+}
+
 void psx_clock(void)
 {
     void cd_tick(void);

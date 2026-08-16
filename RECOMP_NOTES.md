@@ -907,3 +907,50 @@ carte du circuit, le compte-tours et le rapport engagé.
 - **Les fonctions décompilées.** L'intérêt de tout ceci est là : chaque
   fonction byte-matched remplace sa jumelle traduite dans `table.c`, et le jeu
   continue de tourner à chaque remplacement.
+
+## M6 : le temps compté plutôt que deviné
+
+Une recompilation statique perd la seule chose qui donnait son rythme au jeu :
+le temps que prenait chaque instruction. Ce n'est pas un désaccord entre deux
+cadences, comme le 50/60 Hz de l'époque PAL — c'est l'**absence** de cadence.
+Il faut donc en fabriquer une, et le choix décide de tout.
+
+L'horloge a d'abord battu sur les accès mémoire, faute de mieux. Substitut
+commode et faux : il fallait ensuite pousser le temps à la main quand le jeu
+attendait sans rien lire, et le compteur de balayages ne voulait plus rien
+dire.
+
+Elle compte maintenant ce que la machine comptait.
+
+**Le processeur.** Le traducteur facture chaque bloc rectiligne : entre deux
+transferts de contrôle on sait exactement combien d'instructions vont
+s'exécuter, donc une addition par bloc suffit — 16 518 `CYCLES(n)` pour les 949
+fonctions. Le balayage tombe quand le budget d'une image est épuisé.
+
+**Le dessin.** Le GPU remplissait environ un pixel par cycle à 53,2 MHz, soit
+887 000 pixels entre deux balayages. Les pixels écrits par le rastériseur sont
+convertis dans la même monnaie et retranchés du budget. Sans ce compte, une
+scène chargée coûte le même temps qu'une scène vide, et le jeu tourne trop vite
+exactement là où il ralentissait.
+
+**L'attente se facture, elle ne se joue pas.** `VSync` fait tourner le
+processeur à vide jusqu'au balayage suivant. Simuler cette attente instruction
+par instruction serait fidèle et absurde : on avance l'horloge jusqu'à
+l'échéance, ce que ces cycles auraient fait de toute façon. C'est le même geste
+que la détection de boucle d'attente des émulateurs, mais il ne fabrique plus
+un balayage de nulle part — il constate une dépense.
+
+### Ce que la mesure a répondu
+
+Deux questions restaient ouvertes, et le compte les tranche.
+
+*Le jeu vise-t-il 30 ou 60 images par seconde ?* Les quinze appels à `VSync` du
+binaire passent tous **1**, jamais 2 : le code demande un balayage par image.
+Et les pixels le confirment — **73 000 par table d'affichage**, deux tables par
+image, contre 887 000 que le matériel tenait. Ridge Racer utilisait moins du
+quart du budget de remplissage. Les 30 images par seconde qu'on lui prête ne
+sont pas ce qu'il demandait.
+
+*À quelle vitesse tourne la traduction ?* **1,7 milliard d'instructions par
+seconde**, soit une cinquantaine de fois un R3000. C'est pourquoi la bride à
+60 Hz de la fenêtre n'est pas un confort mais une nécessité.

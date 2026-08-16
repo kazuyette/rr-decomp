@@ -271,14 +271,43 @@ def translate(name, base, words):
 
     out.append("    (void)r_hi; (void)r_lo; (void)cond; (void)pc_next;")
 
+    # Le compte des instructions.
+    #
+    # Une recompilation statique perd la seule chose qui donnait son rythme au
+    # jeu : le temps que prenait chaque instruction. On le rend ici, en
+    # facturant a l'avance le cout de chaque bloc de code rectiligne -- entre
+    # deux transferts de controle, on sait exactement combien d'instructions
+    # vont s'executer, et il n'en coute qu'une addition par bloc plutot qu'une
+    # par instruction.
+    bloc_debut = None
+    bloc_taille = 0
+
+    def ouvrir():
+        nonlocal bloc_debut, bloc_taille
+        out.append("")            # place reservee, remplie a la fermeture
+        bloc_debut = len(out) - 1
+        bloc_taille = 0
+
+    def fermer():
+        nonlocal bloc_debut
+        if bloc_debut is None:
+            return
+        if bloc_taille:
+            out[bloc_debut] = f"    CYCLES({bloc_taille});"
+        bloc_debut = None
+
+    ouvrir()
     i = 0
     while i < n:
         pc = base + 4 * i
         if pc in labels:
+            fermer()
             out.append(f"L_{pc:08X}:;")
+            ouvrir()
         w = words[i]
         txt, tgt, delayed = decode(w, pc)
         if not delayed:
+            bloc_taille += 1
             if txt:
                 out.append("    " + txt)
             i += 1
@@ -287,6 +316,7 @@ def translate(name, base, words):
         # instruction du créneau de retard : elle s'exécute AVANT le saut,
         # que celui-ci soit pris ou non. On la déplace donc devant, après
         # avoir figé la condition, qui est évaluée sur les valeurs d'avant.
+        bloc_taille += 2      # le branchement et son creneau de retard
         ds = words[i + 1] if i + 1 < n else 0
         dtxt, dtgt, ddel = decode(ds, pc + 4)
         if ddel:
@@ -343,6 +373,8 @@ def translate(name, base, words):
         # creneau a ete deplace devant son branchement, l'adresse ne porte plus
         # d'etiquette et le C refuse le goto. On la remet ici, apres un saut
         # par-dessus pour ne pas rejouer l'instruction en tombant dedans.
+        fermer()
+        ouvrir()
         dpc = pc + 4
         if dpc in labels:
             after = f"A_{dpc:08X}"
@@ -353,6 +385,7 @@ def translate(name, base, words):
             out.append(f"{after}:;")
         i += 2
 
+    fermer()
     if has_jrind:
         out.append("    goto FIN;")
         out.append("AIGUILLAGE:;")

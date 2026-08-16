@@ -954,3 +954,30 @@ sont pas ce qu'il demandait.
 *À quelle vitesse tourne la traduction ?* **1,7 milliard d'instructions par
 seconde**, soit une cinquantaine de fois un R3000. C'est pourquoi la bride à
 60 Hz de la fenêtre n'est pas un confort mais une nécessité.
+
+## M7 : la musique
+
+Le jeu ne demandait jamais `Play`, et j'ai longtemps cru que la musique
+attendait un synthétiseur. Elle attendait une réponse : `GetTN` lui annonçait
+**une seule piste**. Dès qu'on lui dit qu'il y en a treize, il réclame `GetTD`
+pour chacune, cherche avec `SeekP`, et lance `Play`.
+
+Parce que la bande-son de Ridge Racer n'est pas synthétisée. Ce sont douze
+pistes audio ordinaires, gravées à côté des données, que la console lisait avec
+le même mécanisme que n'importe quel disque compact. Il n'y avait donc rien à
+écrire pour l'entendre — seulement des secteurs à servir.
+
+Le format tombe juste : un secteur audio fait 2352 octets, soit exactement 588
+trames stéréo de seize bits à 44 100 Hz. Ni conversion ni rééchantillonnage.
+
+**Qui donne le rythme.** La carte son, pas notre horloge. Tant que sa file est
+assez remplie, on ne lit pas de secteur. Accorder les deux cadences aurait
+demandé qu'elles restent d'accord, ce qu'elles ne font jamais bien longtemps —
+et une dérive de quelques millièmes s'entend, là où elle ne se voit pas.
+
+`build.py` lit la feuille `.cue` et calcule les positions absolues en cumulant
+les longueurs de fichiers, un secteur brut faisant 2352 octets. L'`INDEX 01`
+donne le début réel de chaque piste, après les deux secondes de silence que
+porte son fichier — les oublier décalerait toute la musique.
+
+Le jeu réclame la piste 8 au menu. Reste le SPU, pour le moteur.

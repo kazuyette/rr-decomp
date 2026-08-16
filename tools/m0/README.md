@@ -138,6 +138,31 @@ cadence est bonne.
 Sans SDL2, rien ne change : images sur disque et scénario, et `build.py` le dit
 au lieu de le taire.
 
+## Le son
+
+La bande-son de Ridge Racer n'est pas synthétisée : ce sont douze pistes audio
+ordinaires, gravées à côté des données, que la console lisait avec le même
+mécanisme que n'importe quel disque compact. Il n'y a donc pas de synthétiseur
+à écrire pour l'entendre — seulement des secteurs à servir au bon rythme.
+
+Donne la feuille `.cue` à la construction et garde les fichiers de pistes à
+côté :
+
+```sh
+python3 tools/m0/build.py PSX.EXE \
+    --iso data.iso --cue "Ridge Racer (Japan).cue" --compile
+```
+
+Le format tombe juste : un secteur audio fait 2352 octets, soit exactement 588
+trames stéréo de seize bits à 44 100 Hz. Ni conversion ni rééchantillonnage.
+C'est la carte son qui donne le rythme — tant que sa file est assez remplie, on
+ne lit pas de secteur ; si notre horloge devait s'accorder avec elle, l'une
+dériverait de l'autre et le son craquerait.
+
+`SANS_SON=1` coupe la musique. Les bruits de moteur, eux, viennent du SPU, qui
+n'est pas encore écrit — c'est ce dont `ss_init error` se plaint à chaque
+démarrage.
+
 ## La manette
 
 Le BIOS ne lit pas la manette à la demande : il remplit un tampon que le jeu
@@ -170,8 +195,10 @@ reste une image. Un scénario écrit une fois continue de marcher.
 | M3 — la piste : la démonstration tourne | ✅ |
 | M4 — la manette : menu et course | ✅ |
 | M5 — la fenêtre : le jeu se joue au clavier | ✅ |
-| M6 — le son | ✗ (`ss_init error` : le SPU n'est pas modélisé) |
-| M7 — la vitesse : GP0 vers le matériel | ✗ |
+| M6 — le temps compté, instructions et pixels | ✅ |
+| M7 — la musique : les pistes audio du disque | ✅ |
+| M8 — le SPU : moteur et bruitages | ✗ (`ss_init error`) |
+| M9 — GP0 vers le matériel | ✗ |
 
 ## Ce que ce banc a appris au reste du projet
 

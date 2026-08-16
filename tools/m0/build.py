@@ -149,23 +149,69 @@ def ecrire_table(definies, sortie):
     return len(definies)
 
 
-def ecrire_disque(iso, sortie):
-    """La description du disque. L'image sert les secteurs telle quelle ; la
-    table de fichiers reste vide, et n'existe que pour le cas ou quelqu'un
-    voudrait servir des fichiers extraits a la place."""
+def lire_cue(chemin):
+    """Les pistes d'une feuille CUE : numero, type, fichier, secteur de debut.
+
+    Les positions absolues ne sont pas ecrites dans la feuille quand chaque
+    piste a son propre fichier : elles se deduisent en accumulant les longueurs,
+    un secteur brut faisant 2352 octets. L'INDEX 01 donne le debut de la piste
+    proprement dite, apres le silence de deux secondes que porte le fichier."""
+    dossier = os.path.dirname(os.path.abspath(chemin))
+    pistes = []
+    fichier = None
+    lba = 0
+    numero = typ = None
+    for ligne in open(chemin, encoding="utf-8", errors="replace"):
+        l = ligne.strip()
+        if l.startswith("FILE "):
+            if fichier:
+                lba += os.path.getsize(fichier) // 2352
+            nom = l.split('"')[1] if '"' in l else l.split()[1]
+            fichier = os.path.join(dossier, nom)
+            if not os.path.exists(fichier):
+                sys.exit("la feuille designe un fichier absent : " + fichier)
+        elif l.startswith("TRACK "):
+            parts = l.split()
+            numero, typ = int(parts[1]), parts[2]
+        elif l.startswith("INDEX 01") and fichier is not None:
+            mm, ss, ff = (int(x) for x in l.split()[2].split(":"))
+            decalage = (mm * 60 + ss) * 75 + ff
+            pistes.append({"n": numero, "audio": typ == "AUDIO",
+                           "fichier": fichier, "debut": lba + decalage,
+                           "saut": decalage})
+    return pistes
+
+
+def ecrire_disque(iso, cue, sortie):
+    """La description du disque : l'image des donnees, et les pistes audio."""
     if iso:
         secteurs = (os.path.getsize(iso) + 2047) // 2048
         chemin = os.path.abspath(iso)
     else:
         secteurs, chemin = 0, ""
-    open(sortie, "w").write(
-        '/* genere par tools/m0/build.py -- ne pas versionner */\n'
-        'struct cdfile { unsigned int lba, size; const char *path; };\n'
-        'const struct cdfile CDFILES[] = { {0, 0, 0} };\n'
-        'const int NCDFILES = 0;\n'
-        'const char *CD_META = "%s";\n'
-        'const unsigned int CD_META_SECTORS = %u;\n' % (chemin, secteurs))
-    return secteurs
+    pistes = lire_cue(cue) if cue else []
+    audio = [p for p in pistes if p["audio"]]
+    lignes = ["/* genere par tools/m0/build.py -- ne pas versionner */",
+              "struct cdfile { unsigned int lba, size; const char *path; };",
+              "const struct cdfile CDFILES[] = { {0, 0, 0} };",
+              "const int NCDFILES = 0;",
+              'const char *CD_META = "%s";' % chemin.replace("\\", "\\\\"),
+              "const unsigned int CD_META_SECTORS = %u;" % secteurs,
+              "",
+              "/* Les pistes audio. `debut` est leur secteur absolu sur le",
+              "   disque, `saut` le silence que porte leur fichier. */",
+              "struct cdtrack { unsigned int debut, longueur, saut; const char *fichier; };",
+              "const struct cdtrack CDTRACKS[] = {"]
+    for p in pistes:
+        n = os.path.getsize(p["fichier"]) // 2352
+        lignes.append('  {%u, %u, %u, "%s"},   /* piste %02d%s */'
+                      % (p["debut"], n, p["saut"],
+                         p["fichier"].replace("\\", "\\\\"),
+                         p["n"], "" if p["audio"] else "  donnees"))
+    lignes.append("};")
+    lignes.append("const int NCDTRACKS = %d;" % len(pistes))
+    open(sortie, "w").write("\n".join(lignes) + "\n")
+    return secteurs, len(pistes), len(audio)
 
 
 def sdl_drapeaux():
@@ -186,6 +232,7 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("exe", help="ta copie de PSX.EXE")
     p.add_argument("--iso", help="image de la piste de donnees du disque")
+    p.add_argument("--cue", help="feuille CUE du disque, pour la musique")
     p.add_argument("--out", default=os.path.join(RACINE, "build", "m0"),
                    help="dossier de sortie (defaut : build/m0)")
     p.add_argument("--compile", action="store_true", help="compiler ensuite")
@@ -195,7 +242,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     definies, bouchons = ecrire_jeu(a.exe, os.path.join(a.out, "game.c"))
     n = ecrire_table(definies, os.path.join(a.out, "table.c"))
-    secteurs = ecrire_disque(a.iso, os.path.join(a.out, "cdfiles.c"))
+    secteurs, npistes, naudio = ecrire_disque(a.iso, a.cue, os.path.join(a.out, "cdfiles.c"))
     open(os.path.join(a.out, "ram.c"), "w").write(
         "unsigned char RAM[0x200000];\nunsigned int g_sp;\n")
 
@@ -210,9 +257,13 @@ def main():
         print("disque : %s, %d secteurs" % (a.iso, secteurs))
     else:
         print("disque : aucun (--iso absent) -- le jeu s'arretera au chargement")
+    if npistes:
+        print("pistes : %d dont %d audio" % (npistes, naudio))
+    else:
+        print("pistes : aucune (--cue absent) -- pas de musique")
 
     sources = [os.path.join(ICI, f)
-               for f in ("main.c", "hw.c", "gpu.c", "gte.c", "video.c")]
+               for f in ("main.c", "hw.c", "gpu.c", "gte.c", "video.c", "audio.c")]
     sources += [os.path.join(a.out, f) for f in ("game.c", "table.c", "cdfiles.c", "ram.c")]
     cmd = [a.cc, "-O1", "-w", "-fcommon", "-I", ICI,
            "-o", os.path.join(a.out, "m0")] + sources

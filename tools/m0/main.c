@@ -524,6 +524,9 @@ void report(int sig)
     }
     {   extern unsigned long g_vblanks;
         extern unsigned long long g_pixels, g_cycles;
+        { extern unsigned long cd_secteurs_audio;
+          printf("musique            : %lu secteurs, %.1f s\n",
+                 cd_secteurs_audio, cd_secteurs_audio / 75.0); }
         printf("balayages          : %lu\n", g_vblanks);
         printf("instructions       : %llu\n", g_cycles);
         printf("pixels dessines    : %llu", g_pixels);
@@ -668,6 +671,10 @@ int main(int argc, char **argv)
         /* Sans fenetre, on capture d'office : c'est le seul moyen de voir. Avec
            une fenetre, seulement si on l'a demande par IMAGES. */
         { extern int g_capture; g_capture = (!g_video) || getenv("IMAGES") != 0; }
+        {   /* Le son suit la fenetre : sans elle, personne n'ecoute. */
+            extern int cd_audio_dispo_pub(int);
+            (void)cd_audio_dispo_pub(g_video && !getenv("SANS_SON"));
+        }
     }
     { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
     signal(SIGALRM, report);

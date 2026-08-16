@@ -207,6 +207,81 @@ static u8 cd_sector[2048];
 static int cd_sector_ready;
 
 static u32 bcd(u8 v) { return (v >> 4) * 10 + (v & 15); }
+static u8 vers_bcd(u32 v) { return (u8)(((v / 10) % 10) * 16 + v % 10); }
+
+/* --- la musique ----------------------------------------------------------
+ *
+ * Les pistes audio sont des secteurs bruts de 2352 octets, soit exactement
+ * 588 trames stereo de seize bits a 44 100 Hz : ni conversion ni
+ * reechantillonnage, on lit et on pousse. C'est la carte son qui donne le
+ * rythme -- tant que sa file est assez remplie, on ne lit rien.
+ */
+extern int g_verbeux;
+struct cdtrack { unsigned int debut, longueur, saut; const char *fichier; };
+extern const struct cdtrack CDTRACKS[];
+extern const int NCDTRACKS;
+int audio_init(void);
+void audio_pousser(const void *, int);
+unsigned audio_en_attente(void);
+void audio_vider(void);
+
+static int cd_joue, cd_piste = 1, cd_audio_dispo;
+int cd_audio_dispo_pub(int oui)
+{
+    cd_audio_dispo = oui && audio_init();
+    if (cd_audio_dispo) printf("son : pistes audio du disque\n");
+    return cd_audio_dispo;
+}
+static FILE *cd_audio_f;
+static u32 cd_audio_secteur;      /* position dans le fichier de la piste */
+static u32 cd_audio_reste;
+unsigned long cd_secteurs_audio;
+
+static void cd_audio_ouvrir(int piste)
+{
+    const struct cdtrack *t;
+    u32 depart;
+    if (cd_audio_f) { fclose(cd_audio_f); cd_audio_f = 0; }
+    if (piste >= 1 && piste <= NCDTRACKS) {
+        t = &CDTRACKS[piste - 1];
+        depart = t->saut;                 /* le debut annonce de la piste */
+    } else {
+        /* Pas de numero : c'est la position posee par Setloc qui commande. */
+        int i;
+        for (i = 0; i < NCDTRACKS; i++) {
+            u32 base = CDTRACKS[i].debut - CDTRACKS[i].saut;
+            if (cd_lba >= base && cd_lba < base + CDTRACKS[i].longueur) {
+                cd_piste = i + 1;
+                t = &CDTRACKS[i];
+                depart = cd_lba - base;
+                goto trouve;
+            }
+        }
+        return;
+    }
+trouve:
+    if (g_verbeux) { printf("  son: piste %d, a partir du secteur %u\n", cd_piste, depart); fflush(stdout); }
+    cd_audio_f = fopen(t->fichier, "rb");
+    if (!cd_audio_f) return;
+    cd_audio_secteur = depart;
+    cd_audio_reste = (t->longueur > depart) ? t->longueur - depart : 0;
+    fseek(cd_audio_f, (long)depart * 2352, SEEK_SET);
+    audio_vider();
+}
+
+/* Appele regulierement : on remplit la file jusqu'a un quart de seconde. */
+static void cd_audio_alimenter(void)
+{
+    static u8 secteur[2352];
+    if (!cd_joue || !cd_audio_f || !cd_audio_dispo) return;
+    while (audio_en_attente() < 44100u * 4u / 4u && cd_audio_reste) {
+        if (fread(secteur, 1, 2352, cd_audio_f) != 2352) { cd_audio_reste = 0; break; }
+        audio_pousser(secteur, 2352);
+        cd_audio_secteur++;
+        cd_audio_reste--;
+        cd_secteurs_audio++;
+    }
+}
 
 void cd_event(u32 spec);
 
@@ -250,10 +325,17 @@ static void cd_command(u8 cmd)
        delai depasse. C'est ce qui arrivait a SetSession, juste apres le
        chargement des donnees, au moment ou le jeu passe a la piste audio. */
     case 0x12: cd_reply(3, one, 1); cd_second = 2; break;  /* SetSession */
-    case 0x08: cd_reading = 0; cd_reply(3, one, 1); cd_second = 2; break; /* Stop */
+    case 0x08: cd_reading = 0; cd_joue = 0; cd_reply(3, one, 1); cd_second = 2; break; /* Stop */
     case 0x07: cd_reply(3, one, 1); cd_second = 2; break;  /* MotorOn */
     case 0x0B: cd_reply(3, one, 1); break;                 /* Mute */
-    case 0x03: cd_reply(3, one, 1); break;                 /* Play  */
+    case 0x03:                                             /* Play  */
+        /* Sans parametre, on reprend la ou on etait ; avec, on saute a la
+           piste demandee. Le jeu se sert des deux. */
+        if (cd_nparam >= 1) cd_piste = (int)bcd(cd_param[0]);
+        cd_audio_ouvrir(cd_piste);
+        cd_joue = 1;
+        cd_reply(3, one, 1);
+        break;
     case 0x1A: {                                           /* GetID */
         /* Un disque de donnees, licencie, region libre. */
         static const u8 id[8] = { 0x02, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A' };
@@ -264,15 +346,31 @@ static void cd_command(u8 cmd)
         break;
     }
     case 0x13: {                                           /* GetTN */
-        u8 r[3]; r[0] = cd_stat; r[1] = 0x01; r[2] = 0x13;
+        u8 r[3];
+        r[0] = cd_stat; r[1] = vers_bcd(1);
+        r[2] = vers_bcd(NCDTRACKS ? NCDTRACKS : 1);
         cd_reply(3, r, 3); break;
     }
     case 0x14: {                                           /* GetTD */
-        u8 r[3]; r[0] = cd_stat; r[1] = 0x00; r[2] = 0x02;
+        /* La position de debut d'une piste, en minutes et secondes. Le zero
+           du disque est a deux secondes du debut du signal : c'est la meme
+           origine que pour Setloc, et l'oublier decale toute la musique. */
+        int n = cd_nparam ? (int)bcd(cd_param[0]) : 1;
+        u32 lba = 0;
+        u8 r[3];
+        if (n >= 1 && n <= NCDTRACKS) lba = CDTRACKS[n - 1].debut;
+        else if (n == 0 && NCDTRACKS)   /* piste 0 : la fin du disque */
+            lba = CDTRACKS[NCDTRACKS - 1].debut + CDTRACKS[NCDTRACKS - 1].longueur;
+        lba += 150;
+        r[0] = cd_stat;
+        r[1] = vers_bcd((lba / 75) / 60);
+        r[2] = vers_bcd((lba / 75) % 60);
         cd_reply(3, r, 3); break;
     }
-    case 0x09: cd_reading = 0; cd_reply(3, one, 1); cd_second = 2; break;  /* Pause */
-    case 0x15: case 0x16: cd_reply(3, one, 1); cd_second = 2; break; /* Seek */
+    case 0x09: cd_reading = 0; cd_joue = 0; cd_reply(3, one, 1); cd_second = 2; break;  /* Pause */
+    case 0x15: case 0x16:                                  /* SeekL, SeekP */
+        cd_audio_ouvrir(0);   /* la position vient du dernier Setloc */
+        cd_reply(3, one, 1); cd_second = 2; break;
     case 0x0C: cd_reply(3, one, 1); break;                 /* Demute  */
     case 0x0E: cd_reply(3, one, 1); break;                 /* Setmode */
     case 0x19: {                                           /* Test    */
@@ -364,6 +462,7 @@ void cd_etat(void)
 
 void cd_tick(void)
 {
+    cd_audio_alimenter();
     if (!cd_pend || --cd_delay > 0) return;
     {
         u8 st = cd_stat, nxt = cd_pend;

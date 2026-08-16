@@ -93,15 +93,20 @@ consulte quand il veut. On l'alimente depuis un **scénario** écrit d'avance,
 pour que deux exécutions donnent la même image :
 
 ```sh
-MANETTE="60000:start 63000: 90000:start 93000: 140000:start 143000: 170000:croix" ./m0 180
+MANETTE="1200:start 1260: 1600:start 1660: 2200:croix" ./build/m0/m0 90 PSX.EXE
 ```
 
-Chaque terme est `instant:touches`, l'instant compté en battements de retour de
-balayage ; un instant sans touche relâche tout. Les noms reconnus : `start`,
-`select`, `haut`, `bas`, `gauche`, `droite`, `croix`, `rond`, `triangle`,
-`carre`, `l1`, `r1`.
+Chaque terme est `instant:touches`, **l'instant compté en images dessinées** ;
+un instant sans touche relâche tout. Les noms reconnus : `start`, `select`,
+`haut`, `bas`, `gauche`, `droite`, `croix`, `rond`, `triangle`, `carre`, `l1`,
+`r1`.
 
-Ce scénario-là traverse l'écran-titre, le menu, et lance la course.
+Ce scénario-là traverse l'écran-titre, ouvre le menu, lance la course et tient
+l'accélérateur.
+
+L'unité est l'image et non le battement vidéo, parce qu'elle ne dépend pas de
+la base de temps : régler l'horloge décale tous les battements, mais une image
+reste une image. Un scénario écrit une fois continue de marcher.
 
 ## Où en est-on
 

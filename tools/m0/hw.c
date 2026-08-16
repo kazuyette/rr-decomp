@@ -116,6 +116,11 @@ static void dma2_run(void)
         addr = (header & 0x1FFFFC);
     }
     dma2_chcr &= ~0x01000000u;
+    /* La manette se lit une fois par image, comme sur la console -- et c'est
+       aussi ce qui donne au scenario une unite stable : le nombre d'images
+       dessinees ne depend pas de la base de temps, alors que les battements
+       video changent des qu'on la regle. */
+    { void pad_ecrire(unsigned long); pad_ecrire(ot_lists); }
     /* Une liste deroulee = une image dessinee. On en garde quelques-unes,
        espacees, plutot que toutes : ce qu'on veut voir est la progression. */
     {
@@ -579,7 +584,6 @@ void psx_clock(void)
        montre s'arretait exactement pendant qu'on la regardait. Il bat donc
        ici, sur la meme base que tout le reste. */
     g_vblanks++;
-    { void pad_ecrire(unsigned long); pad_ecrire(g_vblanks); }
     irq_raise(IRQ_VBLANK);
     if ((istat & imask) && !in_irq_flag) deliver_irq();
 }

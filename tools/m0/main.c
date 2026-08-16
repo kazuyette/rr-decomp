@@ -166,7 +166,8 @@ static u32 touche(const char *nom)
 }
 
 /* « 400:start 460: 900:croix » -- instant, deux-points, touches separees par
-   des virgules. Un instant sans touche relache tout. */
+   des virgules. Un instant sans touche relache tout. L'instant se compte en
+   images dessinees. */
 void scenario_lire(const char *s)
 {
     while (s && *s && nscenario < 16) {

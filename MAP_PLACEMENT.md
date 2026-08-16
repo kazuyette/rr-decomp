@@ -552,7 +552,43 @@ exactement les valeurs déclarées, qu'aucune étape du raisonnement n'imposait.
 Deux compteurs indépendants tombent juste du premier coup : les cartes 1 et 2
 sont établies.
 
-La carte 0 ne couvre aucune polyligne — 45 cellules sur 79 au mieux, et 9 zones
-pour 14 déclarées. Elle sert donc à autre chose, ou son association passe par
-une indirection que je n'ai pas lue. C'est le seul point resté ouvert, et il
-est petit.
+### La carte 0 est un vestige
+
+Le point restant se referme par les deux bouts.
+
+**Par la mesure.** Une recherche exhaustive — deux réflexions × neuf décalages
+de colonne × vingt-cinq décalages de ligne, soit 450 alignements — ne trouve
+*aucune* position où la carte 0 couvre entièrement les cellules d'une des trois
+polylignes. Zéro sur 450, pour les trois circuits.
+
+**Par le code.** `D_801E9210` est écrit six fois dans le jeu :
+
+| valeur | sites | contexte |
+|---|---|---|
+| 1 | `0x8001362C`, `0x8003C7DC`, `0x8003D234`, et une branche de `0x80015138` | toujours avec `D_801E90E0 = 0x100`, 256 nœuds |
+| 2 | `0x80013754`, et l'autre branche de `0x80015138` | avec `D_801E90E0 = 0x170`, 368 nœuds |
+| 0 | `0x80013900` seulement | écrit *avant* la sélection de la table de nœuds, jamais après |
+
+Le seul site qui pose 0 le fait en tête d'une fonction qui choisit ensuite,
+selon `D_801733B8` et `D_8007C210`, l'une des trois tables de nœuds — sans
+jamais réécrire l'index. Aucun chemin n'établit donc 0 comme valeur *utilisée*
+en même temps qu'un monde qui lui correspondrait.
+
+Les deux lectures concordent : **la table à `0x80071D70` est un vestige**, une
+version antérieure de la carte de zones restée dans le binaire. Ce n'est pas
+une lacune de la rétro-ingénierie, c'est une propriété du jeu.
+
+### Au passage, la sélection de circuit
+
+La même fonction donne la logique complète :
+
+```
+si D_801733B8 == 0        -> g_track_nodes_1, 256 nœuds
+sinon si D_8007C210 < 3   -> g_track_nodes_0, 256 nœuds
+sinon                     -> g_track_nodes_2, 368 nœuds
+```
+
+et les longueurs de tour associées, `D_80173368` : `0xC570` pour les 256 nœuds,
+`0x13570` pour les 368. Le test `D_8007C210 < 3` est le même que celui lu dans
+`func_80021BE0` il y a plusieurs sessions, quand rien ne le rattachait encore à
+autre chose.

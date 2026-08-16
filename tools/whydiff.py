@@ -33,6 +33,8 @@ Usage:
   python3 tools/whydiff.py func_80012345    # one function, more context
   python3 tools/whydiff.py --context 12     # widen the neighbourhood
   python3 tools/whydiff.py --brief          # one line per function
+  python3 tools/whydiff.py --object build/sweep/cand_x.o1.o func_x
+                                            # against one pipeline's build
 """
 import os
 import re
@@ -224,16 +226,29 @@ def first_divergence(target, base, skip_t=0, skip_b=0):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    argv = sys.argv[1:]
+    # --object aims the comparison at a single object instead of the merged
+    # build. tools/flag_sweep.py leaves one per pipeline under build/sweep/,
+    # and they are the only place a candidate exists compiled the way the
+    # retail unit was. Diffing against build/matched.o instead shows the
+    # generic pipeline's scheduling and hides whatever the real difference
+    # is -- which is exactly what happened the first time a function was
+    # read by hand rather than generated.
+    base_obj = BASE
+    if "--object" in argv:
+        i = argv.index("--object")
+        base_obj = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    args = [a for a in argv if not a.startswith("--")]
     summary = "--summary" in sys.argv
     brief = "--brief" in sys.argv
     ctx = 4
-    if "--context" in sys.argv:
-        ctx = int(sys.argv[sys.argv.index("--context") + 1])
+    if "--context" in argv:
+        ctx = int(argv[argv.index("--context") + 1])
     if args:
         ctx = max(ctx, 8)
 
-    for obj in TARGETS + [BASE]:
+    for obj in TARGETS + [base_obj]:
         if not os.path.exists(obj):
             print(f"{obj} missing -- run `make all` first")
             return 1
@@ -241,7 +256,7 @@ def main():
     target = {}
     for obj in TARGETS:
         target.update(disassemble(obj))
-    base = disassemble(BASE)
+    base = disassemble(base_obj)
 
     names = args or sorted(set(target) & set(base))
     findings, counts = [], {}

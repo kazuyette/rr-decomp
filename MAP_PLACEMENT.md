@@ -290,3 +290,59 @@ section à `D_801D35F0`, et ce qui écrit `D_801D82D0`. Si une origine par
 section existe, elle est posée là — et un décalage constant qui n'est un
 multiple propre de rien ressemble beaucoup plus à un champ lu dans un fichier
 qu'à une convention de grille.
+
+## La géométrie est stockée retournée d'un demi-tour
+
+Trois lectures et une mesure, dans cet ordre.
+
+**`func_800125B4`, le chargeur, ne stocke aucune origine.** Son entrée de 32
+octets par section est `{ptrA(0), ptrB(4), ptrC(8), cntA(0xC), cntB(0xE),
+cntC(0x10)}` et rien d'autre. Le décalage cherché n'est donc pas dans le
+fichier — il est dans la convention. (Au passage : `func_800437AC` lit le
+pointeur en `0x0` et le compteur en `0xC`, donc la passe de dessin lue plus
+haut est celle du **type A**, pas du type B.)
+
+**`func_80015CD4` donne la constante.** Cette fonction d'initialisation écrit
+`D_801733A0 = 0xF000` — le global que `TRACK_SPINE_FORMAT.md` désignait comme
+« le mécanisme de cours miroir ». Et `0xF000 = 61440 = 30 × 2048`, soit
+exactement le `30 −` de l'indexation. Le repère de rendu est donc le repère de
+la polyligne réfléchi en X autour de `30 × 2048`.
+
+**La composition s'annule, et elle explique l'arrondi.** En posant
+`X_rendu = 0xF000 − X_poly` et `X_poly = 2048q + r` :
+
+```
+cellX  = (0xF000 − X_poly + 0x400) >> 11 = 30 − q − [r > 1024]
+index  = 30 − cellX                      = q + [r > 1024]
+```
+
+soit `index = round(X_poly / 2048)`. La correspondance empirique `z*32 + x` est
+donc **dérivée**, pas constatée, et le `+0x400` n'est pas un détail : il place
+la cellule `k` sur l'intervalle `[2048k − 1024, 2048k + 1024]`, centré sur
+`2048k` et non aligné dessus.
+
+**Reste la mesure.** Puisque le repère de rendu est réfléchi, les coordonnées
+locales doivent être niées pour être dessinées dans le repère de la polyligne.
+Distance médiane des centroïdes de tunnel à l'axe, demi-largeur de route 503 :
+
+| convention | tunnels | tous les quads |
+|---|---|---|
+| `origine + local` (ce que je faisais) | 990 | 1 384 |
+| `origine − local` en X seulement | 650 | 1 129 |
+| `origine − local` en X et Z, origine `+1024` | **300** | **860** |
+
+Nier X **et** Z est un demi-tour autour de Y, pas une double réflexion : le
+sens de parcours des polygones est préservé, ce qui est cohérent avec le fait
+que le jeu ne bascule le winding qu'en mode miroir. Et le `+1024` est
+exactement le demi-pas que l'arrondi ci-dessus impose.
+
+L'image de contrôle avec cette convention est la première où le ruban beige
+suit l'axe sur toute sa longueur, où les tunnels verts sont **sur** la route et
+non à côté, et où le quartier de droite se lit comme une ville avec ses
+viaducs.
+
+Le test de raccord entre sections voisines, essayé avant celui-ci, est nul et
+mérite d'être noté comme tel : moins de 0,4 % des sommets coïncident d'une
+section à l'autre dans toutes les configurations. Les sections sont autonomes
+et pavent leur cellule quel que soit le signe, donc la continuité interne ne
+peut rien arbitrer ici.

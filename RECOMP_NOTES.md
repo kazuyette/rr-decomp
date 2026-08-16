@@ -556,3 +556,52 @@ C'est peu, mais c'est la première fois que le pilote reconnaît quelque chose
 qui vient de nous. Jusqu'ici, ses six compteurs étaient à zéro parce qu'aucune
 interruption ne lui parvenait ; maintenant qu'une lui parvient, ce qui reste à
 corriger est du détail de protocole, pas d'architecture.
+
+## Le dialogue, enfin visible
+
+Deux corrections, puis une trace complète.
+
+**La base de temps.** La boucle d'attente du pilote ne lit aucun registre :
+elle décompte des tours en surveillant un drapeau en mémoire que le gestionnaire
+doit poser. Livrer les interruptions sur les lectures matérielles ne l'atteint
+donc jamais — `CdlReset: timeout` s'imprimait **avant** que la réponse soit
+lue. Une horloge cadencée sur les appels de fonction n'a pas suffi non plus :
+entre la commande et l'expiration, il n'y a pas deux cent cinquante-six appels.
+
+L'interruption est maintenant levée **sur place**, à l'écriture de la commande,
+comme le fait le matériel. L'ordre est enfin le bon : commande, drapeaux,
+réponse, puis seulement le verdict du pilote.
+
+**Ce que la trace montre.**
+
+```
+cd: index        00
+cd: COMMANDE     0A          <- Init
+cd: index        01
+cd: lit drapeaux E3          <- INT3, l'accuse
+cd: lit reponse  02          <- l'etat du lecteur
+CdlReset: timeout
+cd: index        02
+cd: ecrit 1803   00          <- volumes audio
+cd: index        03
+cd: ecrit 1801   80
+cd: ecrit 1803   20
+```
+
+Le pilote reçoit son accusé et lit la réponse. Puis il déclare le timeout et
+passe au réglage des volumes.
+
+## Ce qui manque, nommé précisément
+
+**Il n'acquitte jamais.** Aucune écriture à l'index 1 sur `0x1F801803` — or
+c'est ainsi qu'on efface un drapeau d'interruption sur cette machine. Et le
+relevé des registres lus *pendant* le gestionnaire le confirme : celui-ci ne
+touche que `I_STAT`, `I_MASK` et le contrôle DMA. **Il ne parle jamais au
+lecteur.**
+
+La conclusion s'impose : le traitement de l'interruption CD n'est pas dans le
+corps que j'ai branché. Il y a un second niveau — un rappel enregistré ailleurs,
+que le gestionnaire général appelle et que ma traduction n'atteint pas encore.
+C'est ce chaînon-là qu'il faut suivre, et la trace donne maintenant de quoi le
+faire : on connaît l'ordre exact des échanges et l'endroit précis où la chaîne
+se rompt.

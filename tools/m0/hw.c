@@ -17,7 +17,9 @@
  * Renvoyer une constante, comme je le faisais, laisse le drapeau leve pour
  * toujours -- le gestionnaire retraite sans fin la meme source et n'atteint
  * jamais les autres. */
-static u32 istat, imask;
+u32 g_istat_mirror, g_imask_mirror;
+#define istat g_istat_mirror
+#define imask g_imask_mirror
 void irq_raise(u32 bit) { istat |= bit; }
 #define IRQ_VBLANK 0x0001
 #define IRQ_CDROM  0x0004
@@ -154,6 +156,14 @@ static void cd_command(u8 cmd)
     cd_nparam = 0;
 }
 
+/* Le dialogue avec le lecteur, dans l'ordre. Les compteurs disent qu'il
+   s'arrete ; la sequence dit ou. */
+static int cdlog;
+static void cdtrace(const char *what, u32 a, u32 b)
+{
+    if (cdlog++ < 70) { printf("  cd: %-12s %02X %02X\n", what, a, b); fflush(stdout); }
+}
+
 static u32 cd_read(u32 p)
 {
     switch (p & 3) {
@@ -163,9 +173,17 @@ static u32 cd_read(u32 p)
         if (cd_nresp > cd_rpos) st |= 0x20;  /* une reponse attend */
         return st;
     }
-    case 1: return (cd_rpos < cd_nresp) ? cd_resp[cd_rpos++] : 0;
+    case 1: {
+        u32 r = (cd_rpos < cd_nresp) ? cd_resp[cd_rpos++] : 0;
+        cdtrace("lit reponse", r, cd_rpos);
+        return r;
+    }
     case 2: return 0;
-    case 3: return (cd_index & 1) ? (0xE0 | cd_irq) : (0xE0 | cd_ie);
+    case 3: {
+        u32 r = (cd_index & 1) ? (0xE0 | cd_irq) : (0xE0 | cd_ie);
+        cdtrace(cd_index & 1 ? "lit drapeaux" : "lit masque", r, cd_index);
+        return r;
+    }
     }
     return 0;
 }
@@ -174,18 +192,21 @@ static void cd_write(u32 p, u32 v)
 {
     u8 b = (u8)v;
     switch (p & 3) {
-    case 0: cd_index = b & 3; break;
+    case 0: cdtrace("index", b & 3, 0); cd_index = b & 3; break;
     case 1:
-        if (cd_index == 0) cd_command(b);
+        if (cd_index == 0) { cdtrace("COMMANDE", b, cd_nparam); cd_command(b); }
+        else cdtrace("ecrit 1801", b, cd_index);
         break;
     case 2:
-        if (cd_index == 0) { if (cd_nparam < 16) cd_param[cd_nparam++] = b; }
-        else if (cd_index == 1) cd_ie = b;
+        if (cd_index == 0) { cdtrace("parametre", b, cd_nparam); if (cd_nparam < 16) cd_param[cd_nparam++] = b; }
+        else if (cd_index == 1) { cdtrace("arme", b, 0); cd_ie = b; }
         break;
     case 3:
+        cdtrace("ecrit 1803", b, cd_index);
         /* Index 1 : ecrire ici acquitte l'interruption. C'est ce que le pilote
            fait apres avoir lu sa reponse, et sans quoi il ne redemande rien. */
         if (cd_index == 1) {
+            cdtrace("acquitte", b, cd_second);
             if (b & 0x07) {
                 cd_irq = 0;
                 if (cd_second) {
@@ -272,6 +293,8 @@ u32 hw_read32(u32 p)
     }
 }
 
+void deliver_irq(void);
+
 void hw_write32(u32 p, u32 v, int width)
 {
     (void)width;
@@ -279,7 +302,13 @@ void hw_write32(u32 p, u32 v, int width)
     note(p, 1);
     switch (p) {
     case 0x1F801800: case 0x1F801801:
-    case 0x1F801802: case 0x1F801803: cd_write(p, v); break;
+    case 0x1F801802: case 0x1F801803:
+        cd_write(p, v);
+        /* Le materiel leve son interruption presque aussitot apres la
+           commande. La boucle d'attente du pilote est plus courte que
+           n'importe quelle horloge grossiere : il faut livrer ici, sur place. */
+        if ((istat & imask) && !in_irq_flag) deliver_irq();
+        break;
     case 0x1F801810: gp0_write(v); break;
     case 0x1F801814: gp1_cmds++; break;
     case 0x1F801070: istat &= v; break;    /* acquittement : les zeros effacent */

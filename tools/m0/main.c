@@ -189,9 +189,25 @@ static u32 bios_call(u32 vec, u32 fn, u32 a0, u32 a1, u32 a2, u32 a3)
     return 0;
 }
 
+/* Une base de temps qui ne depende pas du materiel.
+ *
+ * La boucle d'attente du pilote CD ne lit aucun registre : elle decompte des
+ * tours en surveillant un drapeau en memoire, que le gestionnaire pose. Livrer
+ * les interruptions sur les lectures materielles ne l'atteint donc jamais, et
+ * elle expire avant d'avoir rien vu -- « CdlReset: timeout » s'imprime avant
+ * meme que la reponse soit lue.
+ *
+ * Les appels de fonction, eux, arrivent tout le temps. Ils font une horloge
+ * grossiere mais reguliere, et surtout independante de ce que le jeu regarde. */
+extern u32 g_istat_mirror, g_imask_mirror;
+void deliver_irq(void);
+static unsigned long tick;
+
 u32 psx_dispatch(u32 addr, u32 a0, u32 a1, u32 a2, u32 a3, u32 t1)
 {
     int lo = 0, hi = PSX_NFUNCS - 1;
+    if ((++tick & 0xFF) == 0 && (g_istat_mirror & g_imask_mirror) && !in_irq)
+        deliver_irq();
     if (addr == 0xA0 || addr == 0xB0 || addr == 0xC0)
         return bios_call(addr, t1, a0, a1, a2, a3);
     while (lo <= hi) {

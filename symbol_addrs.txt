@@ -18,7 +18,7 @@ g_gpu_device = 0x8007736C;
 // (already referenced by name in already-matched source files) -- only the
 // type changes from data to func, so existing __asm__ transcriptions that
 // reference them by name keep resolving correctly.
-D_8005497C = 0x8005497C; // type:func
+D_8005497C = 0x8005497C; // type:func  (le rappel de synchronisation CD du jeu)
 D_80052820 = 0x80052820; // type:func
 func_80053390 = 0x80053390; // type:func
 func_800535A0 = 0x800535A0; // type:func
@@ -243,4 +243,3 @@ EnterCriticalSection = 0x80049638;
 ExitCriticalSection = 0x800497D8;
 gte_dpcl = 0x80043C54;
 CdSyncCallback = 0x80051CE4;
-cd_sync_callback_game = 0x8005497C;

@@ -58,14 +58,34 @@ REQS = [
 ]
 
 
-def ensure_splat():
-    try:
-        import splat  # noqa: F401
-        return True
-    except ImportError:
-        pass
+SPLAT_PIN = "0.50.0"
 
-    print("splat is not installed in this image; installing it now.")
+
+def installed_splat():
+    """The installed splat64 version, or None."""
+    try:
+        from importlib.metadata import version
+        return version("splat64")
+    except Exception:
+        return None
+
+
+def ensure_splat():
+    have = installed_splat()
+    if have == SPLAT_PIN:
+        return True
+    if have is not None:
+        # A different version is not a detail. spimdisasm decides how the
+        # listings are rendered, and splat decides where the boundaries
+        # fall; either can emit a different -- still correct -- listing of
+        # the same instructions, which changes asm/ under our feet and
+        # breaks matches that have nothing wrong with them. So we replace
+        # it rather than proceed and blame the result on the game.
+        print(f"splat64 {have} is installed; this project pins {SPLAT_PIN}.")
+        print("Installing the pinned set -- a different version renders the")
+        print("listings differently, which would break matches silently.")
+    else:
+        print("splat is not installed in this image; installing it now.")
 
     # pylibyaml is only a C-loader accelerator for PyYAML and has no wheel
     # for this platform -- pip would try to build it and fail. splat merely
@@ -93,7 +113,7 @@ def ensure_splat():
             print(out[-3000:])
         return r.returncode == 0
 
-    if not pip_install(["--no-deps", REQS[0]]):
+    if not pip_install(["--no-deps", "--force-reinstall", REQS[0]]):
         return False
     if not pip_install(REQS[1:]):
         return False

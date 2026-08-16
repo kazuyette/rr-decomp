@@ -128,3 +128,35 @@ les dégradées, avec le terminateur `0x55555555` écrit au mot correspondant �
 
 Ces vingt-deux noms sont acquis sans SDK, en lisant deux constantes par
 fonction et une table de commandes matérielles.
+
+## Treize accesseurs GTE de plus, lus dans les numéros de registre
+
+Le bloc `0x8003FA94`–`0x8003FDEC` — celui qui commence exactement à la frontière
+jeu/bibliothèque — comptait encore quatorze fonctions que `src/gte.c` ne
+couvrait pas. Treize se nomment sans la moindre ambiguïté, parce que le numéro
+de registre COP2 qu'elles touchent *est* leur définition :
+
+| adresse | instructions | registres | rôle |
+|---|---|---|---|
+| `0x8003FB68` | `lwc2 $2, $3` | VXY1, VZ1 | `gte_ldv1` |
+| `0x8003FB78` | `lwc2 $4, $5` | VXY2, VZ2 | `gte_ldv2` |
+| `0x8003FB88` | `lwc2 $0..$5` | les trois sommets | `gte_ldv3` |
+| `0x8003FBA8` | `lwc2 $6` | RGB | `gte_ldrgb` |
+| `0x8003FBB4` | `lwc2 $20, $21, $22` | RGB0, RGB1, RGB2 | `gte_ldrgb3` |
+| `0x8003FCF0` | `swc2 $9, $10, $11` | IR1, IR2, IR3 | `gte_st_ir3` |
+| `0x8003FD04` | `swc2 $19` | SZ3 | `gte_stsz` |
+| `0x8003FD10` | `swc2 $17, $18, $19` | SZ1, SZ2, SZ3 | `gte_stsz3` |
+| `0x8003FD24` | `swc2 $16..$19` | SZ0 à SZ3 | `gte_stsz4` |
+| `0x8003FD3C` | `swc2 $12, $13, $14` | SXY0, SXY1, SXY2 | `gte_stsxy3` |
+| `0x8003FD50` | `swc2 $20, $21, $22` | RGB0, RGB1, RGB2 | `gte_strgb3` |
+| `0x8003FD70` | `swc2 $25, $26, $27` | MAC1, MAC2, MAC3 | `gte_st_mac3` |
+| `0x8003FD84` | `mfc2 $29` puis trois masques | ORGB | `gte_st_orgb3` |
+
+La dernière mérite un mot : elle lit ORGB et le découpe en `& 0x1F`,
+`(& 0x3E0) >> 5`, `(& 0x7C00) >> 10`, écrits en trois mots consécutifs. C'est le
+dépaquetage d'une couleur 5-5-5 en trois composantes 32 bits — la lecture est
+forcée par les masques eux-mêmes.
+
+La quatorzième, `func_8003FA94`, est un `jr $ra ; nop` — une fonction vide, à
+l'adresse exacte de la frontière. Elle reste sans nom : une fonction vide ne
+porte aucune preuve de ce qu'elle était.

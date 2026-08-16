@@ -32,6 +32,7 @@ Usage:
   python3 tools/whydiff.py --summary        # pattern counts only
   python3 tools/whydiff.py func_80012345    # one function, more context
   python3 tools/whydiff.py --context 12     # widen the neighbourhood
+  python3 tools/whydiff.py --brief          # one line per function
 """
 import os
 import re
@@ -162,6 +163,7 @@ def first_divergence(target, base):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     summary = "--summary" in sys.argv
+    brief = "--brief" in sys.argv
     ctx = 4
     if "--context" in sys.argv:
         ctx = int(sys.argv[sys.argv.index("--context") + 1])
@@ -199,7 +201,18 @@ def main():
         print("nothing differs")
         return 0
 
-    if not summary:
+    if brief:
+        # One line per function: the diverging pair and nothing else. The
+        # point is to read forty of them at once and see whether the
+        # dominant pattern has a dominant cause, instead of theorising
+        # from three examples -- which has now produced one refuted rule.
+        findings.sort(key=lambda f: (f[0], f[1]))
+        for kind, name, i, t_, b_ in findings:
+            tv = str(t_[i]) if i < len(t_) else "(end)"
+            bv = str(b_[i]) if i < len(b_) else "(end)"
+            print(f"{kind:16s} {name:24s} {i:4d}  {tv:38s} | {bv}")
+        print()
+    elif not summary:
         findings.sort(key=lambda f: (f[0], f[1]))
         for kind, name, i, t, b in findings:
             print(f"\n=== {name}: {kind} at instruction {i} "

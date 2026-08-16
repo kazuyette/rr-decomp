@@ -455,3 +455,33 @@ Le signalement extérieur qui a débloqué ça — « la géométrie est du mêm
 il faut la retourner en miroir » — portait sur trois portions différentes et
 était exact. Aucune de mes métriques agrégées ne le voyait, parce qu'elles
 moyennaient sur un décor réparti des deux côtés.
+
+## L'amas détaché du nord-est
+
+Signalé de l'extérieur comme suspect sur le rendu final : un groupe de quads de
+type A posés à l'écart, sans route ni sol autour. Ce sont huit sections, et
+elles se répartissent en deux groupes nets.
+
+| sections | cellules | hauteur (monde) | distance à une piste | biais de profondeur |
+|---|---|---|---|---|
+| 72, 73, 93 | (19–21, 7–9) | −1221 .. +170 | 1 590 – 3 074 | 50 / 51 |
+| 40, 41, 56, 57, 58 | (21–23, 5–6) | −642 .. +1 | 5 975 – 6 716 | 12 |
+
+Chaque section est bâtie de la même façon : une bande de quads en tpage 23 et,
+juste au-dessus, une bande en tpage 28, les deux partageant exactement leur
+arête en Y. Et les quads sont **verticaux** — celui d'exemple mesure 994 de
+large pour 937 de haut sur une empreinte de 285 de profondeur.
+
+Des parois verticales de 300 à 1 200 unités de haut, texturées en deux bandes
+superposées, à une à trois cellules de la piste, avec un biais de profondeur de
+50 là où la valeur courante du fichier est −8 : c'est un **décor de fond**,
+dessiné loin derrière tout le reste. La falaise et le relief qu'on voit par
+dessus la baie depuis la section côtière.
+
+L'absence de sol autour n'est donc pas une lacune : entre la route et ces
+parois, il y a l'eau, et l'eau n'a pas de quads.
+
+Ce qui corrige une troisième fois la phrase « aucun des trois types n'est un
+mur ». Le type A en contient, et des grands. Le test d'empreinte fine en plan
+les manquait parce qu'ils sont larges autant que hauts — fins seulement dans la
+troisième dimension, celle que la vue de dessus écrase.

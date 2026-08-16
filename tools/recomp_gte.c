@@ -361,21 +361,34 @@ static void mat_vec(const s16 *m, s16 vx, s16 vy, s16 vz,
 
 static void interp_far(int sf, int lm, s32 r, s32 g, s32 b)
 {
-    /* Les opérations de brume interpolent vers la couleur lointaine avec IR0. */
+    /* MAC <- MAC + IR0 * (FC - MAC), a l'echelle du materiel.
+     *
+     * La specification dit : IR = ((FC SHL 12) - MAC) SAR (sf*12), puis
+     * MAC = (IR * IR0 + MAC) SAR (sf*12). Le MAC de depart n'est PAS redecale.
+     * Ma premiere version le decalait de sf*12 des deux cotes, ce qui donnait
+     * des couleurs saturees a blanc sur toute la brume -- une erreur qu'aucun
+     * test d'invariant n'aurait vue, et que la seconde transcription en Python
+     * a attrapee au premier etat tire.
+     */
     int s = sf ? 12 : 0;
-    s64 dr = ((s64)gte.RFC << 12) - ((s64)r << s);
-    s64 dg = ((s64)gte.GFC << 12) - ((s64)g << s);
-    s64 db = ((s64)gte.BFC << 12) - ((s64)b << s);
-    s32 ir1 = sat_ir(1, (s32)(dr >> s), 0);
-    s32 ir2 = sat_ir(2, (s32)(dg >> s), 0);
-    s32 ir3 = sat_ir(3, (s32)(db >> s), 0);
-    gte.MAC1 = mac123(1, ((s64)ir1 * gte.IR0 + ((s64)r << s)) >> s);
-    gte.MAC2 = mac123(2, ((s64)ir2 * gte.IR0 + ((s64)g << s)) >> s);
-    gte.MAC3 = mac123(3, ((s64)ir3 * gte.IR0 + ((s64)b << s)) >> s);
-    gte.IR1 = sat_ir(1, gte.MAC1, lm);
-    gte.IR2 = sat_ir(2, gte.MAC2, lm);
-    gte.IR3 = sat_ir(3, gte.MAC3, lm);
-    push_rgb(sat_col(1, gte.MAC1 >> 4), sat_col(2, gte.MAC2 >> 4), sat_col(3, gte.MAC3 >> 4));
+    s32 mac[3];
+    s32 in[3];
+    int i;
+    in[0] = r; in[1] = g; in[2] = b;
+    {
+        s32 fc[3];
+        fc[0] = gte.RFC; fc[1] = gte.GFC; fc[2] = gte.BFC;
+        for (i = 0; i < 3; i++) {
+            s64 d = ((s64)fc[i] << 12) - (s64)in[i];
+            s32 ir = sat_ir(i + 1, (s32)(d >> s), 0);
+            mac[i] = mac123(i + 1, ((s64)ir * gte.IR0 + (s64)in[i]) >> s);
+        }
+    }
+    gte.MAC1 = mac[0]; gte.MAC2 = mac[1]; gte.MAC3 = mac[2];
+    gte.IR1 = sat_ir(1, mac[0], lm);
+    gte.IR2 = sat_ir(2, mac[1], lm);
+    gte.IR3 = sat_ir(3, mac[2], lm);
+    push_rgb(sat_col(1, mac[0] >> 4), sat_col(2, mac[1] >> 4), sat_col(3, mac[2] >> 4));
 }
 
 static void light_color(s16 vx, s16 vy, s16 vz, int sf, int lm, int use_rgb, int fog)
@@ -391,7 +404,7 @@ static void light_color(s16 vx, s16 vy, s16 vz, int sf, int lm, int use_rgb, int
         r = (s32)gte.IR1 << 4; g = (s32)gte.IR2 << 4; b = (s32)gte.IR3 << 4;
     }
     if (fog) {
-        interp_far(sf, lm, r >> (sf ? 12 : 0), g >> (sf ? 12 : 0), b >> (sf ? 12 : 0));
+        interp_far(sf, lm, r, g, b);
         return;
     }
     gte.MAC1 = mac123(1, (s64)r >> (sf ? 12 : 0));

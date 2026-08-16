@@ -236,9 +236,10 @@ réécrire les opérations **une seconde fois**, dans un autre langage, depuis l
 même documentation, puis de comparer sur des états de registres tirés au
 hasard.
 
-**4 400 comparaisons — quatre cents états, onze encodages — et aucun écart**
-sur `mvmva` (quatre variantes de matrice, de vecteur et de décalage), `nclip`,
-`avsz3`, `avsz4`, `sqr` et `op`.
+**7 600 comparaisons — quatre cents états, dix-neuf encodages — et aucun
+écart** sur `mvmva` (quatre variantes de matrice, de vecteur et de décalage),
+`nclip`, `avsz3`, `avsz4`, `sqr`, `op`, **`rtps`, `rtpt`** — donc la projection
+et sa division par table — **`gpf`, `gpl`, `intpl` et `dpcs`**.
 
 Ce que ça vaut, précisément : deux transcriptions indépendantes ne se trompent
 pas au même endroit, sauf si la documentation elle-même est ambiguë. Ça attrape
@@ -252,12 +253,33 @@ parce qu'écrire IRGB dépaquette une couleur dans IR1-3 et qu'écrire SXYP
 pousse la pile des coordonnées. Quatre cents états divergeaient pour cette
 seule raison.
 
+## La méthode a payé : un vrai bug trouvé
+
+`gpf` et `gpl` se sont accordées du premier coup. `intpl` et `dpcs` ont
+divergé sur les quatre cents états — et l'erreur était dans le C.
+
+L'interpolation vers la couleur lointaine s'écrit, dans la spécification :
+
+```
+IR  = ((FC SHL 12) - MAC) SAR (sf*12)
+MAC = (IR * IR0 + MAC)    SAR (sf*12)
+```
+
+Le `MAC` de départ n'est **pas** redécalé. Ma première version le décalait de
+`sf*12` aux deux endroits, ce qui saturait toute la brume à blanc. Aucun test
+d'invariant ne l'aurait vu : les valeurs restaient plausibles, du même ordre de
+grandeur, simplement fausses. La seconde transcription l'a attrapé au premier
+état tiré.
+
+C'est exactement ce pour quoi la méthode existe, et c'est la première fois
+qu'elle rend quelque chose. Le correctif touchait aussi le chemin brume des
+calculs d'éclairage, qui compensait le bug en pré-décalant ses entrées — deux
+erreurs qui s'annulaient à moitié.
+
 ## Ce qui n'est pas encore contrôlé
 
-`rtps` et `rtpt` — donc la projection elle-même, avec sa division — et toute la
-famille des calculs d'éclairage et de brume : `ncds`, `ncdt`, `nccs`, `ncct`,
-`ncs`, `nct`, `cdp`, `cc`, `dpcs`, `dpct`, `dcpl`, `intpl`, `gpf`, `gpl`. Elles
-sont implémentées mais pas encore doublées en Python.
-
-C'est la moitié la plus délicate, et je préfère le dire plutôt que de laisser
-« GTE validé » suggérer plus que les 4 400 comparaisons ne prouvent.
+La famille des calculs d'éclairage : `ncds`, `ncdt`, `nccs`, `ncct`, `ncs`,
+`nct`, `cdp`, `cc`, `dpct`, `dcpl`. Elles sont implémentées et elles partagent
+maintenant l'interpolation corrigée, mais elles ne sont pas encore doublées en
+Python. Vingt-cinq occurrences dans le binaire, contre plus de cent pour ce qui
+est vérifié.

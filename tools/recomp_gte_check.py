@@ -152,6 +152,145 @@ class Ref:
                 self.mac(3, (m[0] * ir2 - m[4] * ir1) >> sh)]
 
 
+    # --- couleur et brume
+    def col(self, v, n):
+        if v > 0xFF:
+            self.flag |= (1 << 21) >> (n - 1)
+            return 0xFF
+        if v < 0:
+            self.flag |= (1 << 21) >> (n - 1)
+            return 0
+        return v
+
+    def interp(self, base, sf, lm):
+        """MAC <- MAC + IR0 * (FC - MAC), a l'echelle du materiel.
+
+        La specification dit : IR = ((FC SHL 12) - MAC) SAR (sf*12), puis
+        MAC = (IR * IR0 + MAC) SAR (sf*12). Le MAC de depart n'est PAS
+        redecale ; c'est le piege de cette famille.
+        """
+        sh = 12 if sf else 0
+        fc = (s32(self.c[21]), s32(self.c[22]), s32(self.c[23]))
+        mac = list(base)
+        irs = []
+        for i in range(3):
+            irs.append(self.ir(i + 1, ((fc[i] << 12) - mac[i]) >> sh, 0))
+        ir0 = s16(self.d[8])
+        out = [self.mac(i + 1, (irs[i] * ir0 + mac[i]) >> sh) for i in range(3)]
+        firs = [self.ir(i + 1, out[i], lm) for i in range(3)]
+        rgb = [self.col(out[i] >> 4, i + 1) for i in range(3)]
+        return out, firs, rgb
+
+    def gpf(self, sf, lm):
+        sh = 12 if sf else 0
+        ir0 = s16(self.d[8])
+        ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
+        out = [self.mac(i + 1, (ir[i] * ir0) >> sh) for i in range(3)]
+        return out, [self.ir(i + 1, out[i], lm) for i in range(3)], \
+               [self.col(out[i] >> 4, i + 1) for i in range(3)]
+
+    def gpl(self, sf, lm):
+        sh = 12 if sf else 0
+        ir0 = s16(self.d[8])
+        ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
+        mac = [s32(self.d[25]), s32(self.d[26]), s32(self.d[27])]
+        out = [self.mac(i + 1, ((mac[i] << sh) + ir[i] * ir0) >> sh) for i in range(3)]
+        return out, [self.ir(i + 1, out[i], lm) for i in range(3)], \
+               [self.col(out[i] >> 4, i + 1) for i in range(3)]
+
+    def intpl(self, sf, lm):
+        ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
+        return self.interp([x << 12 for x in ir], sf, lm)
+
+    def dpcs(self, sf, lm):
+        rgbc = self.d[6]
+        return self.interp([(rgbc & 0xFF) << 16, ((rgbc >> 8) & 0xFF) << 16,
+                            ((rgbc >> 16) & 0xFF) << 16], sf, lm)
+
+    # --- projection
+    def unr(self, h, sz3):
+        """La division du materiel : table de 257 entrees, deux iterations.
+
+        Reecrite depuis la specification sans regarder l'implementation C. Le
+        point delicat est le decalage de normalisation : il faut amener SZ3 sur
+        son bit de poids fort avant d'indexer la table, sinon l'approximation
+        part sur la mauvaise decade.
+        """
+        if h >= sz3 * 2:
+            self.flag |= 1 << 17
+            return 0x1FFFF
+        z = 0
+        while z < 16 and not ((sz3 << z) & 0x8000):
+            z += 1
+        n = h << z
+        d = sz3 << z
+        tbl = []
+        for i in range(257):
+            v = (0x40000 // (i + 0x100) + 1) // 2 - 0x101
+            tbl.append(0 if v < 0 else (0xFF if v > 0xFF else v))
+        u = tbl[(d - 0x7FC0) >> 7] + 0x101
+        d = ((0x2000080 - (d * u)) >> 8) & 0xFFFFFFFF
+        d = ((0x0000080 + (d * u)) >> 8) & 0xFFFFFFFF
+        n = ((n * d + 0x8000) >> 16) & 0xFFFFFFFF
+        return min(n, 0x1FFFF)
+
+    def rtp(self, vi, sf, lm, last, st):
+        sh = 12 if sf else 0
+        m = self.RT()
+        vx, vy, vz = self.V(vi)
+        tr = (s32(self.c[5]), s32(self.c[6]), s32(self.c[7]))
+        acc = []
+        for row in range(3):
+            v = ((tr[row] << 12) + m[row * 3] * vx + m[row * 3 + 1] * vy
+                 + m[row * 3 + 2] * vz)
+            acc.append(v)
+        mac = [self.mac(i + 1, acc[i] >> sh) for i in range(3)]
+        ir1 = self.ir(1, mac[0], lm)
+        ir2 = self.ir(2, mac[1], lm)
+        unshifted = acc[2] >> 12
+        if unshifted < -0x8000 or unshifted > 0x7FFF:
+            self.flag |= 1 << 22
+        lo = 0 if lm else -0x8000
+        ir3 = 0x7FFF if mac[2] > 0x7FFF else (lo if mac[2] < lo else mac[2])
+        z = unshifted
+        sz3 = 0 if z < 0 else (0xFFFF if z > 0xFFFF else z)
+        st["sz"] = st["sz"][1:] + [sz3]
+        h = self.c[26] & 0xFFFF
+        q = self.unr(h, sz3)
+        ofx, ofy = s32(self.c[24]), s32(self.c[25])
+        sx = q * ir1 + ofx
+        sy = q * ir2 + ofy
+        cx = sx >> 16
+        cy = sy >> 16
+        cx = 0x3FF if cx > 0x3FF else (-0x400 if cx < -0x400 else cx)
+        cy = 0x3FF if cy > 0x3FF else (-0x400 if cy < -0x400 else cy)
+        st["sxy"] = st["sxy"][1:] + [(cx, cy)]
+        st["mac"] = mac
+        st["ir"] = [ir1, ir2, ir3]
+        st["mac0"] = s32(sy)
+        if last:
+            dqa = s16(self.c[27] & 0xFFFF)
+            dqb = s32(self.c[28])
+            dq = q * dqa + dqb
+            st["mac0"] = s32(dq)
+            v = dq >> 12
+            st["ir0"] = 0x1000 if v > 0x1000 else (0 if v < 0 else v)
+        return st
+
+    def rtps(self, sf, lm, three):
+        st = {"sz": [self.d[16] & 0xFFFF, self.d[17] & 0xFFFF,
+                     self.d[18] & 0xFFFF, self.d[19] & 0xFFFF][1:],
+              "sxy": [(s16(self.d[12] & 0xFFFF), s16(self.d[12] >> 16)),
+                      (s16(self.d[13] & 0xFFFF), s16(self.d[13] >> 16)),
+                      (s16(self.d[14] & 0xFFFF), s16(self.d[14] >> 16))],
+              "ir0": s16(self.d[8])}
+        if three:
+            for i in range(3):
+                st = self.rtp(i, sf, lm, i == 2, st)
+        else:
+            st = self.rtp(0, sf, lm, 1, st)
+        return st
+
 # --- pilotage de l'implémentation C
 lib.gte_write_data.argtypes = [ctypes.c_int, ctypes.c_uint32]
 lib.gte_write_ctrl.argtypes = [ctypes.c_int, ctypes.c_uint32]
@@ -185,6 +324,10 @@ CASES = [
     ("avsz3",       0x158002D), ("avsz4",       0x168002E),
     ("sqr    sf=1", 0x0A80428), ("sqr    sf=0", 0x0A00428),
     ("op     sf=1", 0x178000C), ("op     sf=0", 0x170000C),
+    ("rtps",        0x0180001), ("rtpt",        0x0280030),
+    ("gpf    sf=1", 0x198003D), ("gpf    sf=0", 0x190003D),
+    ("gpl    sf=1", 0x1A8003E), ("gpl    sf=0", 0x1A0003E),
+    ("intpl",       0x0980011), ("dpcs",        0x0780010),
 ]
 
 rnd = random.Random(20260816)
@@ -213,6 +356,24 @@ for k in range(ROUNDS):
         elif fn == 0x28:
             want = tuple(ref.sqr((code >> 19) & 1))
             got = tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27))
+        elif fn in (0x01, 0x30):
+            st = ref.rtps((code >> 19) & 1, (code >> 10) & 1, fn == 0x30)
+            want = (tuple(st["mac"]), tuple(st["ir"]), st["sz"][-1],
+                    st["sxy"][-1], st["ir0"], st["mac0"])
+            got = (tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27)),
+                   tuple(s16(lib.gte_read_data(i)) for i in (9, 10, 11)),
+                   lib.gte_read_data(19),
+                   (s16(lib.gte_read_data(14) & 0xFFFF), s16(lib.gte_read_data(14) >> 16)),
+                   s16(lib.gte_read_data(8)), s32(lib.gte_read_data(24)))
+        elif fn in (0x3D, 0x3E, 0x11, 0x10):
+            sf = (code >> 19) & 1; lm = (code >> 10) & 1
+            f = {0x3D: ref.gpf, 0x3E: ref.gpl, 0x11: ref.intpl, 0x10: ref.dpcs}[fn]
+            macs, irs, rgb = f(sf, lm)
+            want = (tuple(macs), tuple(irs), tuple(rgb))
+            c2 = lib.gte_read_data(22)
+            got = (tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27)),
+                   tuple(s16(lib.gte_read_data(i)) for i in (9, 10, 11)),
+                   (c2 & 0xFF, (c2 >> 8) & 0xFF, (c2 >> 16) & 0xFF))
         elif fn == 0x0C:
             want = tuple(ref.op((code >> 19) & 1))
             got = tuple(s32(lib.gte_read_data(i)) for i in (25, 26, 27))

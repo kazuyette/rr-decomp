@@ -527,12 +527,32 @@ Un ensemble de visibilité potentielle écrit à la main dans un éditeur de tex
 en 1994, et compilé tel quel dans l'exécutable. Il n'y a rien à décoder : le
 format *est* sa propre représentation.
 
-### Ce qui n'est pas établi
+### L'alignement, réglé par le code et non par un ajustement
 
-L'alignement exact des lignes de cette carte sur la grille `IDX.HED`. Une
-recherche libre de décalage donne 92 %, 92 % et 100 % de couverture mais avec
-trois décalages différents selon le circuit — c'est le signe d'un ajustement,
-pas d'une correspondance. Les trois circuits partagent la même géométrie et
-doivent partager le même alignement ; tant que trois décalages sortent, la
-question reste ouverte et se tranchera en lisant `func_80015AAC`, qui calcule
-la zone de la caméra à partir de sa cellule.
+`func_80015AAC` fait **exactement le même calcul** que `func_80015BC4` — même
+index `z*34 + 31 − cellX`, même décodage — et rend la zone au lieu de la
+comparer. Il n'y a donc aucun décalage libre à chercher : la grille `IDX.HED`
+s'indexe en `z*32 + 30 − cellX`, la carte de zones en `z*34 + 31 − cellX`. Même
+cellule, colonne décalée d'exactement un cran.
+
+### La vérification qui ne pouvait pas sortir par hasard
+
+Avec cette colonne `+1`, en croisant les trois polylignes et les trois cartes —
+cellules de la polyligne ayant une zone, et nombre de zones distinctes :
+
+| | carte 0 | carte 1 | carte 2 |
+|---|---|---|---|
+| polyligne 0 | 45/79 (9) | **79/79 (14)** | 79/79 (15) |
+| polyligne 1 | 46/80 (9) | **80/80 (14)** | 80/80 (15) |
+| polyligne 2 | 60/112 (10) | 81/112 (14) | **112/112 (20)** |
+
+`D_80072A30` déclare **14, 14 et 20** zones. Le nombre de zones *distinctes
+effectivement traversées* vaut 14 sur la carte 1 et 20 sur la carte 2 —
+exactement les valeurs déclarées, qu'aucune étape du raisonnement n'imposait.
+Deux compteurs indépendants tombent juste du premier coup : les cartes 1 et 2
+sont établies.
+
+La carte 0 ne couvre aucune polyligne — 45 cellules sur 79 au mieux, et 9 zones
+pour 14 déclarées. Elle sert donc à autre chose, ou son association passe par
+une indirection que je n'ai pas lue. C'est le seul point resté ouvert, et il
+est petit.

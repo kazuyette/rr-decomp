@@ -43,29 +43,28 @@ void func_80021BE0(void) {
     s32 pos;
     s32 dist;
     s32 mark;
-    s32 shortTrack;
     s16 phase;
 
-    /* Second reading, from the o2 diff of the first.
+    /* Third reading. The first two each held half the answer.
      *
-     * Two things the target says and the first attempt did not. The lap
-     * length is built as 0x17000 and overwritten with 0x10000 when the
-     * test passes, rather than chosen by a conditional expression -- the
-     * constant is assembled across the load and branch delay slots, which
-     * only happens when the assignment precedes the test. And the
-     * comparison against 3 is evaluated once and reused for the marker
-     * further down; the first version recomputed it.
+     * The first wrote the comparison twice and let the compiler eliminate
+     * the common subexpression, which put slti straight into the register
+     * the branches use -- as the target does. But it chose the lap length
+     * with a conditional expression, so the constant was hoisted ahead of
+     * the load instead of filling its delay slot.
      *
-     * Worth recording: this is the "initialise then overwrite under a
-     * condition" shape that was declared refuted earlier today on
-     * func_8004D388. It was refuted there. The conclusion drawn from it --
-     * that the shape never matters -- was too broad. Which form is right
-     * is a property of the function, not a rule.
+     * The second fixed the constant by assigning then overwriting, and
+     * broke the comparison by naming it: a local forced a move into the
+     * register after computing elsewhere, one instruction the target does
+     * not have.
+     *
+     * So: assign then overwrite, and write the test out both times rather
+     * than storing it. The negation in the second test is written as
+     * !(x < 3) rather than x >= 3 so that it is the same subexpression,
+     * which is what lets it be computed once.
      */
-    shortTrack = (D_8007C210 < 3);
-
     lap = 0x17000;
-    if (shortTrack) {
+    if (D_8007C210 < 3) {
         lap = 0x10000;
     }
 
@@ -79,7 +78,7 @@ void func_80021BE0(void) {
         }
     } else if (phase == 1) {
         mark = 0xB900;
-        if (!shortTrack) {
+        if (!(D_8007C210 < 3)) {
             mark = 0x12900;
         }
         pos = D_8007C260;

@@ -21,6 +21,7 @@
 int video_init(void) { return 0; }
 void video_image(const u16 *v, int x, int y, int w, int h) { (void)v; (void)x; (void)y; (void)w; (void)h; }
 u32 video_manette(void) { return 0xFFFF; }
+int video_negcon(unsigned char *q) { (void)q; return 0; }
 int video_fermee(void) { return 0; }
 void video_fin(void) {}
 
@@ -129,10 +130,15 @@ int video_init(void)
  * venue, et on accepte qu'elle arrive ou reparte en cours de partie -- une
  * manette qu'on rebranche doit remarcher sans relancer le jeu.
  *
- * Le jeu ne connait que la manette numerique : celle de 1994 n'avait pas de
- * joysticks. Le stick gauche est donc converti en croix directionnelle, avec
- * une zone morte, plutot que transmis tel quel -- le transmettre demanderait
- * d'annoncer un autre type de manette, que ce jeu ne saurait pas lire.
+ * Le jeu connait deux manettes. La numerique, qui ne rend que seize boutons ;
+ * et le neGcon de Namco, dont le corps se tord et dont les boutons I et II
+ * mesurent l'appui. Ridge Racer a ete ecrit pour cette manette-la : la
+ * fonction qui lit le port teste le type 0x23 et, dans ce cas, prend la
+ * torsion comme angle de braquage et les deux boutons comme pedales. Le mode
+ * numerique ne fait que fabriquer les memes valeurs a partir des directions.
+ *
+ * Le stick gauche peut donc devenir soit une croix directionnelle, soit une
+ * torsion. Voir manette_negcon plus bas.
  */
 static void manette_ouvrir(int index)
 {
@@ -178,6 +184,59 @@ static u32 manette_lire(void)
     if (y >  MORT) m &= ~0x4000u;
     return m;
 }
+
+/* Le rapport du neGcon : quatre octets apres les boutons.
+ *
+ *   octet 4  torsion du boitier, 0x00 a gauche, 0x80 au repos, 0xFF a droite
+ *   octet 5  bouton I,  0x00 relache a 0xFF enfonce
+ *   octet 6  bouton II, idem
+ *   octet 7  gachette L, idem
+ *
+ * Les seuils sont ceux du jeu, lus dans read_pad_input : il ecrete I, II et L
+ * a 0x6A puis divise par 0x6A, si bien que la course utile s'arrete la ; et il
+ * fabrique les directions numeriques a partir de la torsion, droite au-dela de
+ * 0xA3, gauche en deca de 0x5E. On produit donc 0x6A pour un appui plein, et
+ * non 0xFF : au-dela, on gaspillerait la moitie de la course des gachettes.
+ *
+ * La croix directionnelle et les boutons de face restent branches : ils
+ * poussent la torsion et les pedales a fond. On ne perd rien en passant en
+ * analogique, on ajoute seulement les valeurs intermediaires.
+ */
+static int manette_negcon(unsigned char *q)
+{
+    const int PLEIN = 0x6A;
+    const int MORT = 3000;
+    int x, t, i, ii, l;
+    if (!manette) return 0;
+
+    x = SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_LEFTX);
+    if (x > -MORT && x < MORT) x = 0;
+    else x -= (x > 0 ? MORT : -MORT);
+    t = 0x80 + x * 127 / (32767 - MORT);
+    if (t < 0) t = 0;
+    if (t > 255) t = 255;
+
+    i  = SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) * PLEIN / 32767;
+    ii = SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_TRIGGERLEFT)  * PLEIN / 32767;
+    l  = 0;
+    if (i < 0) i = 0;
+    if (ii < 0) ii = 0;
+
+    /* Ce que le clavier ou les boutons demandent l'emporte : tout ou rien. */
+    if (!(boutons & 0x8000u)) t = 0x00;
+    if (!(boutons & 0x2000u)) t = 0xFF;
+    if (!(boutons & 0x0040u)) i = PLEIN;
+    if (!(boutons & 0x0020u)) ii = PLEIN;
+    if (!(boutons & 0x0004u)) l = PLEIN;
+
+    q[0] = (unsigned char)t;
+    q[1] = (unsigned char)i;
+    q[2] = (unsigned char)ii;
+    q[3] = (unsigned char)l;
+    return 1;
+}
+
+int video_negcon(unsigned char *q) { return manette_negcon(q); }
 
 static void touches(void)
 {

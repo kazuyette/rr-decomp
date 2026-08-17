@@ -125,6 +125,13 @@ u32 g_pad_buf[2];
 int g_pad_on;
 u32 g_pad_boutons = 0xFFFF;   /* actifs a zero : rien d'enfonce */
 
+/* Quel type de manette annoncer. Le jeu en connait deux, et sa fonction de
+   lecture branche sur l'octet de type : 0x41 pour la numerique, 0x23 pour le
+   neGcon de Namco. Le second donne un braquage et des pedales analogiques qui
+   existent deja dans le jeu de 1994 -- il a ete concu avec cette manette.
+   On l'annonce des qu'une vraie manette est branchee. */
+int mod_negcon = 1;
+
 /* Le scenario. Une liste « instant:touches », l'instant compte en battements
    de retour de balayage. Ecrit plutot qu'interactif, pour que deux executions
    donnent la meme image. */
@@ -148,13 +155,27 @@ void pad_ecrire(unsigned long tick)
         if (vivant != 0xFFFF) m = vivant;
     }
     g_pad_boutons = m;
-    for (i = 0; i < 2; i++) {
-        u32 p = g_pad_buf[i] & 0x1FFFFF;
-        if (!p) continue;
-        RAM[p + 0] = (i == 0) ? 0x00 : 0xFF;   /* seul le premier port existe */
-        RAM[p + 1] = 0x41;                     /* manette numerique */
-        RAM[p + 2] = (u8)(m >> 8);
-        RAM[p + 3] = (u8)m;
+    {
+        int video_negcon(unsigned char *);
+        unsigned char an[4];
+        int neg = g_video && mod_negcon && video_negcon(an);
+        for (i = 0; i < 2; i++) {
+            u32 p = g_pad_buf[i] & 0x1FFFFF;
+            if (!p) continue;
+            RAM[p + 0] = (i == 0) ? 0x00 : 0xFF; /* seul le premier port existe */
+            RAM[p + 1] = (i == 0 && neg) ? 0x23 : 0x41;
+            RAM[p + 2] = (u8)(m >> 8);
+            RAM[p + 3] = (u8)m;
+            /* Le tampon fait seize octets -- InitPAD2 le dit -- donc les quatre
+               octets analogiques tiennent sans deborder sur le second port, qui
+               commence huit octets plus loin. */
+            if (i == 0 && neg) {
+                RAM[p + 4] = an[0];
+                RAM[p + 5] = an[1];
+                RAM[p + 6] = an[2];
+                RAM[p + 7] = an[3];
+            }
+        }
     }
 }
 

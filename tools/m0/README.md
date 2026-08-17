@@ -99,9 +99,9 @@ python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
 
 | clavier | manette | PlayStation |
 |---|---|---|
-| flèches | croix directionnelle, stick gauche | croix directionnelle |
-| espace ou X | bouton du bas | croix — accélérer |
-| C | bouton de droite | rond — freiner |
+| flèches | croix directionnelle, stick gauche | croix directionnelle, torsion |
+| espace ou X | bouton du bas, gâchette basse droite | croix — accélérer |
+| C | bouton de droite, gâchette basse gauche | rond — freiner |
 | S, D | gauche, haut | carré, triangle |
 | A, E | gâchettes hautes | L1, R1 |
 | — | gâchettes basses | L2, R2 |
@@ -115,9 +115,34 @@ ce qui évite d'écrire une table par modèle. La première venue est prise, et
 elle peut arriver ou repartir en cours de partie — une manette qu'on rebranche
 remarche sans relancer le jeu.
 
-Le stick gauche est converti en croix directionnelle, avec une zone morte. Le
-transmettre tel quel demanderait d'annoncer un autre type de manette, que ce
-jeu de 1994 ne saurait pas lire.
+### Le neGcon, ou l'analogique qui était déjà là
+
+Ridge Racer a été conçu avec le neGcon de Namco, une manette dont le boîtier se
+tord et dont les boutons I et II mesurent l'appui. Sa lecture est **dans le jeu
+de 1994** : `read_pad_input`, en `0x8002E778`, teste l'octet de type du tampon
+et branche.
+
+```
+type 0x41  manette numérique   4 octets   les directions fabriquent le braquage
+type 0x23  neGcon              8 octets   torsion, bouton I, bouton II, gâchette L
+```
+
+Dans la branche neGcon, la torsion (octet 4, `0x80` au repos) devient
+directement l'angle de braquage, et les boutons I et II deviennent
+l'accélérateur et le frein : le jeu les écrête à `0x6A` puis divise par `0x6A`,
+ce qui donne une pédale sur 106 crans au lieu de deux positions. Il en refabrique
+au passage les bits numériques — droite au-delà de `0xA3`, gauche en deçà de
+`0x5E`, pédale enfoncée au-delà de `0x36` — pour le reste du code qui ne regarde
+que les boutons.
+
+Il n'y avait donc rien à écrire du côté du jeu : il suffit d'annoncer `0x23` et
+de remplir quatre octets de plus. C'est ce que fait `pad_ecrire` dès qu'une
+manette est branchée. Le stick gauche donne la torsion, les gâchettes basses
+donnent les pédales ; la croix directionnelle et les boutons de face restent
+branchés et poussent les mêmes valeurs à fond, de sorte qu'on ne perd rien.
+
+`MANETTE` dans le menu `F1` bascule entre `NEGCON` et `NUMERIQUE`, à chaud —
+c'est la façon la plus courte de vérifier ce que l'analogique change.
 
 L'image est présentée quand le jeu échange ses tampons, c'est-à-dire au moment
 exact où il déclare une image finie — pas au bout d'un compteur choisi par

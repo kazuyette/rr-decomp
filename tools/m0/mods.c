@@ -85,7 +85,7 @@ static const char ORDRE[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.-/<>*%()";
 extern double mod_hz;
 extern unsigned g_latence_octets;
 extern int g_cout_dessin;
-extern int mod_muet_musique, mod_muet_spu, mod_afficher_etat;
+extern int mod_muet_musique, mod_muet_spu, mod_afficher_etat, mod_negcon;
 
 static int hz_i = 60;
 static int lat_i = 40;
@@ -101,6 +101,7 @@ static void t_hz(int v, char *s)   { if (v) sprintf(s, "%d", v); else sprintf(s,
 static void t_ms(int v, char *s)   { sprintf(s, "%d MS", v); }
 static void t_oui(int v, char *s)  { strcpy(s, v ? "OUI" : "NON"); }
 static void t_non(int v, char *s)  { strcpy(s, v ? "NON" : "OUI"); }
+static void t_pad(int v, char *s)  { strcpy(s, v ? "NEGCON" : "NUMERIQUE"); }
 
 static void a_hz(int v)  { mod_hz = v; }
 static void a_lat(int v) { g_latence_octets = 44100u * 4u * (unsigned)v / 1000u; }
@@ -109,6 +110,7 @@ static void a_rien(int v){ (void)v; }
 static struct reglage REGLAGES[] = {
     { "IMAGES PAR SECONDE", &hz_i,               0, 240, 10, t_hz,  a_hz   },
     { "AVANCE DU SON",      &lat_i,              5, 200,  5, t_ms,  a_lat  },
+    { "MANETTE",            &mod_negcon,         0,   1,  1, t_pad, a_rien },
     { "COUT DU DESSIN",     &g_cout_dessin,      0,   1,  1, t_oui, a_rien },
     { "MUSIQUE",            &mod_muet_musique,   0,   1,  1, t_non, a_rien },
     { "BRUITAGES",          &mod_muet_spu,       0,   1,  1, t_non, a_rien },

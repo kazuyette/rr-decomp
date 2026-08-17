@@ -40,6 +40,7 @@ void video_fin(void) {}
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 int mods_ouvert(void);
 void mods_basculer(void);
 void mods_deplacer(int);
@@ -97,6 +98,18 @@ static void cadencer(void)
 int video_init(void)
 {
     SDL_SetMainReady();
+    /* Deux avis a donner a SDL avant qu'il ouvre quoi que ce soit.
+     *
+     * Sous Windows, SDL lit par defaut les manettes Xbox par RAWINPUT, qu'il
+     * recoupe ensuite avec XInput pour retrouver les gachettes. Quand ce
+     * recoupement echoue, on obtient une manette a moitie vivante : les axes
+     * repondent, les boutons restent a zero -- exactement ce qu'on a vu.
+     * XInput seul est plus ancien et moins fin, mais il rend tout.
+     *
+     * Et une manette ne doit pas se taire parce que la fenetre a perdu le
+     * dessus : on joue en regardant l'ecran, pas la barre des taches. */
+    SDL_SetHint(SDL_HINT_JOYSTICK_RAWINPUT, "0");
+    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL : %s\n", SDL_GetError());
         return 0;
@@ -155,8 +168,46 @@ static void manette_ouvrir(int index)
 {
     if (manette) return;
     manette = SDL_GameControllerOpen(index);
-    if (manette)
+    if (manette) {
+        SDL_Joystick *j = SDL_GameControllerGetJoystick(manette);
         printf("manette : %s\n", SDL_GameControllerName(manette));
+        /* Ce que le peripherique declare, avant toute interpretation. Une
+           manette qui annonce zero bouton n'est pas la meme panne qu'une
+           manette qui en annonce quatorze et n'en rend aucun. */
+        if (j)
+            printf("   %d boutons, %d axes, %d croix\n",
+                   SDL_JoystickNumButtons(j), SDL_JoystickNumAxes(j),
+                   SDL_JoystickNumHats(j));
+    }
+}
+
+/* L'etat brut, sans la couche « manette de jeu ». Sert a distinguer un
+   peripherique muet d'une correspondance qui ne correspond a rien. */
+static void manette_brut(void)
+{
+    static char avant[128];
+    char ligne[128], *p = ligne;
+    SDL_Joystick *j;
+    int i, n;
+    if (!manette) return;
+    j = SDL_GameControllerGetJoystick(manette);
+    if (!j) return;
+    p += sprintf(p, "brut : b");
+    n = SDL_JoystickNumButtons(j);
+    if (n > 20) n = 20;
+    for (i = 0; i < n; i++) *p++ = SDL_JoystickGetButton(j, i) ? '1' : '.';
+    n = SDL_JoystickNumHats(j);
+    if (n > 0) p += sprintf(p, " croix %02X", SDL_JoystickGetHat(j, 0));
+    n = SDL_JoystickNumAxes(j);
+    if (n > 6) n = 6;
+    for (i = 0; i < n; i++)
+        p += sprintf(p, " %d:%6d", i, SDL_JoystickGetAxis(j, i));
+    *p = 0;
+    if (strcmp(ligne, avant)) {
+        strcpy(avant, ligne);
+        printf("%s\n", ligne);
+        fflush(stdout);
+    }
 }
 
 static void manette_fermer(void)
@@ -312,6 +363,7 @@ static void touches(void)
     if (k[SDL_SCANCODE_A])        m &= ~0x0004u;   /* L1 */
     if (k[SDL_SCANCODE_E])        m &= ~0x0008u;   /* R1 */
     boutons = m & manette_lire();
+    { extern int mod_pad_vu; if (mod_pad_vu) manette_brut(); }
 }
 
 void video_image(const u16 *vram, int x, int y, int l, int h)

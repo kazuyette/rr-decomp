@@ -169,19 +169,14 @@ chaque voix puise des échantillons compressés à sa hauteur et son volume. Tou
 est mélangé avec la musique avant d'être poussé vers la carte son, comme le
 matériel le faisait.
 
-Deux écarts, tous deux visibles dans l'état des lieux final :
+Un écart connu : **l'enveloppe est approchée**. Le matériel suit des pentes
+exponentielles tabulées ; celle-ci en garde la forme avec des pentes linéaires
+par morceaux. Un son tenu sonne juste, une attaque très courte moins.
 
-- **L'enveloppe est approchée.** Le matériel suit des pentes exponentielles
-  tabulées ; celle-ci en garde la forme avec des pentes linéaires par morceaux.
-  Un son tenu sonne juste, une attaque très courte moins.
-- **Le bit d'activation est ignoré.** Le jeu allume ses voix alors que `SPUCNT`
-  vaut zéro, ce qui sur la console ne produirait rien — il ne le ferait donc
-  pas. Le défaut est chez nous : le pilote reconstruit ce registre à partir du
-  registre d'état, que nous ne modélisons qu'en partie. Plutôt que de rendre le
-  silence en attendant d'avoir compris, on mélange, et on **compte** les voix
-  demandées le SPU prétendument éteint. Ce compteur tombera à zéro le jour où
-  le registre d'état sera juste. `SPU_STRICT=1` rétablit la lettre du matériel,
-  et le silence avec elle.
+L'état des lieux compte les voix allumées alors que le SPU se dit éteint. Ce
+compteur vaut zéro, et c'est ce zéro qui atteste — il a valu 288 le temps
+qu'on comprenne que la faute n'était pas dans le SPU mais dans la lecture par
+demi-mot.
 
 La réverbération n'est pas implémentée : le jeu en écrit les registres, on les
 accepte et on les ignore.
@@ -220,7 +215,7 @@ reste une image. Un scénario écrit une fois continue de marcher.
 | M5 — la fenêtre : le jeu se joue au clavier | ✅ |
 | M6 — le temps compté, instructions et pixels | ✅ |
 | M7 — la musique : les pistes audio du disque | ✅ |
-| M8 — le SPU : moteur et bruitages | ~ (ça sonne, deux écarts documentés) |
+| M8 — le SPU : moteur et bruitages | ✅ (enveloppe approchée) |
 | M9 — GP0 vers le matériel | ✗ |
 
 ## Ce que ce banc a appris au reste du projet

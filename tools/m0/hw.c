@@ -588,6 +588,20 @@ static u32 irq_tick;
 
 void deliver_irq(void);
 
+/* La lecture par demi-mot. Les registres qui n'existent qu'en seize bits sont
+   servis tels quels ; les autres passent par la lecture de mot et en prennent
+   la moitie qui convient. */
+u32 hw_read16(u32 p)
+{
+    if (p >= 0x1F801C00 && p < 0x1F801E80) {
+        hw_reads++;
+        note(p, 0);
+        return spu_read16(p);
+    }
+    if (p >= 0x1F801800 && p <= 0x1F801803) return hw_read32(p) & 0xFFFF;
+    return hw_read32(p & ~3u) >> (8 * (p & 2));
+}
+
 u32 hw_read32(u32 p)
 {
     hw_reads++;

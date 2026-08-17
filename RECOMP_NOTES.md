@@ -1013,3 +1013,31 @@ moitié, dont le pilote dérive la valeur qu'il réécrit. Plutôt que de rendre
 silence en attendant d'avoir compris, on mélange et on compte — 288 voix par
 minute de jeu. Ce compteur est la mesure exacte de ce qui reste à comprendre,
 et il figure dans l'état des lieux à chaque exécution.
+
+### L'écart n'était pas dans le SPU
+
+Le compteur des voix allumées « SPU éteint » a fait son travail plus vite que
+prévu : il a désigné la faute, qui n'était pas là où le symptôme s'affichait.
+
+Le pilote fait un lire-modifier-écrire tout à fait propre sur `SPUCNT` —
+`lhu 0x1AA`, `andi`, `ori`, `sh 0x1AA`. Le bit d'activation ne pouvait se
+perdre que si la **lecture** rendait autre chose. Elle rendait autre chose :
+
+```c
+if (p >= 0x1F801000) return hw_read32(p & ~3u) >> (8 * (p & 2));
+```
+
+Une lecture de seize bits n'est pas une lecture de trente-deux dont on prend
+une moitié. Rabattre l'adresse sur le mot inférieur faisait lire le registre
+**voisin** — `SPUCNT` en 0x1F801DAA rendait la file de transfert du SPU,
+c'est-à-dire zéro. Le pilote y perdait l'activation à chaque passage.
+
+La moitié des registres du SPU sont à une adresse congrue à 2 modulo 4, donc
+la moitié se lisaient faux. Une lecture par demi-mot digne de ce nom les sert
+maintenant tels quels.
+
+Deux choses valent d'être retenues. La première est que ce défaut vivait dans
+`rt.h` depuis le premier jour, invisible : rien avant le SPU ne lisait un
+registre par demi-mot à une adresse impaire en mots. La seconde est que le
+compteur a suffi — mettre un nombre sur un écart plutôt que de le décrire
+donne quelque chose à faire tomber à zéro.

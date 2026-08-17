@@ -18,6 +18,7 @@ extern u32 COP0[32];
 u32 psx_syscall(u32, u32, u32, u32);
 
 u32  hw_read32(u32 phys);
+u32  hw_read16(u32 phys);
 void hw_write32(u32 phys, u32 v, int width);
 
 /* Le KUSEG, le KSEG0 et le KSEG1 designent la meme memoire physique : seuls
@@ -68,7 +69,15 @@ static inline u32 LH(u32 a)
     u32 p = PHYS(a);
     if (p < 0x200000) { u16 v; __builtin_memcpy(&v, RAM + p, 2); return v; }
     if (p >= 0x1F800000 && p < 0x1F800400) { u16 v; __builtin_memcpy(&v, SPAD + (p & 0x3FF), 2); return v; }
-    if (p >= 0x1F801000) return hw_read32(p & ~3u) >> (8 * (p & 2));
+    /* Une lecture de seize bits n'est pas une lecture de trente-deux dont on
+       prend une moitie. Beaucoup de registres du materiel se lisent par
+       demi-mot et n'ont aucun sens autrement : rabattre l'adresse sur le mot
+       inferieur, comme on le faisait, faisait lire le registre voisin.
+       C'est ainsi que SPUCNT, en 0x1F801DAA, rendait la file de transfert du
+       SPU -- c'est-a-dire zero. Le pilote, qui lit ce registre, le modifie et
+       le reecrit, y perdait le bit d'activation a chaque passage, et les
+       vingt-quatre voix jouaient pour un SPU qui se croyait eteint. */
+    if (p >= 0x1F801000) return hw_read16(p);
     return 0;
 }
 static inline u32 LB(u32 a)

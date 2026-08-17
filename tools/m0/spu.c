@@ -22,7 +22,6 @@
  * accepte et on les ignore.
  */
 #include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include "rt.h"
 
@@ -147,20 +146,13 @@ void spu_melanger(s16 *sortie, int trames)
 {
     int i, k;
     for (i = 0; i < trames; i++) { sortie[2 * i] = 0; sortie[2 * i + 1] = 0; }
-    /* Le bit d'activation, et pourquoi on l'ignore.
-     *
-     * Le jeu allume ses voix alors que SPUCNT vaut zero, ce qui sur la console
-     * ne produirait rien -- il ne le ferait donc pas. Le defaut est chez nous :
-     * le pilote reconstruit ce registre a partir du registre d'etat, que nous
-     * ne modelisons qu'en partie, et l'activation s'y perd.
-     *
-     * Plutot que de rendre le silence en attendant d'avoir compris, on melange
-     * les voix que le jeu demande, et on compte celles qu'il a demandees le
-     * SPU pretendument eteint. Le compteur dit l'ampleur de l'ecart, et il
-     * tombera a zero le jour ou le registre d'etat sera juste.
-     *
-     * SPU_STRICT=1 retablit la lettre du materiel, et le silence avec elle. */
-    if (!(ctrl & 0x8000) && getenv("SPU_STRICT")) return;
+    /* Le bit d'activation est respecte. Il ne l'a pas toujours ete : le jeu
+       allumait ses voix alors que ce registre valait zero, ce qui sur la
+       console ne produirait rien -- donc il ne le faisait pas, et le defaut
+       etait chez nous. Il n'etait pas dans le SPU mais dans la lecture par
+       demi-mot, qui rendait le registre voisin. Le compteur ci-dessous reste
+       en place : il vaut zero, et c'est ce zero qui atteste. */
+    if (!(ctrl & 0x8000)) return;
     for (k = 0; k < 24; k++) {
         struct voix *w = &v[k];
         int g, d;

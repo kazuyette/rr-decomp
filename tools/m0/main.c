@@ -565,6 +565,20 @@ void report(int sig)
         }
         if (etats_hors) printf("   (%lu images hors table)\n", etats_hors);
         printf("   %d etats sur 40 eprouves\n", n);
+        /* Un seul scenario ne peut pas tout visiter : la demonstration montre
+           ce que le menu ne montre pas, et reciproquement. En ajoutant chaque
+           execution a un fichier, la couverture s'accumule au lieu d'etre
+           recomptee -- et ce qui reste a atteindre se lit d'un coup d'oeil. */
+        {   const char *c = getenv("COUVERTURE");
+            if (c) {
+                FILE *f = fopen(c, "a");
+                if (f) {
+                    for (e = 0; e < 40; e++)
+                        if (etats_vus[e]) fprintf(f, "%d %lu\n", e, etats_vus[e]);
+                    fclose(f);
+                }
+            }
+        }
     }
     printf("commandes GP0 les plus frequentes :\n");
     {   /* trier par frequence : montrer les douze plus courantes, pas les

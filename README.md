@@ -63,7 +63,10 @@ count is exact, being derived from the splat listings.)
 > Reassembling one's own disassembly matches by construction and proves nothing about
 > recovered source. That tree has been replaced by the standard splat layout — one `.s` file
 > per function plus `INCLUDE_ASM` — so that progress is measurable and each conversion is a
-> one-line replacement. The old tree is preserved in the `archive/asm-transcription` tag.
+> one-line replacement. The old tree is kept locally under an `archive/` tag and is
+> deliberately **not published**: 87 683 lines of verbatim MIPS is disassembly, and this
+> repository does not distribute disassembly. The episode is recorded here instead, which
+> is the part that was worth keeping.
 
 ## The native runtime
 

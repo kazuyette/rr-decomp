@@ -24,6 +24,7 @@ import argparse
 import os
 import re
 import struct
+import shutil
 import subprocess
 import sys
 
@@ -272,6 +273,73 @@ def sdl_drapeaux(prefixe=None):
     return None
 
 
+def controle_prealable(a):
+    """Dire tout ce qui manque, avant de commencer à travailler.
+
+    Traduire neuf cent quarante-neuf fonctions prend une minute. Découvrir
+    ensuite qu'il n'y a pas de compilateur, par un « command not found » du
+    système, est une minute perdue et un message qui ne dit pas quoi faire.
+    On regarde donc tout d'abord, et on rend la liste entière : celui qui
+    installe trois choses d'un coup ne revient pas trois fois.
+    """
+    manques, avis = [], []
+
+    if not os.path.exists(a.exe):
+        manques.append(
+            "%s est introuvable.\n"
+            "   C'est ta propre copie de l'executable du jeu, extraite de ton\n"
+            "   disque (SLPS-00001). Rien ici ne la remplace." % a.exe)
+
+    if not os.path.isdir(os.path.join(RACINE, "asm")):
+        manques.append(
+            "asm/ est absent : le desassemblage n'a pas encore ete produit.\n"
+            "   make setup            # une fois, apres le clonage")
+
+    if not shutil.which(a.cc):
+        quoi = ("sudo apt install gcc-mingw-w64-x86-64" if a.windows
+                else "sudo apt install build-essential")
+        manques.append("le compilateur %s n'est pas dans le chemin.\n"
+                       "   %s" % (a.cc, quoi))
+
+    for drapeau, chemin in (("--iso", a.iso), ("--cue", a.cue)):
+        if chemin and not os.path.exists(chemin):
+            manques.append("%s %s : ce fichier n'existe pas." % (drapeau, chemin))
+
+    if a.sdl:
+        if not os.path.isdir(os.path.join(a.sdl, "include")):
+            manques.append(
+                "--sdl %s ne contient pas include/.\n"
+                "   Attendu : la racine livree par SDL pour MinGW, celle qui\n"
+                "   porte include/, lib/ et bin/ -- SDL2-x.y.z/x86_64-w64-mingw32,\n"
+                "   et non le dossier qui la contient." % a.sdl)
+        elif not os.path.exists(os.path.join(a.sdl, "bin", "SDL2.dll")):
+            avis.append("SDL2.dll est absente de %s/bin : il faudra la mettre a\n"
+                        "   cote du programme a la main, sinon Windows ne le\n"
+                        "   demarrera pas." % a.sdl)
+    elif a.windows:
+        avis.append("sans --sdl, le .exe n'aura ni fenetre ni son.\n"
+                    "   curl -LO https://github.com/libsdl-org/SDL/releases/"
+                    "download/release-2.30.9/SDL2-devel-2.30.9-mingw.tar.gz\n"
+                    "   tar xzf SDL2-devel-2.30.9-mingw.tar.gz\n"
+                    "   puis --sdl SDL2-2.30.9/x86_64-w64-mingw32")
+
+    if not a.iso:
+        avis.append("sans --iso, le jeu demarre puis s'arrete au chargement :\n"
+                    "   il lit ses fichiers sur le disque, pas dans l'executable.")
+    if not a.cue:
+        avis.append("sans --cue, pas de musique : les douze pistes sont des\n"
+                    "   pistes audio ordinaires, gravees a cote des donnees.")
+
+    for m in avis:
+        print("note : " + m)
+    if manques:
+        print("\nil manque %d chose%s avant de pouvoir construire :\n"
+              % (len(manques), "s" if len(manques) > 1 else ""))
+        for m in manques:
+            print(" * " + m + "\n")
+        sys.exit(1)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -289,6 +357,8 @@ def main():
     a = p.parse_args()
     if not a.cc:
         a.cc = "x86_64-w64-mingw32-gcc" if a.windows else "gcc"
+
+    controle_prealable(a)
 
     os.makedirs(a.out, exist_ok=True)
     definies, bouchons = ecrire_jeu(a.exe, os.path.join(a.out, "game.c"))

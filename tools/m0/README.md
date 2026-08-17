@@ -1,16 +1,20 @@
-# L'exécutable natif
+# The native runtime
 
-Ce dossier contient l'environnement d'exécution d'une **recompilation
-statique** de Ridge Racer : le code MIPS du jeu est traduit mécaniquement en C
-par `tools/recomp.py`, et tourne sur un modèle du matériel écrit ici. Le but
-n'est pas de faire un émulateur — c'est d'avoir un jalon qui démarre et qui
-progresse, et dans lequel chaque fonction décompilée pourra ensuite remplacer
-sa jumelle traduite, une par une, sans jamais casser le tout.
+This directory holds the runtime for a **static recompilation** of Ridge
+Racer: the game's MIPS code is translated to C mechanically by
+`tools/recomp.py`, and runs against a model of the hardware written here. The
+goal is not to build an emulator — it is to have a milestone that boots and
+keeps working, in which each decompiled function can later replace its
+translated twin, one at a time, without ever breaking the whole.
 
-Le code du jeu lui-même est **généré** depuis ta propre copie de `PSX.EXE` et
-n'est pas versionné, comme le reste du désassemblage.
+The game's own code is **generated** from your copy of `PSX.EXE` and is not
+committed, exactly like the rest of the disassembly.
 
-## Construire et lancer
+> **You need your own legally-owned copy of the game.** Nothing here ships game
+> data, and nothing here works without a disc you own. The two files taken from
+> it — `PSX.EXE` and an image of the data track — never leave your machine.
+
+## Build and run
 
 ```sh
 cp /path/to/PSX.EXE .
@@ -19,77 +23,95 @@ python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
 ./build/m0/m0 90 PSX.EXE
 ```
 
-Il te faut deux choses tirées de ta propre copie du jeu : `PSX.EXE`, et une
-image de la **piste de données** en secteurs de 2048 octets. Si tu pars d'une
-image BIN/CUE (2352 octets par secteur, ce que le lecteur lit vraiment) :
+Two things come from your own disc: `PSX.EXE`, and an image of the **data
+track** in 2048-byte sectors. If you start from a BIN/CUE image (2352 bytes per
+sector, which is what the drive actually reads):
 
 ```sh
 python3 tools/m0/bin2iso.py RidgeRacer.bin data.iso
 ```
 
-`PSX.EXE` se copie ensuite depuis l'image montée, ou s'extrait avec n'importe
-quel outil ISO 9660. Sans `--iso`, le jeu démarre puis s'arrête au chargement.
+`PSX.EXE` is then copied out of the mounted image, or extracted with any ISO
+9660 tool. Without `--iso` the game starts and then stops at loading — it reads
+its files from the disc, not from the executable.
 
-### Ce qu'il faut avoir installé
+### What you need installed
 
-Python 3 et un compilateur C, rien d'autre : `tools/setup.py` installe splat
-lui-même au premier appel. Sous Windows, passe par WSL — le banc utilise
-`getenv` et des chemins POSIX.
+Python 3 and a C compiler, and nothing else: `tools/setup.py` installs splat
+itself on first use. SDL2 is optional and gives you a window, sound and a
+gamepad. On Windows, either build under WSL or cross-compile — see
+[a Windows build](#a-windows-build).
 
-`build.py` recalcule la liste des fonctions à chaque construction, à partir du
-désassemblage — rien n'est figé dans un fichier qui se périmerait au premier
-symbole renommé. Il annonce le nombre de fonctions traduites et, s'il en reste,
-les **bouchons**, avec leur motif.
+`build.py` checks all of this before it starts, and names everything that is
+missing at once:
 
-Les images sortent en PPM, une toutes les cent tables d'affichage, dans le
-dossier `IMAGES` (le dossier courant par défaut) :
+```
+il manque 2 choses avant de pouvoir construire :
+
+ * PSX.EXE est introuvable.
+   C'est ta propre copie de l'executable du jeu, extraite de ton
+   disque (SLPS-00001). Rien ici ne la remplace.
+
+ * le compilateur gcc n'est pas dans le chemin.
+   sudo apt install build-essential
+```
+
+Translating 949 functions takes about a minute; finding out afterwards that
+there is no compiler, through a `command not found` from the shell, is a minute
+wasted and a message that does not say what to do.
+
+`build.py` recomputes the function list on every build from the disassembly —
+nothing is frozen in a file that would go stale the first time a symbol is
+renamed. It reports how many functions were translated and, if any remain, the
+**stubs**, with the reason for each.
+
+Frames are written as PPM, one every hundred display lists, into the `IMAGES`
+directory (the current one by default):
 
 ```sh
 IMAGES=/tmp/images ./build/m0/m0 90 PSX.EXE
 python3 tools/m0/ppm2png.py /tmp/images/*.ppm
 ```
 
-Par défaut, la sortie tient en quelques lignes : ce que le jeu imprime
-lui-même, puis un état des lieux à la fin. `VERBEUX=1` ajoute le journal des
-appels BIOS et le dialogue avec le lecteur — c'est un outil de mise au point,
-qui servait à trouver où le démarrage s'arrêtait. Maintenant qu'il ne s'arrête
-plus, il ne fait que cacher le reste.
+By default the output is a few lines: what the game prints itself, then a
+summary at the end. `VERBEUX=1` adds the BIOS call log and the conversation
+with the CD drive — a debugging tool, which served to find where booting
+stopped. Now that it no longer stops, it only hides the rest.
 
-## Le temps
+## Time
 
-Une recompilation statique n'a pas d'horloge. Le code traduit n'est plus
-cadencé par rien : il s'exécute à la vitesse de la machine hôte, et rien ne
-relie une instruction à un cycle. Il faut donc en fabriquer une, et le choix
-n'est pas neutre.
+A static recompilation has no clock. The translated code is paced by nothing:
+it runs at the speed of the host, and no instruction is tied to a cycle. One
+has to be manufactured, and the choice is not neutral.
 
-Elle bat ici sur les **accès mémoire** (`TICK()` dans `rt.h`), parce que c'est
-la seule chose que du code qui tourne ne peut pas s'abstenir de faire — une
-horloge cadencée sur les accès matériel ou sur les appels s'arrête précisément
-pendant qu'une boucle d'attente tourne en mémoire.
+It ticks here on **memory accesses** (`TICK()` in `rt.h`), because that is the
+one thing running code cannot abstain from doing — a clock ticking on hardware
+accesses or on calls stops precisely while a wait loop spins in memory.
 
-Restait un cas que ça ne couvre pas : `VSync` attend en interrogeant le
-compteur du BIOS, encore et encore, sans rien faire d'autre. Cette attente ne
-fait presque pas avancer une horloge cadencée sur le travail — le jeu y brûlait
-**3,2 milliards d'appels pour trois minutes**. Demander l'heure en boucle est
-pourtant l'aveu qu'on n'a rien à faire : le temps avance donc à chaque
-demande. C'est la détection de boucle d'attente des émulateurs sous sa forme la
-plus simple, celle où le code le dit lui-même. Dix fois plus d'images par
-seconde, sans toucher à la base de temps du reste.
+One case remained uncovered: `VSync` waits by polling the BIOS counter, over
+and over, doing nothing else. That wait barely advances a clock that ticks on
+work — the game burned **3.2 billion calls in three minutes**. But asking for
+the time in a loop is an admission of having nothing to do: so time advances on
+every request. This is emulator wait-loop detection in its simplest form, the
+one where the code says so itself. Ten times more frames per second, without
+touching anything else in the time base.
 
-## Les fichiers
+## The files
 
 | | |
 |---|---|
-| `rt.h` | La mémoire : 2 Mo de RAM, le bloc-notes de 1 Ko, l'aiguillage vers les registres. Et la base de temps, cadencée sur les accès mémoire — la seule chose que du code qui tourne ne peut pas s'abstenir de faire. |
-| `hw.c` | Le lecteur CD, les canaux DMA 2, 3 et 6, les interruptions, le journal des registres. |
-| `gpu.c` | Le rastériseur : mémoire vidéo 1024×512, polygones plats, dégradés et texturés, rectangles et sprites, traits, transferts dans les deux sens, palettes 4 et 8 bits, fenêtre de texture, semi-transparence dans ses quatre modes. Logiciel, parce que ce qu'on cherche à établir est la fidélité, pas la vitesse. |
-| `gte.c` | Le coprocesseur géométrique, vérifié contre une seconde implémentation indépendante (`gte_check.py`, 11 600 comparaisons, 29 encodages). |
-| `main.c` | Le chargeur, l'aiguillage des appels indirects, les appels BIOS, la manette. |
+| `rt.h` | Memory: 2 MB of RAM, the 1 KB scratchpad, the routing to hardware registers. And the time base, ticking on memory accesses. |
+| `hw.c` | The CD drive, DMA channels 2, 3, 4 and 6, interrupts, the register log. |
+| `gpu.c` | The rasteriser: 1024×512 video memory, flat, gouraud and textured polygons, rectangles and sprites, lines, transfers both ways, 4- and 8-bit CLUTs, texture window, semi-transparency in all four modes. Software, because what we are trying to establish is fidelity, not speed. |
+| `gte.c` | The geometry coprocessor, checked against an independent second implementation (`gte_check.py`, 11 600 comparisons, 29 encodings). |
+| `spu.c` | The 24 voices: ADPCM decoding and a real ADSR envelope. |
+| `main.c` | The loader, indirect-call dispatch, the BIOS calls, the controller. |
+| `video.c`, `audio.c`, `mods.c` | The window, the sound device, and the settings menu. All three are optional: without SDL2 the rest works exactly as before. |
 
-## La fenêtre
+## The window
 
-Si SDL2 est installé, `build.py` le détecte et le jeu s'ouvre dans une fenêtre,
-avec le clavier vivant :
+If SDL2 is installed, `build.py` finds it and the game opens in a window, with
+a live keyboard:
 
 ```sh
 sudo apt install libsdl2-dev     # Debian, Ubuntu, WSL
@@ -97,294 +119,300 @@ python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
 ./build/m0/m0 600 PSX.EXE
 ```
 
-| clavier | manette | PlayStation |
+| keyboard | gamepad | PlayStation |
 |---|---|---|
-| flèches | croix directionnelle, stick gauche | croix directionnelle, torsion |
-| espace ou X | bouton du bas, gâchette basse droite | croix — accélérer |
-| C | bouton de droite, gâchette basse gauche | rond — freiner |
-| S, D | gauche, haut | carré, triangle |
-| A, E | gâchettes hautes | L1, R1 |
-| — | gâchettes basses | L2, R2 |
-| entrée | start | start |
-| maj | select | select |
-| F1 | select (menu ouvert) | — ouvre les réglages |
-| échap | — | quitter |
+| arrows | d-pad, left stick | d-pad, twist |
+| space or X | bottom button, right trigger | cross — accelerate |
+| C | right button, left trigger | circle — brake |
+| S, D | left, top | square, triangle |
+| A, E | shoulder buttons | L1, R1 |
+| enter | start | start |
+| shift | back | select |
+| F1 | back (menu open) | — opens the settings |
+| escape | — | quit |
 
-SDL reconnaît la plupart des manettes et leur donne une disposition commune,
-ce qui évite d'écrire une table par modèle. La première venue est prise, et
-elle peut arriver ou repartir en cours de partie — une manette qu'on rebranche
-remarche sans relancer le jeu.
+The gamepad layout follows button *position*, not name: the bottom button
+accelerates and the right button brakes, whatever the pad calls them.
 
-### Une version Windows
+SDL recognises most gamepads and gives them a common layout, which saves
+writing a table per model. The first one found is taken, and it may arrive or
+leave mid-game — a pad you unplug and plug back in works again without
+restarting.
 
-Sur WSL, la manette ne traverse pas : le noyau de WSL n'a pas de pilote pour
-elle, et `usbipd` doit d'abord l'arracher à Windows qui la tient. Le plus court
-est alors de ne pas traverser du tout — de produire un `.exe` qui tourne du côté
-où la manette est déjà branchée. Le code ne change pas ; seul le compilateur
-change.
+The picture is presented when the game swaps its buffers, that is, at the exact
+moment it declares a frame finished — not after a counter we chose.
+`SANS_FENETRE=1` returns to the frames-on-disk mode.
+
+### A Windows build
+
+`build.py --windows` cross-compiles a native `.exe` with MinGW. The code does
+not change; only the compiler does.
 
 ```sh
 sudo apt install gcc-mingw-w64-x86-64
 curl -LO https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-mingw.tar.gz
 tar xzf SDL2-devel-2.30.9-mingw.tar.gz
 
-python3 tools/m0/build.py PSX.EXE --iso data.iso --cue disque.cue \
+python3 tools/m0/build.py PSX.EXE --iso data.iso --cue disc.cue \
         --windows --sdl SDL2-2.30.9/x86_64-w64-mingw32 --compile
 ```
 
-Les chemins du disque et des pistes sont notés en absolu dans le fichier
-généré, pour que le programme se lance de n'importe où. Avec `--windows` ils
-sont traduits comme WSL les traduit — `/mnt/e/...` devient `E:\...` — sans quoi
-le `.exe` ouvrirait un chemin que Windows ne connaît pas, rendrait des secteurs
-de zéros, et le jeu se plaindrait de « File not found » : une plainte exacte
-sur un fait faux, qui envoie chercher le défaut à l'autre bout de la chaîne.
-Le programme le dit maintenant lui-même, une fois, là où il le sait encore :
-`disque introuvable : <chemin>`.
-
-`SDL2.dll` est recopiée à côté du programme : Windows ne cherche pas les
-bibliothèques dans un chemin système, et sans elle le programme ne démarre pas
-du tout. Ensuite, depuis PowerShell et **à la racine du dépôt**, parce que
-l'image du disque et les pistes audio sont désignées par des chemins relatifs :
+`SDL2.dll` is copied next to the program: Windows does not look for libraries
+in a system path, and without it the program does not start at all. Then, from
+PowerShell:
 
 ```powershell
-.\build\win\m0.exe 100000 PSX.EXE
+.\build\m0\m0.exe 100000 PSX.EXE
 ```
 
-Trois différences, toutes dans `main.c`, `video.c` et `audio.c` :
+The disc and track paths are recorded absolute in the generated file, so the
+program can be launched from anywhere. With `--windows` they are translated the
+way WSL translates them — `/mnt/e/...` becomes `E:\...` — without which the
+`.exe` would open a path Windows does not know, get back sectors of zeros, and
+the game would complain "File not found": an exact complaint about a false
+fact, which sends you looking at the far end of the chain. The program now says
+so itself, once, where it still knows: `disque introuvable: <path>`.
 
-- l'alarme qui limite la durée est un signal sur Unix, un fil qui dort sur
-  Windows — ce qu'est une alarme vue de l'intérieur du système ;
-- SDL détourne `main()` par une macro sous Windows et réclame sa propre
-  bibliothèque de démarrage ; `SDL_MAIN_HANDLED` et `SDL_SetMainReady()`
-  disent que le `main` est déjà écrit, et le même code sert des deux côtés ;
-- le code traduit fait un objet de 949 fonctions, et le format d'objet de
-  Windows compte ses sections sur seize bits ; `-Wa,-mbig-obj` lève la limite.
+Three things do not port as they are:
 
-### Le neGcon, ou l'analogique qui était déjà là
+- the duration limit is a signal on Unix and a sleeping thread on Windows —
+  which is what an alarm is, seen from inside the system;
+- SDL diverts `main()` through a macro on Windows and wants its own startup
+  library; `SDL_MAIN_HANDLED` and `SDL_SetMainReady()` say the `main` is
+  already written, and the same code serves both sides;
+- the translated code makes one object of 949 functions, and Windows' object
+  format counts its sections in sixteen bits; `-Wa,-mbig-obj` lifts the limit.
 
-Ridge Racer a été conçu avec le neGcon de Namco, une manette dont le boîtier se
-tord et dont les boutons I et II mesurent l'appui. Sa lecture est **dans le jeu
-de 1994** : `read_pad_input`, en `0x8002E778`, teste l'octet de type du tampon
-et branche.
+SDL is also told to read gamepads through XInput rather than RAWINPUT. With
+RAWINPUT, an Xbox pad came back half alive on Windows — axes answered, buttons
+stayed at zero.
+
+### The neGcon, or the analogue that was already there
+
+Ridge Racer was designed alongside Namco's neGcon, a controller whose body
+twists and whose I and II buttons measure how hard they are pressed. Reading it
+is **in the 1994 game**: `read_pad_input`, at `0x8002E778`, tests the type byte
+of the pad buffer and branches.
 
 ```
-type 0x41  manette numérique   4 octets   les directions fabriquent le braquage
-type 0x23  neGcon              8 octets   torsion, bouton I, bouton II, gâchette L
+type 0x41  digital pad   4 bytes   the directions fabricate the steering
+type 0x23  neGcon        8 bytes   twist, button I, button II, L trigger
 ```
 
-Dans la branche neGcon, la torsion (octet 4, `0x80` au repos) devient
-directement l'angle de braquage, et les boutons I et II deviennent
-l'accélérateur et le frein : le jeu les écrête à `0x6A` puis divise par `0x6A`,
-ce qui donne une pédale sur 106 crans au lieu de deux positions. Il en refabrique
-au passage les bits numériques — droite au-delà de `0xA3`, gauche en deçà de
-`0x5E`, pédale enfoncée au-delà de `0x36` — pour le reste du code qui ne regarde
-que les boutons.
+In the neGcon branch, the twist (byte 4, `0x80` at rest) becomes the steering
+angle directly, and buttons I and II become throttle and brake: the game clamps
+them to `0x6A` then divides by `0x6A`, which gives a pedal with 106 steps
+instead of two positions. It rebuilds the digital bits from them along the way
+— right beyond `0xA3`, left below `0x5E`, pedal pressed beyond `0x36` — for the
+rest of the code, which only looks at buttons.
 
-Il n'y avait donc rien à écrire du côté du jeu : il suffit d'annoncer `0x23` et
-de remplir quatre octets de plus. C'est ce que fait `pad_ecrire` dès qu'une
-manette est branchée. Le stick gauche donne la torsion, les gâchettes basses
-donnent les pédales ; la croix directionnelle et les boutons de face restent
-branchés et poussent les mêmes valeurs à fond, de sorte qu'on ne perd rien.
+So there was nothing to write on the game's side: announcing `0x23` and filling
+four more bytes is all of it. The left stick gives the twist, the triggers give
+the pedals; the d-pad and face buttons stay connected and push the same values
+to their limits, so nothing is lost.
 
-`MANETTE` dans le menu `F1` bascule entre `NEGCON` et `NUMERIQUE`, à chaud —
-c'est la façon la plus courte de vérifier ce que l'analogique change.
+`MANETTE` in the `F1` menu switches between `NEGCON` and `NUMERIQUE` live —
+the shortest way to hear what the analogue path changes. `MANETTE_NUMERIQUE=1`
+forces the digital type without going through the menu.
 
-L'image est présentée quand le jeu échange ses tampons, c'est-à-dire au moment
-exact où il déclare une image finie — pas au bout d'un compteur choisi par
-nous. `SANS_FENETRE=1` revient au mode images sur disque.
+### Frame rate
 
-### La cadence
+Nothing throttles the translated code: it produces frames as fast as the host
+allows, and the car then accelerates several times too fast for a reason that
+has nothing to do with the game. On the console the video scan sets the tempo —
+sixty times a second in NTSC, which the Japanese release is.
 
-Rien ne bride le code traduit : il produit ses images aussi vite que la machine
-hôte le permet, et la voiture accélère alors plusieurs fois trop vite pour une
-raison qui n'a rien à voir avec le jeu. Sur la console, c'est le balayage vidéo
-qui donne le tempo — soixante fois par seconde en NTSC, ce qu'est la version
-japonaise.
-
-L'attente se fait donc dans l'échange de tampons, et pas ailleurs : le jeu y
-bloque déjà de lui-même, donc brider l'affichage bride tout le reste sans
-toucher à la base de temps. Le retard ne s'accumule pas — une image trop longue
-n'est pas rattrapée sur la suivante.
+The wait therefore happens in the buffer swap and nowhere else: the game
+already blocks there by itself, so throttling the display throttles everything
+else without touching the time base. Lateness does not accumulate — a frame
+that took too long is not made up for on the next one.
 
 ```sh
-HZ=30 ./build/m0/m0 600 PSX.EXE     # la cadence de la course sur console
-HZ=0  ./build/m0/m0 600 PSX.EXE     # aucune bride, pour mesurer
+HZ=30 ./build/m0/m0 600 PSX.EXE     # the rate the race holds on console
+HZ=0  ./build/m0/m0 600 PSX.EXE     # no throttle, for measuring
 ```
 
-**Comment savoir laquelle est juste** : le chronomètre de la course décompte
-des secondes. Lancer une course, regarder `TIME` descendre montre en soixante
-secondes réelles combien le jeu en a compté. Une unité par seconde, et la
-cadence est bonne.
+**How to tell which is right**: the race timer counts down in seconds. Start a
+race and watch `TIME` fall — in sixty real seconds, how many did the game
+count? One unit per second, and the rate is right.
 
-Sans SDL2, rien ne change : images sur disque et scénario, et `build.py` le dit
-au lieu de le taire.
+Without SDL2 nothing changes: frames on disk and a scripted controller, and
+`build.py` says so instead of keeping quiet about it.
 
-## Le menu des réglages
+## The settings menu
 
-`F1` ouvre un menu par-dessus le jeu : cadence, avance du son, coût du dessin,
-musique, bruitages, affichage de l'état courant. Les flèches naviguent et
-règlent ; tant qu'il est ouvert, la manette rend « rien d'enfoncé » au jeu,
-parce qu'on ne veut pas piloter et régler en même temps.
+`F1` opens a menu drawn over the game: frame rate, audio lead, draw cost,
+music, effects, controller type, and the state display. The arrow keys navigate
+and adjust; while it is open the pad returns "nothing pressed" to the game,
+because one does not want to drive and adjust at the same time. (Its labels are
+in French, like the source comments.)
 
-Pourquoi un menu à nous plutôt qu'une entrée dans celui du jeu : ajouter une
-ligne au menu OPTION de Ridge Racer demanderait d'abord de décompiler l'état
-18, qui est encore de l'assembleur traduit mécaniquement — on modifierait du
-code régénéré à chaque construction, et la modification ne survivrait pas. Ce
-menu-ci a de plus le droit de régler des choses que la console n'avait pas.
+Why a menu of our own rather than an entry in the game's: adding a line to
+Ridge Racer's OPTION menu would first require decompiling state 18, which is
+still mechanically translated assembly — one would be editing code that is
+regenerated on every build, and the edit would not survive. This menu also gets
+to adjust things the console did not have.
 
-Il se dessine dans l'image finale, **après** la mémoire vidéo et non dedans :
-le jeu ne peut donc pas l'effacer en redessinant, et nous ne salissons pas ce
-qu'il a produit. Les deux restent séparés, ce qui compte le jour où l'on
-compare une image à une référence.
+It is drawn into the final frame, **after** video memory and not into it: the
+game cannot erase it by redrawing, and we do not dirty what it produced. The
+two stay separate, which matters on the day one compares a frame against a
+reference.
 
-## Le son
+## Sound
 
-La bande-son de Ridge Racer n'est pas synthétisée : ce sont douze pistes audio
-ordinaires, gravées à côté des données, que la console lisait avec le même
-mécanisme que n'importe quel disque compact. Il n'y a donc pas de synthétiseur
-à écrire pour l'entendre — seulement des secteurs à servir au bon rythme.
+Ridge Racer's soundtrack is not synthesised: it is twelve ordinary audio
+tracks, burned next to the data, which the console read with the same mechanism
+as any compact disc. There is no synthesiser to write in order to hear it —
+only sectors to serve at the right rate.
 
-Donne la feuille `.cue` à la construction et garde les fichiers de pistes à
-côté :
+Give the `.cue` sheet to the build and keep the track files next to it:
 
 ```sh
 python3 tools/m0/build.py PSX.EXE \
     --iso data.iso --cue "Ridge Racer (Japan).cue" --compile
 ```
 
-Le format tombe juste : un secteur audio fait 2352 octets, soit exactement 588
-trames stéréo de seize bits à 44 100 Hz. Ni conversion ni rééchantillonnage.
-C'est la carte son qui donne le rythme — tant que sa file est assez remplie, on
-ne lit pas de secteur ; si notre horloge devait s'accorder avec elle, l'une
-dériverait de l'autre et le son craquerait.
+The format lines up exactly: an audio sector is 2352 bytes, which is exactly
+588 stereo frames of sixteen bits at 44 100 Hz. No conversion, no resampling.
+The sound card sets the pace — as long as its queue is full enough we read no
+sector; if our clock had to agree with it, one would drift from the other and
+the sound would crackle.
 
-`SANS_SON=1` coupe le son.
+`SANS_SON=1` turns the sound off.
 
-### L'avance de la file audio
+### The audio queue's lead
 
-On remplit la carte son d'une petite avance. C'est un compromis qui s'entend
-des deux côtés : trop courte, elle se retrouve à sec et l'on entend des trous ;
-trop longue, tout ce qui est déjà dans la file a été calculé **avant**
-l'événement qui vient de se produire — le son du choc part après le choc,
-d'autant de temps qu'il y a d'avance.
+We keep the sound card filled a little ahead. It is a trade-off audible from
+both sides: too short and it runs dry, and you hear gaps; too long and
+everything already queued was computed **before** the event that just happened
+— the crash sound starts after the crash, by exactly the lead.
 
-Cela ne s'entend pas sur la musique, qui est continue. Cela s'entend beaucoup
-sur les sons déclenchés, où l'oreille compare avec l'image.
+It cannot be heard on the music, which is continuous. It is very audible on
+triggered sounds, where the ear compares against the picture.
 
-La mesure donne un genou net : à 20 ms la file se vide 867 fois par minute, à
-40 elle se vide 8 fois, et au-delà on ne gagne plus rien. **40 ms** est donc le
-réglage, et `LATENCE=60` ou `LATENCE=25` permet d'en juger soi-même. L'état des
-lieux affiche l'avance et le nombre de fois où la file s'est trouvée à sec.
+Measuring gives a sharp knee: at 20 ms the queue runs dry 867 times a minute,
+at 40 it runs dry 8 times, and beyond that nothing is gained. **40 ms** is
+therefore the setting, and `LATENCE=60` or `LATENCE=25` lets you judge for
+yourself. The summary reports the lead and how many times the queue ran dry.
 
-### Le SPU
+### The SPU
 
-Le reste du son — moteur, crissements, voix — vient des vingt-quatre voix du
-SPU : un demi-mégaoctet de mémoire à part, rempli par le canal 4 du DMA, où
-chaque voix puise des échantillons compressés à sa hauteur et son volume. Tout
-est mélangé avec la musique avant d'être poussé vers la carte son, comme le
-matériel le faisait.
+The rest of the sound — engine, tyre squeal, voice — comes from the SPU's
+twenty-four voices: half a megabyte of separate memory, filled by DMA channel
+4, from which each voice draws compressed samples at its own pitch and volume.
+Everything is mixed with the music before being pushed to the sound card, as
+the hardware did.
 
-L'enveloppe suit les quatre phases du matériel avec leurs vraies pentes : un
-décalage donne la période, un pas donne l'amplitude, et en mode exponentiel
-une montée ralentit passé les trois quarts tandis qu'une descente se
-proportionne au niveau atteint — c'est ce qui donne aux extinctions leur
-traînée.
+The envelope follows the hardware's four phases with their real slopes: a shift
+gives the period, a step gives the amplitude, and in exponential mode a rise
+slows past three quarters while a fall scales with the level reached — which is
+what gives fade-outs their tail.
 
-Ce qui manque : **la réverbération**, dont on accepte les registres sans les
-honorer.
+The summary reports two counters worth their weight in admission. Voices
+sounding while the SPU claims to be off: **zero**, and it is that zero which
+attests — it stood at 288 for as long as it took to understand that the fault
+was not in the SPU but in the sixteen-bit read. And sweeping volumes, which we
+approximate by their starting value: **zero** as well; this game never uses
+them, so the approximation costs nothing here.
 
-L'état des lieux affiche deux compteurs qui valent leur pesant d'aveu. Les
-voix allumées alors que le SPU se dit éteint : **zéro**, et c'est ce zéro qui
-atteste — il a valu 288 le temps qu'on comprenne que la faute n'était pas dans
-le SPU mais dans la lecture par demi-mot. Et les volumes en balayage, que nous
-approchons par leur valeur de départ : **zéro** aussi, ce jeu ne s'en sert
-jamais, donc l'approximation ne coûte rien ici.
+Reverb is not implemented: the game writes its registers, we accept them and
+ignore them.
 
-La réverbération n'est pas implémentée : le jeu en écrit les registres, on les
-accepte et on les ignore.
+## The controller
 
-## La manette
-
-Le BIOS ne lit pas la manette à la demande : il remplit un tampon que le jeu
-consulte quand il veut. On l'alimente depuis un **scénario** écrit d'avance,
-pour que deux exécutions donnent la même image :
+The BIOS does not read the pad on demand: it fills a buffer the game consults
+when it likes. We can feed that from a **script** written in advance, so that
+two runs give the same frames:
 
 ```sh
 MANETTE="1200:start 1260: 1600:start 1660: 2200:croix" ./build/m0/m0 90 PSX.EXE
 ```
 
-Chaque terme est `instant:touches`, **l'instant compté en images dessinées** ;
-un instant sans touche relâche tout. Les noms reconnus : `start`, `select`,
+Each term is `moment:keys`, **the moment counted in frames drawn**; a moment
+with no key releases everything. The names recognised: `start`, `select`,
 `haut`, `bas`, `gauche`, `droite`, `croix`, `rond`, `triangle`, `carre`, `l1`,
-`r1`.
+`r1`. That script crosses the title screen, opens the menu, starts the race and
+holds the throttle.
 
-Ce scénario-là traverse l'écran-titre, ouvre le menu, lance la course et tient
-l'accélérateur.
+The unit is the frame and not the video beat, because it does not depend on the
+time base: retuning the clock shifts every beat, but a frame is still a frame.
+A script written once keeps working.
 
-L'unité est l'image et non le battement vidéo, parce qu'elle ne dépend pas de
-la base de temps : régler l'horloge décale tous les battements, mais une image
-reste une image. Un scénario écrit une fois continue de marcher.
+`MANETTE_VUE=1` prints what the controller actually returns — the sixteen-bit
+word, the announced type, the four analogue bytes, and the raw device state
+underneath SDL's game-controller layer:
 
-## Ce qu'on a réellement éprouvé
+```
+manette : FFFD  type 23  torsion 80  I 6A  II 00  L 00
+```
 
-Le jeu dispatche sur une table de quarante états (`0x80070EA4`, index en
-`0x801D34F8`). L'état des lieux les liste tous et dit combien d'images chacun a
-tournées — ou qu'il n'a jamais été atteint. C'est la seule façon honnête de
-répondre à « est-ce que ça marche » : **12 états sur 40** avec un scénario qui
-va jusqu'à la course, et vingt-huit qu'on n'a jamais vus tourner.
+That line is what found the RAWINPUT defect above. If it changes when you press
+something, SDL is reading and the game is ignoring; if it does not change,
+there is no point looking at the game side.
 
-Un défaut ne se manifeste que dans un état qu'on exécute. Les vingt-huit
-autres ne sont pas « sans doute bons » — ils sont **inconnus**.
+## What has actually been exercised
 
-Pour explorer, `planche.py` assemble les images en planche-contact :
+The game dispatches on a table of forty states (`0x80070EA4`, index at
+`0x801D34F8`). The summary lists them all and says how many frames each ran —
+or that it was never reached. That is the only honest answer to "does it work":
+**12 states out of 40** with a script that goes as far as the race, 17 when
+played by hand, and the rest never seen running.
+
+A defect only shows up in a state you execute. The others are not "probably
+fine" — they are **unknown**.
+
+To explore, `planche.py` assembles frames into a contact sheet:
 
 ```sh
 IMAGES=/tmp/images SANS_FENETRE=1 ./build/m0/m0 60 PSX.EXE
-python3 tools/m0/planche.py /tmp/images/*.ppm -o planche.png -c 6
+python3 tools/m0/planche.py /tmp/images/*.ppm -o sheet.png -c 6
 ```
 
-Trente images d'un coup font apparaître ce qu'une image isolée ne dit pas : un
-écran qui ne change plus, une couleur qui dérive, un retour en arrière qu'on
-n'attendait pas.
+Thirty frames at once reveal what a single frame does not: a screen that stops
+changing, a colour that drifts, a step backwards you were not expecting.
 
-## Où en est-on
+## Where things stand
 
-| jalon | état |
+| milestone | state |
 |---|---|
-| M0 — le jeu démarre et imprime son propre journal | ✅ |
-| M1 — il lit son disque et émet ses primitives | ✅ |
-| M2 — l'image : écran de chargement, écran-titre | ✅ |
-| M3 — la piste : la démonstration tourne | ✅ |
-| M4 — la manette : menu et course | ✅ |
-| M5 — la fenêtre : le jeu se joue au clavier | ✅ |
-| M6 — le temps compté, instructions et pixels | ✅ |
-| M7 — la musique : les pistes audio du disque | ✅ |
-| M8 — le SPU : moteur et bruitages | ✅ (enveloppe approchée) |
-| M9 — GP0 vers le matériel | ✗ |
+| M0 — the game boots and prints its own log | ✅ |
+| M1 — it reads its disc and emits its primitives | ✅ |
+| M2 — the picture: loading screen, title screen | ✅ |
+| M3 — the track: the demo runs | ✅ |
+| M4 — the controller: menu and race | ✅ |
+| M5 — the window: the game is playable on a keyboard | ✅ |
+| M6 — time counted, instructions and pixels | ✅ |
+| M7 — music: the disc's audio tracks | ✅ |
+| M8 — the SPU: engine and effects | ✅ (envelope approximated) |
+| M9 — GP0 to the host GPU | ✗ |
 
-M0 à M8 forment ensemble la version **v0.1.0** : le jeu se joue. Les jalons
-mesurent ce que le banc sait faire ; la version dit qu'on peut s'asseoir devant.
-Ce sont deux questions différentes, et aucune des deux n'est le pourcentage de
-décompilation, qui se compte ailleurs.
+M0 through M8 together make version **v0.1.0**: the game is playable. The
+milestones measure what the runtime can do; the version says you can sit down
+in front of it. Those are two different questions, and neither of them is the
+decompilation percentage, which is counted elsewhere.
 
-## Ce que ce banc a appris au reste du projet
+## What this runtime taught the rest of the project
 
-Les défauts trouvés ici sont documentés un par un dans
-[`RECOMP_NOTES.md`](../../RECOMP_NOTES.md). Le motif qui revient, et qui vaut
-d'être retenu :
+The defects found here are documented one by one in
+[`RECOMP_NOTES.md`](../../RECOMP_NOTES.md). The pattern that keeps recurring,
+and that is worth keeping:
 
-> **Un bouchon silencieux ne casse pas là où il est.**
+> **A silent stub does not break where it is.**
 
-`InitGeom` était remplacée par un bouchon parce qu'elle contient une unique
-instruction COP0. Elle règle aussi ZSF3 et ZSF4, les facteurs qui convertissent
-une profondeur en indice de table d'affichage. Sans eux, chaque polygone
-recevait la profondeur zéro, et le jeu — qui jette ce qui tombe à l'indice zéro
-— jetait la piste entière. Le symptôme, cinq fonctions plus loin : une image
-sans route.
+`InitGeom` was replaced by a stub because it contains a single COP0
+instruction. It also sets ZSF3 and ZSF4, the factors that turn a depth into a
+display-list index. Without them every polygon got depth zero, and the game —
+which discards whatever lands at index zero — discarded the entire track. The
+symptom, five functions away: a picture with no road.
 
-Le même motif, en trois autres exemplaires : un `jr` de table de saut envoyé au
-répartiteur global, qui coupait le gestionnaire d'interruption juste avant son
-acquittement ; un `strcpy` du BIOS non implémenté, qui rendait zéro sans rien
-copier et faisait conclure « File not found » à un jeu qui avait lu son disque
-correctement ; et un bit de sens de DMA ignoré, qui poussait le contenu de la
-pile dans le GPU.
+The same pattern, in five more copies: a jump table's `jr` sent to the global
+dispatcher, which cut the interrupt handler just before its acknowledge; an
+unimplemented BIOS `strcpy`, which returned zero without copying anything and
+made a game that had read its disc correctly conclude "File not found"; an
+ignored DMA direction bit, which pushed the contents of the stack into the GPU;
+a disc path that could not be opened, which returned sectors of zeros; and
+SDL's RAWINPUT driver, which returned a controller with working axes and dead
+buttons.
+
+Each of them was found the same way: by putting a **number** on the deviation
+and driving it to zero. Prose does not converge.

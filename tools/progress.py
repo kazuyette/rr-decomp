@@ -92,6 +92,15 @@ def c_definitions(text):
 
 def main():
     sizes = asm_sizes()
+    # Le garde-fou porte sur les tailles, pas sur le nombre de fonctions. Sans
+    # les objets reassembles, `sizes` est vide : les deux ensembles se vident
+    # par intersection, le total reste non nul grace aux seules references, et
+    # la division par le nombre d'instructions eclatait. Un depot fraichement
+    # clone tombait ainsi sur une trace d'exception la ou la premiere commande
+    # du README l'envoyait.
+    if not sizes:
+        print("nothing to report -- build/asm/*.o missing, run `make all` first")
+        return 1
     asm_refs, c_funcs, asm_funcs = set(), set(), set()
     for path in sorted(glob.glob(os.path.join(ROOT, "src", "*.c"))):
         text = open(path).read()

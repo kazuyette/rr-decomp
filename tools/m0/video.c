@@ -41,6 +41,10 @@ static SDL_Texture *texture;
 static int tex_l, tex_h;
 static int ferme;
 static u32 boutons = 0xFFFF;
+static SDL_GameController *manette;
+static void manette_ouvrir(int);
+static void manette_fermer(void);
+static u32 manette_lire(void);
 
 /* La cadence.
  *
@@ -81,7 +85,7 @@ static void cadencer(void)
 
 int video_init(void)
 {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL : %s\n", SDL_GetError());
         return 0;
     }
@@ -101,6 +105,13 @@ int video_init(void)
     /* Le filtrage lineaire adoucit un affichage 320 par 240 etire en 640 par
        480. C'est un gout, pas une fidelite : la console n'en avait pas. */
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+    {   /* Une manette deja branchee ne provoque pas d'evenement : il faut la
+           chercher une fois au demarrage. */
+        int i;
+        for (i = 0; i < SDL_NumJoysticks(); i++)
+            if (SDL_IsGameController(i)) { manette_ouvrir(i); break; }
+        if (!manette) printf("manette : aucune, le clavier fera l'affaire\n");
+    }
     {   /* HZ=0 pour ne rien brider, HZ=30 pour la cadence que la course tient
            sur la console -- le jeu y dessine une image sur deux balayages. */
         const char *h = getenv("HZ");
@@ -109,6 +120,63 @@ int video_init(void)
         else printf("fenetre : cadence libre\n");
     }
     return 1;
+}
+
+/* --- la manette ----------------------------------------------------------
+ *
+ * SDL sait reconnaitre la plupart des manettes et leur donner une disposition
+ * commune, ce qui evite d'ecrire une table par modele. On ouvre la premiere
+ * venue, et on accepte qu'elle arrive ou reparte en cours de partie -- une
+ * manette qu'on rebranche doit remarcher sans relancer le jeu.
+ *
+ * Le jeu ne connait que la manette numerique : celle de 1994 n'avait pas de
+ * joysticks. Le stick gauche est donc converti en croix directionnelle, avec
+ * une zone morte, plutot que transmis tel quel -- le transmettre demanderait
+ * d'annoncer un autre type de manette, que ce jeu ne saurait pas lire.
+ */
+static void manette_ouvrir(int index)
+{
+    if (manette) return;
+    manette = SDL_GameControllerOpen(index);
+    if (manette)
+        printf("manette : %s\n", SDL_GameControllerName(manette));
+}
+
+static void manette_fermer(void)
+{
+    if (manette) { SDL_GameControllerClose(manette); manette = 0; }
+}
+
+static u32 manette_lire(void)
+{
+    u32 m = 0xFFFF;
+    int x, y;
+    const int MORT = 12000;      /* zone morte : un stick au repos n'est jamais
+                                    exactement au centre */
+    if (!manette) return m;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_UP))    m &= ~0x1000u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) m &= ~0x2000u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  m &= ~0x4000u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_LEFT))  m &= ~0x8000u;
+    /* La disposition suit la position des boutons, pas leur nom : le bouton du
+       bas accelere, celui de droite freine, comme la croix et le rond. */
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_A))     m &= ~0x0040u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_B))     m &= ~0x0020u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_X))     m &= ~0x0080u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_Y))     m &= ~0x0010u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  m &= ~0x0004u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) m &= ~0x0008u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_START)) m &= ~0x0800u;
+    if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_BACK))  m &= ~0x0100u;
+    if (SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_TRIGGERLEFT)  > 8000) m &= ~0x0001u;
+    if (SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 8000) m &= ~0x0002u;
+    x = SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_LEFTX);
+    y = SDL_GameControllerGetAxis(manette, SDL_CONTROLLER_AXIS_LEFTY);
+    if (x < -MORT) m &= ~0x8000u;
+    if (x >  MORT) m &= ~0x2000u;
+    if (y < -MORT) m &= ~0x1000u;
+    if (y >  MORT) m &= ~0x4000u;
+    return m;
 }
 
 static void touches(void)
@@ -131,7 +199,33 @@ static void touches(void)
         default: break;
         }
     }
-    if (mods_ouvert()) { boutons = 0xFFFF; return; }
+    /* Les evenements de branchement sont traites a part : ils n'ont pas de
+       touche associee, et la boucle ci-dessus ne regarde que le clavier. */
+    {
+        SDL_Event f;
+        SDL_PumpEvents();
+        while (SDL_PeepEvents(&f, 1, SDL_GETEVENT,
+                              SDL_CONTROLLERDEVICEADDED,
+                              SDL_CONTROLLERDEVICEREMOVED) > 0) {
+            if (f.type == SDL_CONTROLLERDEVICEADDED) manette_ouvrir(f.cdevice.which);
+            else manette_fermer();
+        }
+    }
+    /* Le menu se pilote aussi a la manette : la croix directionnelle et le
+       bouton du bas, comme au clavier. */
+    if (mods_ouvert()) {
+        static u32 avant = 0xFFFF;
+        u32 g = manette_lire();
+        u32 nouveau = avant & ~g;          /* ce qui vient d'etre enfonce */
+        if (nouveau & 0x1000u) mods_deplacer(-1);
+        if (nouveau & 0x4000u) mods_deplacer(+1);
+        if (nouveau & 0x8000u) mods_changer(-1);
+        if (nouveau & 0x2000u) mods_changer(+1);
+        if (nouveau & 0x0100u) mods_basculer();
+        avant = g;
+        boutons = 0xFFFF;
+        return;
+    }
     k = SDL_GetKeyboardState(NULL);
     /* La disposition suit ce qu'on a sous les doigts, pas la sérigraphie de la
        manette : les flèches dirigent, la barre d'espace accélère. */
@@ -149,7 +243,7 @@ static void touches(void)
     if (k[SDL_SCANCODE_S])        m &= ~0x0080u;   /* carre    */
     if (k[SDL_SCANCODE_A])        m &= ~0x0004u;   /* L1 */
     if (k[SDL_SCANCODE_E])        m &= ~0x0008u;   /* R1 */
-    boutons = m;
+    boutons = m & manette_lire();
 }
 
 void video_image(const u16 *vram, int x, int y, int l, int h)

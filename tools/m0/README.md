@@ -97,16 +97,27 @@ python3 tools/m0/build.py PSX.EXE --iso data.iso --compile
 ./build/m0/m0 600 PSX.EXE
 ```
 
-| touche | manette |
-|---|---|
-| flèches | croix directionnelle |
-| espace ou X | croix — accélérer |
-| C | rond — freiner |
-| S, D | carré, triangle |
-| A, E | L1, R1 |
-| entrée | start |
-| maj | select |
-| échap | quitter |
+| clavier | manette | PlayStation |
+|---|---|---|
+| flèches | croix directionnelle, stick gauche | croix directionnelle |
+| espace ou X | bouton du bas | croix — accélérer |
+| C | bouton de droite | rond — freiner |
+| S, D | gauche, haut | carré, triangle |
+| A, E | gâchettes hautes | L1, R1 |
+| — | gâchettes basses | L2, R2 |
+| entrée | start | start |
+| maj | select | select |
+| F1 | select (menu ouvert) | — ouvre les réglages |
+| échap | — | quitter |
+
+SDL reconnaît la plupart des manettes et leur donne une disposition commune,
+ce qui évite d'écrire une table par modèle. La première venue est prise, et
+elle peut arriver ou repartir en cours de partie — une manette qu'on rebranche
+remarche sans relancer le jeu.
+
+Le stick gauche est converti en croix directionnelle, avec une zone morte. Le
+transmettre tel quel demanderait d'annoncer un autre type de manette, que ce
+jeu de 1994 ne saurait pas lire.
 
 L'image est présentée quand le jeu échange ses tampons, c'est-à-dire au moment
 exact où il déclare une image finie — pas au bout d'un compteur choisi par

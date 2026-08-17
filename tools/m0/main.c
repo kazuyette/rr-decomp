@@ -524,6 +524,14 @@ void report(int sig)
     }
     {   extern unsigned long g_vblanks;
         extern unsigned long long g_pixels, g_cycles;
+        { extern unsigned long spu_voix_jouees, dma4_done;
+          { extern int spu_crete;
+            extern unsigned long spu_voix_eteint;
+            printf("SPU                : %lu voix, %lu transferts, crete %d\n",
+                   spu_voix_jouees, dma4_done, spu_crete);
+            if (spu_voix_eteint)
+                printf("   dont %lu allumees le SPU dit eteint -- notre modele du"
+                       " registre d'etat est incomplet\n", spu_voix_eteint); } }
         { extern unsigned long cd_secteurs_audio;
           printf("musique            : %lu secteurs, %.1f s\n",
                  cd_secteurs_audio, cd_secteurs_audio / 75.0); }

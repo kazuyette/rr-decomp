@@ -159,9 +159,32 @@ C'est la carte son qui donne le rythme — tant que sa file est assez remplie, o
 ne lit pas de secteur ; si notre horloge devait s'accorder avec elle, l'une
 dériverait de l'autre et le son craquerait.
 
-`SANS_SON=1` coupe la musique. Les bruits de moteur, eux, viennent du SPU, qui
-n'est pas encore écrit — c'est ce dont `ss_init error` se plaint à chaque
-démarrage.
+`SANS_SON=1` coupe le son.
+
+### Le SPU
+
+Le reste du son — moteur, crissements, voix — vient des vingt-quatre voix du
+SPU : un demi-mégaoctet de mémoire à part, rempli par le canal 4 du DMA, où
+chaque voix puise des échantillons compressés à sa hauteur et son volume. Tout
+est mélangé avec la musique avant d'être poussé vers la carte son, comme le
+matériel le faisait.
+
+Deux écarts, tous deux visibles dans l'état des lieux final :
+
+- **L'enveloppe est approchée.** Le matériel suit des pentes exponentielles
+  tabulées ; celle-ci en garde la forme avec des pentes linéaires par morceaux.
+  Un son tenu sonne juste, une attaque très courte moins.
+- **Le bit d'activation est ignoré.** Le jeu allume ses voix alors que `SPUCNT`
+  vaut zéro, ce qui sur la console ne produirait rien — il ne le ferait donc
+  pas. Le défaut est chez nous : le pilote reconstruit ce registre à partir du
+  registre d'état, que nous ne modélisons qu'en partie. Plutôt que de rendre le
+  silence en attendant d'avoir compris, on mélange, et on **compte** les voix
+  demandées le SPU prétendument éteint. Ce compteur tombera à zéro le jour où
+  le registre d'état sera juste. `SPU_STRICT=1` rétablit la lettre du matériel,
+  et le silence avec elle.
+
+La réverbération n'est pas implémentée : le jeu en écrit les registres, on les
+accepte et on les ignore.
 
 ## La manette
 
@@ -197,7 +220,7 @@ reste une image. Un scénario écrit une fois continue de marcher.
 | M5 — la fenêtre : le jeu se joue au clavier | ✅ |
 | M6 — le temps compté, instructions et pixels | ✅ |
 | M7 — la musique : les pistes audio du disque | ✅ |
-| M8 — le SPU : moteur et bruitages | ✗ (`ss_init error`) |
+| M8 — le SPU : moteur et bruitages | ~ (ça sonne, deux écarts documentés) |
 | M9 — GP0 vers le matériel | ✗ |
 
 ## Ce que ce banc a appris au reste du projet

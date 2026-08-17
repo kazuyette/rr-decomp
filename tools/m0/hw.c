@@ -91,6 +91,32 @@ extern unsigned long gp0_words, gp1_cmds, prim_count, prim_hist[256], gpu_frames
 static u32 dma2_madr, dma2_bcr, dma2_chcr;
 static u32 dma3_madr, dma3_bcr, dma3_chcr;
 static u32 dma6_madr, dma6_bcr, dma6_chcr;
+static u32 dma4_madr, dma4_bcr, dma4_chcr;
+static u32 dicr = 0;
+
+/* La fin d'un transfert leve une interruption, si le canal l'a demandee.
+ *
+ * Le jeu ne surveille pas le registre : il ouvre un evenement et s'endort
+ * dessus. Sans l'interruption, l'evenement n'arrive jamais et l'attente est
+ * eternelle -- c'est exactement ou le son se bloquait, une fois son
+ * initialisation reussie. Le registre de controle porte les autorisations
+ * dans ses bits 16 a 22 et les drapeaux dans les bits 24 a 30 ; le bit 31
+ * resume, et c'est lui qui declenche. */
+static void dma_fini(int canal)
+{
+    if (!(dicr & (1u << (16 + canal)))) return;
+    dicr |= 1u << (24 + canal);
+    if (dicr & (1u << 23)) {
+        dicr |= 0x80000000u;
+        irq_raise(0x0008);            /* la source « DMA » */
+    }
+}
+unsigned long dma4_done;
+void spu_write16(u32, u16);
+u16 spu_read16(u32);
+void spu_dma(const u8 *, u32, u32);
+void spu_melanger(s16 *, int);
+int spu_actif(void);
 unsigned long otc_runs;
 unsigned long dma3_done;
 unsigned long ot_lists, ot_nodes, ot_broken, dma2_blocks;
@@ -269,17 +295,45 @@ trouve:
     audio_vider();
 }
 
-/* Appele regulierement : on remplit la file jusqu'a un quart de seconde. */
+/* Le melange, appele regulierement : on remplit la file de la carte son
+   jusqu'a un quart de seconde d'avance.
+ *
+ * Deux sources s'y rejoignent -- les pistes du disque et les vingt-quatre voix
+ * du SPU -- et il faut bien qu'elles se rejoignent quelque part. Les pousser
+ * separement reviendrait a demander deux sorties a la carte son, ou a laisser
+ * l'une effacer l'autre. On additionne donc, en saturant : c'est ce que le
+ * materiel faisait de toute facon, la sortie du lecteur passant par le meme
+ * melangeur que les voix.
+ *
+ * L'unite est le secteur, soit 588 trames : c'est le grain du disque, et il
+ * tombe juste sur la frequence de sortie. */
 static void cd_audio_alimenter(void)
 {
     static u8 secteur[2352];
-    if (!cd_joue || !cd_audio_f || !cd_audio_dispo) return;
-    while (audio_en_attente() < 44100u * 4u / 4u && cd_audio_reste) {
-        if (fread(secteur, 1, 2352, cd_audio_f) != 2352) { cd_audio_reste = 0; break; }
+    static s16 voix[588 * 2];
+    if (!cd_audio_dispo) return;
+    while (audio_en_attente() < 44100u * 4u / 4u) {
+        s16 *cd = (s16 *)secteur;
+        int i, lu = 0;
+        if (cd_joue && cd_audio_f && cd_audio_reste) {
+            if (fread(secteur, 1, 2352, cd_audio_f) == 2352) {
+                lu = 1; cd_audio_secteur++; cd_audio_reste--; cd_secteurs_audio++;
+            } else {
+                cd_audio_reste = 0;
+            }
+        }
+        if (!lu) memset(secteur, 0, sizeof secteur);
+        spu_melanger(voix, 588);
+        for (i = 0; i < 588 * 2; i++) {
+            int somme = (int)cd[i] + (int)voix[i];
+            if (somme > 32767) somme = 32767;
+            if (somme < -32768) somme = -32768;
+            cd[i] = (s16)somme;
+        }
         audio_pousser(secteur, 2352);
-        cd_audio_secteur++;
-        cd_audio_reste--;
-        cd_secteurs_audio++;
+        /* Sans musique ni voix, inutile de remplir la file indefiniment : on
+           s'arrete des qu'il y a de quoi tenir, sinon on tournerait ici. */
+        if (!lu && !spu_actif()) break;
     }
 }
 
@@ -565,6 +619,10 @@ u32 hw_read32(u32 p)
     case 0x1F8010B0: return dma3_madr;
     case 0x1F8010B4: return dma3_bcr;
     case 0x1F8010B8: return dma3_chcr;
+    case 0x1F8010C0: return dma4_madr;
+    case 0x1F8010C4: return dma4_bcr;
+    case 0x1F8010C8: return dma4_chcr;
+    case 0x1F8010F4: return dicr;
     case 0x1F8010E0: return dma6_madr;
     case 0x1F8010E4: return dma6_bcr;
     case 0x1F8010E8: return dma6_chcr;
@@ -572,7 +630,9 @@ u32 hw_read32(u32 p)
     case 0x1F801802: case 0x1F801803: return cd_read(p);
     case 0x1F801070: return istat;
     case 0x1F801074: return imask;
-    default: return 0;
+    default:
+        if (p >= 0x1F801C00 && p < 0x1F801E80) return spu_read16(p);
+        return 0;
     }
 }
 
@@ -652,6 +712,28 @@ void hw_write32(u32 p, u32 v, int width)
             otc_runs++;
         }
         break;
+    case 0x1F8010F4:
+        /* Les drapeaux s'acquittent en ecrivant un : on les efface donc la ou
+           l'ecriture les pose, et on garde le reste tel quel. */
+        dicr = (dicr & ~0x00FF803Fu & ~(v & 0x7F000000u)) | (v & 0x00FF803Fu);
+        if (!(dicr & 0x7F000000u)) dicr &= ~0x80000000u;
+        break;
+    case 0x1F8010C0: dma4_madr = v; break;
+    case 0x1F8010C4: dma4_bcr = v; break;
+    case 0x1F8010C8:
+        /* Canal 4 : la memoire principale alimente le SPU. Sans lui, les voix
+           liraient un demi-mega-octet de zeros -- ce qui s'entend fort bien,
+           puisque cela ne s'entend pas du tout. */
+        dma4_chcr = v;
+        if (v & 0x01000000u) {
+            u32 mots = (dma4_bcr & 0xFFFF) * ((dma4_bcr >> 16) & 0xFFFF);
+            if (!mots) mots = (dma4_bcr & 0xFFFF);
+            if (v & 1) spu_dma(RAM, dma4_madr & 0x1FFFFC, mots * 4);
+            dma4_chcr &= ~0x01000000u;
+            dma4_done++;
+            dma_fini(4);
+        }
+        break;
     case 0x1F8010A0: dma2_madr = v; break;
     case 0x1F8010A4: dma2_bcr = v; break;
     case 0x1F8010A8:
@@ -687,7 +769,9 @@ void hw_write32(u32 p, u32 v, int width)
             dma2_chcr &= ~0x01000000u;
         }
         break;
-    default: break;
+    default:
+        if (p >= 0x1F801C00 && p < 0x1F801E80) spu_write16(p, (u16)v);
+        break;
     }
 }
 

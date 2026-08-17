@@ -263,7 +263,7 @@ def main():
         print("pistes : aucune (--cue absent) -- pas de musique")
 
     sources = [os.path.join(ICI, f)
-               for f in ("main.c", "hw.c", "gpu.c", "gte.c", "video.c", "audio.c")]
+               for f in ("main.c", "hw.c", "gpu.c", "gte.c", "video.c", "audio.c", "spu.c")]
     sources += [os.path.join(a.out, f) for f in ("game.c", "table.c", "cdfiles.c", "ram.c")]
     cmd = [a.cc, "-O1", "-w", "-fcommon", "-I", ICI,
            "-o", os.path.join(a.out, "m0")] + sources

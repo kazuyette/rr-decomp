@@ -981,3 +981,35 @@ donne le début réel de chaque piste, après les deux secondes de silence que
 porte son fichier — les oublier décalerait toute la musique.
 
 Le jeu réclame la piste 8 au menu. Reste le SPU, pour le moteur.
+
+## M8 : le SPU
+
+`ss_init error` accusait le SPU absent ; il a disparu dès que les vingt-quatre
+voix ont existé. Mais il fallait d'abord démêler ce que le jeu disait.
+
+**`3312 > 3264` n'était pas un défaut.** Ces deux nombres sortent d'un `printf`
+aux constantes figées dans le binaire — `li a1,0xCF0`, `li a2,0xCC0` — imprimé
+sans condition, dans une fonction qui ne fait rien d'autre qu'initialiser un
+pointeur. C'est un avertissement de développeur que Namco a expédié tel quel
+vers le port série que personne ne branche. Il s'imprime aussi sur une console.
+Seul `ss_init error`, conditionnel lui, nous accusait.
+
+**Le blocage était ailleurs que dans le son.** Une fois l'initialisation
+réussie, le jeu allait plus loin et s'endormait sur un événement de fin de
+transfert DMA que nous ne délivrions pas. Le registre de contrôle du DMA porte
+les autorisations dans ses bits 16 à 22 et les drapeaux dans les bits 24 à 30 ;
+sans lui, l'événement n'arrive jamais. Le jeu n'a pas planté — il a attendu,
+seize images en deux minutes.
+
+**Ce qui marche** : la mémoire du SPU et son transfert (491 072 octets d'un
+coup, la banque entière), la décompression ADPCM avec ses boucles, la hauteur,
+les volumes, l'allumage et l'extinction. Crête mesurée à 35 574 sur du
+saturé — les voix produisent bien du son.
+
+**Ce qui ne marche pas encore, et qui se compte** : le jeu allume ses voix
+alors que `SPUCNT` vaut zéro. Sur la console cela ne produirait rien, donc il
+ne le ferait pas : le défaut est chez nous, dans un registre d'état modélisé à
+moitié, dont le pilote dérive la valeur qu'il réécrit. Plutôt que de rendre le
+silence en attendant d'avoir compris, on mélange et on compte — 288 voix par
+minute de jeu. Ce compteur est la mesure exacte de ce qui reste à comprendre,
+et il figure dans l'état des lieux à chaque exécution.

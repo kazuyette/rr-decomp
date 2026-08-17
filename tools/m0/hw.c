@@ -262,6 +262,10 @@ static FILE *cd_audio_f;
 static u32 cd_audio_secteur;      /* position dans le fichier de la piste */
 static u32 cd_audio_reste;
 unsigned long cd_secteurs_audio;
+unsigned long audio_vides;
+static int audio_amorce;
+/* Quarante millisecondes : deux images a soixante par seconde. */
+unsigned g_latence_octets = 44100u * 4u * 40u / 1000u;
 
 static void cd_audio_ouvrir(int piste)
 {
@@ -296,7 +300,18 @@ trouve:
 }
 
 /* Le melange, appele regulierement : on remplit la file de la carte son
-   jusqu'a un quart de seconde d'avance.
+   jusqu'a la latence choisie.
+ *
+ * Cette avance est un compromis, et il s'entend des deux cotes. Trop courte,
+ * la carte son se retrouve a sec et l'on entend des trous. Trop longue, tout
+ * ce qui est deja dans la file a ete calcule AVANT l'evenement qui vient de se
+ * produire -- le son du choc part apres le choc, d'autant de temps qu'il y a
+ * d'avance. C'etait un quart de seconde ; c'est desormais quarante
+ * millisecondes, et le compteur de fois ou la file s'est videe dit si l'on est
+ * alle trop loin.
+ *
+ * Ce reglage n'aurait pas d'importance sur du son continu comme la musique :
+ * il n'en a que pour les sons declenches, ou l'oreille compare avec l'image.
  *
  * Deux sources s'y rejoignent -- les pistes du disque et les vingt-quatre voix
  * du SPU -- et il faut bien qu'elles se rejoignent quelque part. Les pousser
@@ -312,7 +327,12 @@ static void cd_audio_alimenter(void)
     static u8 secteur[2352];
     static s16 voix[588 * 2];
     if (!cd_audio_dispo) return;
-    while (audio_en_attente() < 44100u * 4u / 4u) {
+    while (audio_en_attente() < g_latence_octets) {
+        /* On ne compte le vide qu'une fois la sortie amorcee : avant le
+           premier remplissage, la file est vide par construction et non par
+           accident. */
+        if (audio_amorce && audio_en_attente() == 0) audio_vides++;
+        audio_amorce = 1;
         s16 *cd = (s16 *)secteur;
         int i, lu = 0;
         if (cd_joue && cd_audio_f && cd_audio_reste) {

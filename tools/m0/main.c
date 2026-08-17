@@ -535,8 +535,12 @@ void report(int sig)
                 printf("   dont %lu allumees le SPU dit eteint -- notre modele du"
                        " registre d'etat est incomplet\n", spu_voix_eteint); } }
         { extern unsigned long cd_secteurs_audio;
+          extern unsigned long audio_vides;
+          extern unsigned g_latence_octets;
           printf("musique            : %lu secteurs, %.1f s\n",
-                 cd_secteurs_audio, cd_secteurs_audio / 75.0); }
+                 cd_secteurs_audio, cd_secteurs_audio / 75.0);
+          printf("son                : %u ms d'avance, %lu fois a sec\n",
+                 g_latence_octets * 1000u / (44100u * 4u), audio_vides); }
         printf("balayages          : %lu\n", g_vblanks);
         printf("instructions       : %llu\n", g_cycles);
         printf("pixels dessines    : %llu", g_pixels);
@@ -664,6 +668,13 @@ int main(int argc, char **argv)
     g_sp = 0x801FFF00u;
 
     g_verbeux = getenv("VERBEUX") ? 1 : 0;
+    {   /* L'avance de la file audio, en millisecondes. Plus court, le son
+           colle mieux a l'image ; trop court, il se troue. */
+        extern unsigned g_latence_octets;
+        const char *l = getenv("LATENCE");
+        if (l) { unsigned ms = (unsigned)atoi(l); if (ms < 5) ms = 5; if (ms > 500) ms = 500;
+                 g_latence_octets = 44100u * 4u * ms / 1000u; }
+    }
     {   /* L'etalonnage de l'horloge : combien d'instructions le processeur
            executait entre deux balayages. Il se regle sans recompiler, parce
            que c'est une valeur qu'on ajuste en regardant le jeu tourner. */

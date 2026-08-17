@@ -1062,3 +1062,34 @@ compteur le redira si un autre jeu passe par là.
 
 Compter avant de corriger a évité d'écrire du code exact pour un chemin mort,
 juste après avoir compté pour trouver un chemin faux.
+
+### Les effets en retard
+
+Symptôme rapporté à l'oreille : les sons déclenchés arrivent après le geste.
+La cause n'était pas dans le SPU mais dans la file de la carte son, que je
+remplissais d'un **quart de seconde** d'avance.
+
+C'est le genre de défaut qu'aucun compteur n'aurait signalé, parce que rien
+n'était faux : les échantillons étaient justes, dans le bon ordre, au bon
+débit. Ils étaient seulement calculés trop tôt. Tout ce qui est déjà dans la
+file a été produit avant l'événement qui vient de se produire, et le son part
+donc en retard d'exactement l'avance qu'on s'est donnée.
+
+Sur de la musique, cela ne s'entend pas — un flux continu n'a pas de « moment
+juste ». Cela s'entend sur tout ce qui est déclenché, parce que l'oreille le
+compare avec l'image.
+
+La mesure donne un genou net, en comptant les fois où la file se trouve à sec :
+
+```
+ 20 ms -> 867 fois a sec
+ 30 ms ->   8
+ 40 ms ->   8
+ 60 ms ->   8
+100 ms ->   8
+```
+
+Le plateau à huit est structurel — les changements de piste — et non un défaut
+de remplissage. Quarante millisecondes est donc le premier réglage qui ne coûte
+rien, et il divise le retard par six. `LATENCE` permet d'en juger à l'oreille,
+qui reste le seul instrument pour ce genre de chose.

@@ -161,6 +161,22 @@ dériverait de l'autre et le son craquerait.
 
 `SANS_SON=1` coupe le son.
 
+### L'avance de la file audio
+
+On remplit la carte son d'une petite avance. C'est un compromis qui s'entend
+des deux côtés : trop courte, elle se retrouve à sec et l'on entend des trous ;
+trop longue, tout ce qui est déjà dans la file a été calculé **avant**
+l'événement qui vient de se produire — le son du choc part après le choc,
+d'autant de temps qu'il y a d'avance.
+
+Cela ne s'entend pas sur la musique, qui est continue. Cela s'entend beaucoup
+sur les sons déclenchés, où l'oreille compare avec l'image.
+
+La mesure donne un genou net : à 20 ms la file se vide 867 fois par minute, à
+40 elle se vide 8 fois, et au-delà on ne gagne plus rien. **40 ms** est donc le
+réglage, et `LATENCE=60` ou `LATENCE=25` permet d'en juger soi-même. L'état des
+lieux affiche l'avance et le nombre de fois où la file s'est trouvée à sec.
+
 ### Le SPU
 
 Le reste du son — moteur, crissements, voix — vient des vingt-quatre voix du

@@ -362,6 +362,11 @@ n'attendait pas.
 | M8 — le SPU : moteur et bruitages | ✅ (enveloppe approchée) |
 | M9 — GP0 vers le matériel | ✗ |
 
+M0 à M8 forment ensemble la version **v0.1.0** : le jeu se joue. Les jalons
+mesurent ce que le banc sait faire ; la version dit qu'on peut s'asseoir devant.
+Ce sont deux questions différentes, et aucune des deux n'est le pourcentage de
+décompilation, qui se compte ailleurs.
+
 ## Ce que ce banc a appris au reste du projet
 
 Les défauts trouvés ici sont documentés un par un dans

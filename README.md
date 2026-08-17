@@ -68,8 +68,15 @@ not emulation — it is to have a native milestone that boots today, so that eac
 byte-matched function can replace its translated twin one at a time without
 ever breaking the whole.
 
-It currently boots to the loading screen, the title screen, the menu, and a
-race, with a scripted controller. See [`tools/m0/README.md`](tools/m0/README.md)
+**It is playable today — `v0.1.0`.** It boots from your own disc image to the
+loading screen, the title, the menu and a race; it draws, it plays the disc's
+twelve Red Book audio tracks and synthesises the SPU's twenty-four voices, and
+it takes a keyboard or a gamepad. Analogue steering and pedals go through the
+neGcon protocol the 1994 game already speaks. It builds natively on Linux and,
+with `--windows`, on Windows. [`CHANGELOG.md`](CHANGELOG.md) says what that
+covers, what it does not, and which defects had to be found on the way.
+
+See [`tools/m0/README.md`](tools/m0/README.md)
 to build and run it, and [`RECOMP_NOTES.md`](RECOMP_NOTES.md) for the defects
 found along the way — the translator's own bugs were found by differential
 testing against qemu-mipsel (114/116 functions bit-identical over 1856 cases),

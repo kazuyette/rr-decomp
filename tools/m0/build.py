@@ -195,6 +195,13 @@ def chemin_cible(p, windows):
     a = os.path.abspath(p)
     if not windows:
         return a
+    # Construit depuis Windows lui-meme, le chemin absolu est deja le bon : il
+    # n'y a rien a traduire, et le traduire quand meme le rendait relatif -- le
+    # programme n'aurait plus trouve son disque des qu'on l'aurait lance
+    # d'ailleurs. Une regle de conversion doit d'abord savoir reconnaitre ce
+    # qui est deja converti.
+    if re.match(r"^[A-Za-z]:[\\/]", a):
+        return a.replace("/", "\\")
     m = re.match(r"/mnt/([a-z])(/.*)?$", a)
     if m:
         return m.group(1).upper() + ":" + (m.group(2) or "/").replace("/", "\\")

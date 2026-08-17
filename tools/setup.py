@@ -46,9 +46,9 @@ REQS = [
     "intervaltree==3.1.0",
     "tqdm==4.67.1",
     "colorama",
-    # splat64 0.50.0 exige cette version exacte ; la laisser libre fait
-    # afficher a pip un conflit de dependances a chaque installation, qui
-    # n'empeche rien mais qu'on finit par ne plus lire.
+    # splat64 0.50.0 requires this exact version; leaving it unpinned makes
+    # pip print a dependency conflict on every install, which prevents
+    # nothing but which one eventually stops reading.
     "pyyaml==6.0.3",
     # Nothing below is used by a PSX project. splat imports its N64
     # segment types eagerly, so pygfxd (display lists) and crunch64
@@ -90,38 +90,39 @@ def ensure_splat():
     else:
         print("splat is not installed in this image; installing it now.")
 
-    # Ou peut-on ecrire ? Le conteneur de la chaine d'outils tourne en root et
-    # ecrit donc dans le site systeme ; une machine ordinaire, non. Supposer
-    # l'un des deux cas est la faute la plus banale de ce genre de script, et
-    # elle ne se voit pas chez celui qui l'ecrit.
+    # Where can we write? The toolchain container runs as root and therefore
+    # writes into the system site; an ordinary machine does not. Assuming
+    # either of the two cases is the most commonplace fault in this kind of
+    # script, and it is invisible to whoever writes it.
     import site
-    en_root = hasattr(os, "geteuid") and os.geteuid() == 0
-    candidats = []
+    as_root = hasattr(os, "geteuid") and os.geteuid() == 0
+    candidates = []
     try:
-        perso = site.getusersitepackages()
-        if isinstance(perso, str):
-            candidats.append(perso)
+        user_site = site.getusersitepackages()
+        if isinstance(user_site, str):
+            candidates.append(user_site)
     except Exception:
         pass
-    systeme = list(site.getsitepackages() or [])
-    candidats = (systeme + candidats) if en_root else (candidats + systeme)
+    system_sites = list(site.getsitepackages() or [])
+    candidates = ((system_sites + candidates) if as_root
+                  else (candidates + system_sites))
 
-    def ecrivable(dossier):
+    def writable(directory):
         try:
-            os.makedirs(dossier, exist_ok=True)
-            essai = os.path.join(dossier, ".essai-ecriture")
-            open(essai, "w").close()
-            os.remove(essai)
+            os.makedirs(directory, exist_ok=True)
+            probe = os.path.join(directory, ".write-test")
+            open(probe, "w").close()
+            os.remove(probe)
             return True
         except OSError:
             return False
 
-    target = next((c for c in candidats if ecrivable(c)), None)
+    target = next((c for c in candidates if writable(c)), None)
     if target is None:
-        print("aucun dossier de paquets Python n'est accessible en ecriture :")
-        for c in candidats:
+        print("no Python package directory is writable:")
+        for c in candidates:
             print("   " + c)
-        print("installe splat toi-meme, puis relance :")
+        print("install splat yourself, then run this again:")
         print("   python3 -m pip install --user " + " ".join(REQS))
         return False
 
@@ -137,12 +138,12 @@ def ensure_splat():
 
     # --break-system-packages only exists from pip 23; the toolchain image
     # is Ubuntu 22.04 and ships an older one, which rejects the flag
-    # outright. Try with it, fall back without. --user quand on n'est pas
-    # root : le site personnel precede le site systeme dans sys.path, donc la
-    # version epinglee masque celle de la distribution sans y toucher.
+    # outright. Try with it, fall back without. --user when we are not root:
+    # the personal site precedes the system site in sys.path, so the pinned
+    # version masks the distribution's one without touching it.
     def pip_install(args):
         base = [sys.executable, "-m", "pip", "install"]
-        if not en_root:
+        if not as_root:
             base.append("--user")
         r = subprocess.run(base + ["--break-system-packages"] + args,
                            capture_output=True, text=True)

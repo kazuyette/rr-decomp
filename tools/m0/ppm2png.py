@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Convertit les images du banc en PNG, sans dépendance.
+"""Converts the bench's frames to PNG, with no dependencies.
 
-Le banc écrit des PPM parce que c'est le format qu'on peut produire en C sans
-bibliothèque -- une ligne d'en-tête et les octets. Personne ne veut regarder du
-PPM, d'où ce convertisseur : zlib et struct suffisent à écrire un PNG valide,
-et la bibliothèque standard les fournit tous les deux.
+The bench writes PPMs because it is the format one can produce in C without a
+library -- one header line and the bytes. Nobody wants to look at PPM, hence
+this converter: zlib and struct are enough to write a valid PNG, and the
+standard library provides both of them.
 
     python3 tools/m0/ppm2png.py build/m0/*.ppm
 """
@@ -13,35 +13,35 @@ import sys
 import zlib
 
 
-def convertir(source, destination):
-    donnees = open(source, "rb").read()
-    parties = donnees.split(b"\n", 3)
-    if parties[0] != b"P6":
-        raise ValueError(source + " n'est pas un PPM binaire")
-    largeur, hauteur = (int(x) for x in parties[1].split())
-    pixels = parties[3]
-    # Le PNG veut un octet de filtre en tete de chaque ligne ; zero veut dire
-    # « aucun filtre », ce qui compresse un peu moins bien et evite d'ecrire un
-    # predicteur pour rien.
-    brut = b"".join(b"\x00" + pixels[y * largeur * 3:(y + 1) * largeur * 3]
-                    for y in range(hauteur))
+def convert(source, destination):
+    data = open(source, "rb").read()
+    parts = data.split(b"\n", 3)
+    if parts[0] != b"P6":
+        raise ValueError(source + " is not a binary PPM")
+    width, height = (int(x) for x in parts[1].split())
+    pixels = parts[3]
+    # PNG wants a filter byte at the head of each row; zero means "no filter",
+    # which compresses a little less well and avoids writing a predictor for
+    # nothing.
+    raw = b"".join(b"\x00" + pixels[y * width * 3:(y + 1) * width * 3]
+                    for y in range(height))
 
-    def bloc(genre, contenu):
-        corps = genre + contenu
-        return (struct.pack(">I", len(contenu)) + corps
-                + struct.pack(">I", zlib.crc32(corps)))
+    def chunk(kind, payload):
+        body = kind + payload
+        return (struct.pack(">I", len(payload)) + body
+                + struct.pack(">I", zlib.crc32(body)))
 
     png = (b"\x89PNG\r\n\x1a\n"
-           + bloc(b"IHDR", struct.pack(">IIBBBBB", largeur, hauteur, 8, 2, 0, 0, 0))
-           + bloc(b"IDAT", zlib.compress(brut, 6))
-           + bloc(b"IEND", b""))
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 6))
+           + chunk(b"IEND", b""))
     open(destination, "wb").write(png)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    for chemin in sys.argv[1:]:
-        sortie = chemin[:-4] + ".png" if chemin.endswith(".ppm") else chemin + ".png"
-        convertir(chemin, sortie)
-        print(sortie)
+    for path in sys.argv[1:]:
+        out = path[:-4] + ".png" if path.endswith(".ppm") else path + ".png"
+        convert(path, out)
+        print(out)

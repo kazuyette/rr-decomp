@@ -1,32 +1,32 @@
-/* Le menu des réglages, dessiné par-dessus le jeu.
+/* The settings menu, drawn on top of the game.
  *
- * Pourquoi un menu à nous plutôt qu'une entrée dans celui du jeu
- * -------------------------------------------------------------
- * Ajouter une ligne au menu OPTION de Ridge Racer demanderait d'abord de
- * décompiler l'état 18, qui est encore de l'assembleur traduit mécaniquement :
- * on modifierait du code régénéré à chaque construction, et la modification ne
- * survivrait pas. Ce menu-ci vit entièrement de notre côté. Il ne touche pas
- * au jeu, ne survit pas moins bien aux régénérations, et surtout il a le droit
- * de régler des choses que la console n'avait pas -- la cadence, la latence
- * audio, la résolution.
+ * Why a menu of our own rather than an entry in the game's
+ * -------------------------------------------------------
+ * Adding a line to Ridge Racer's OPTION menu would first require decompiling
+ * state 18, which is still mechanically translated assembly: we would be
+ * modifying code that is regenerated on every build, and the modification
+ * would not survive. This menu lives entirely on our side. It does not touch
+ * the game, it does not survive regeneration any less well, and above all it
+ * is allowed to adjust things the console did not have -- the frame rate, the
+ * audio latency, the resolution.
  *
- * Il se dessine dans l'image finale, après la mémoire vidéo, et non dedans :
- * le jeu ne peut donc pas l'effacer en redessinant, et nous ne pouvons pas
- * salir ce qu'il a produit. Les deux restent séparés, ce qui compte le jour où
- * l'on compare une image à une référence.
+ * It is drawn into the final image, after video memory rather than inside it:
+ * the game therefore cannot erase it by redrawing, and we cannot soil what it
+ * has produced. The two remain separate, which matters on the day one compares
+ * a frame against a reference.
  *
- * Tant qu'il est ouvert, la manette rend « rien d'enfoncé » au jeu : on ne
- * veut pas piloter et régler en même temps.
+ * While it is open, the controller reports "nothing pressed" to the game: we
+ * do not want to drive and adjust at the same time.
  */
 #include <stdio.h>
 #include <string.h>
 #include "rt.h"
 
-/* Police 5 par 7, une ligne par octet, cinq bits utiles.
-   Ecrite en art ASCII puis convertie -- une table de nombres tapee a la
-   main se relit mal et se trompe en silence. */
-static const unsigned char POLICE[][7] = {
-    {0x00,0x00,0x00,0x00,0x00,0x00,0x00},   /* espace */
+/* 5 by 7 font, one row per byte, five useful bits.
+   Written as ASCII art and then converted -- a table of numbers typed by hand
+   reads back poorly and goes wrong in silence. */
+static const unsigned char FONT[][7] = {
+    {0x00,0x00,0x00,0x00,0x00,0x00,0x00},   /* space */
     {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11},   /* A */
     {0x1E,0x11,0x1E,0x11,0x11,0x11,0x1E},   /* B */
     {0x0F,0x10,0x10,0x10,0x10,0x10,0x0F},   /* C */
@@ -74,144 +74,144 @@ static const unsigned char POLICE[][7] = {
     {0x02,0x04,0x08,0x08,0x08,0x04,0x02},   /* ( */
     {0x08,0x04,0x02,0x02,0x02,0x04,0x08},   /* ) */
 };
-static const char ORDRE[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.-/<>*%()";
+static const char CHARSET[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.-/<>*%()";
 
-/* --- les réglages --------------------------------------------------------
+/* --- the settings --------------------------------------------------------
  *
- * Chaque entrée est une valeur entière avec ses bornes et son pas ; le libellé
- * de la valeur est rendu par une fonction, parce que « 60 images/s » et
- * « libre » sont la même variable.
+ * Each entry is an integer value with its bounds and its step; the value's
+ * label is produced by a function, because "60 frames/s" and "free" are the
+ * same variable.
  */
 extern double mod_hz;
-extern unsigned g_latence_octets;
-extern int g_cout_dessin;
-extern int mod_muet_musique, mod_muet_spu, mod_afficher_etat, mod_negcon;
-extern int mod_pad_vu;
-extern u32 g_pad_mot;
-extern unsigned char g_pad_an[4];
+extern unsigned g_latency_bytes;
+extern int g_draw_cost;
+extern int mod_mute_music, mod_mute_spu, mod_show_state, mod_negcon;
+extern int mod_show_pad;
+extern u32 g_pad_word;
+extern unsigned char g_pad_analog[4];
 extern int g_pad_type;
 
 static int hz_i = 60;
 static int lat_i = 40;
 
-struct reglage {
-    const char *nom;
-    int *valeur, mini, maxi, pas;
-    void (*texte)(int, char *);
-    void (*appliquer)(int);
+struct setting {
+    const char *name;
+    int *value, min, max, step;
+    void (*format)(int, char *);
+    void (*apply)(int);
 };
 
-static void t_hz(int v, char *s)   { if (v) sprintf(s, "%d", v); else sprintf(s, "LIBRE"); }
+static void t_hz(int v, char *s)   { if (v) sprintf(s, "%d", v); else sprintf(s, "FREE"); }
 static void t_ms(int v, char *s)   { sprintf(s, "%d MS", v); }
-static void t_oui(int v, char *s)  { strcpy(s, v ? "OUI" : "NON"); }
-static void t_non(int v, char *s)  { strcpy(s, v ? "NON" : "OUI"); }
-static void t_pad(int v, char *s)  { strcpy(s, v ? "NEGCON" : "NUMERIQUE"); }
+static void t_yes(int v, char *s)  { strcpy(s, v ? "YES" : "NO"); }
+static void t_no(int v, char *s)   { strcpy(s, v ? "NO" : "YES"); }
+static void t_pad(int v, char *s)  { strcpy(s, v ? "NEGCON" : "DIGITAL"); }
 
 static void a_hz(int v)  { mod_hz = v; }
-static void a_lat(int v) { g_latence_octets = 44100u * 4u * (unsigned)v / 1000u; }
-static void a_rien(int v){ (void)v; }
+static void a_lat(int v) { g_latency_bytes = 44100u * 4u * (unsigned)v / 1000u; }
+static void a_none(int v){ (void)v; }
 
-static struct reglage REGLAGES[] = {
-    { "IMAGES PAR SECONDE", &hz_i,               0, 240, 10, t_hz,  a_hz   },
-    { "AVANCE DU SON",      &lat_i,              5, 200,  5, t_ms,  a_lat  },
-    { "MANETTE",            &mod_negcon,         0,   1,  1, t_pad, a_rien },
-    { "VOIR LA MANETTE",    &mod_pad_vu,         0,   1,  1, t_oui, a_rien },
-    { "COUT DU DESSIN",     &g_cout_dessin,      0,   1,  1, t_oui, a_rien },
-    { "MUSIQUE",            &mod_muet_musique,   0,   1,  1, t_non, a_rien },
-    { "BRUITAGES",          &mod_muet_spu,       0,   1,  1, t_non, a_rien },
-    { "ETAT DU JEU",        &mod_afficher_etat,  0,   1,  1, t_oui, a_rien },
+static struct setting SETTINGS[] = {
+    { "FRAMES PER SECOND",  &hz_i,               0, 240, 10, t_hz,  a_hz   },
+    { "AUDIO LEAD",         &lat_i,              5, 200,  5, t_ms,  a_lat  },
+    { "CONTROLLER",         &mod_negcon,         0,   1,  1, t_pad, a_none },
+    { "SHOW CONTROLLER",    &mod_show_pad,       0,   1,  1, t_yes, a_none },
+    { "DRAW COST",          &g_draw_cost,        0,   1,  1, t_yes, a_none },
+    { "MUSIC",              &mod_mute_music,     0,   1,  1, t_no,  a_none },
+    { "EFFECTS",            &mod_mute_spu,       0,   1,  1, t_no,  a_none },
+    { "GAME STATE",         &mod_show_state,     0,   1,  1, t_yes, a_none },
 };
-#define NREGLAGES ((int)(sizeof REGLAGES / sizeof REGLAGES[0]))
+#define NSETTINGS ((int)(sizeof SETTINGS / sizeof SETTINGS[0]))
 
-static int ouvert, choix;
+static int menu_open, choice;
 
-int mods_ouvert(void) { return ouvert; }
-void mods_basculer(void) { ouvert = !ouvert; }
+int mods_is_open(void) { return menu_open; }
+void mods_toggle(void) { menu_open = !menu_open; }
 
-void mods_deplacer(int d)
+void mods_move(int d)
 {
-    choix += d;
-    if (choix < 0) choix = NREGLAGES - 1;
-    if (choix >= NREGLAGES) choix = 0;
+    choice += d;
+    if (choice < 0) choice = NSETTINGS - 1;
+    if (choice >= NSETTINGS) choice = 0;
 }
 
-void mods_changer(int d)
+void mods_change(int d)
 {
-    struct reglage *r = &REGLAGES[choix];
-    int v = *r->valeur + d * r->pas;
-    if (v < r->mini) v = r->mini;
-    if (v > r->maxi) v = r->maxi;
-    *r->valeur = v;
-    r->appliquer(v);
+    struct setting *r = &SETTINGS[choice];
+    int v = *r->value + d * r->step;
+    if (v < r->min) v = r->min;
+    if (v > r->max) v = r->max;
+    *r->value = v;
+    r->apply(v);
 }
 
-/* --- dessin --------------------------------------------------------------- */
-static void glyphe(u32 *px, int pas, int l, int h, int x, int y, char c, u32 couleur)
+/* --- drawing -------------------------------------------------------------- */
+static void glyph(u32 *px, int pitch, int w, int h, int x, int y, char c, u32 colour)
 {
-    const char *p = strchr(ORDRE, c);
+    const char *p = strchr(CHARSET, c);
     int i, j, n;
-    if (!p) p = ORDRE;
-    n = (int)(p - ORDRE);
+    if (!p) p = CHARSET;
+    n = (int)(p - CHARSET);
     for (j = 0; j < 7; j++)
         for (i = 0; i < 5; i++)
-            if (POLICE[n][j] & (0x10 >> i)) {
+            if (FONT[n][j] & (0x10 >> i)) {
                 int xx = x + i, yy = y + j;
-                if (xx >= 0 && xx < l && yy >= 0 && yy < h)
-                    px[yy * (pas / 4) + xx] = couleur;
+                if (xx >= 0 && xx < w && yy >= 0 && yy < h)
+                    px[yy * (pitch / 4) + xx] = colour;
             }
 }
 
-static void texte(u32 *px, int pas, int l, int h, int x, int y,
-                  const char *s, u32 couleur)
+static void text(u32 *px, int pitch, int w, int h, int x, int y,
+                 const char *s, u32 colour)
 {
-    for (; *s; s++, x += 6) glyphe(px, pas, l, h, x, y, *s, couleur);
+    for (; *s; s++, x += 6) glyph(px, pitch, w, h, x, y, *s, colour);
 }
 
-static void fond(u32 *px, int pas, int l, int h, int x0, int y0, int x1, int y1)
+static void backdrop(u32 *px, int pitch, int w, int h, int x0, int y0, int x1, int y1)
 {
     int x, y;
     for (y = y0; y < y1 && y < h; y++)
-        for (x = x0; x < x1 && x < l; x++) {
-            /* Assombrir plutot que peindre : on garde le jeu visible dessous,
-               ce qui rappelle qu'on regle quelque chose qui tourne. */
-            u32 c = px[y * (pas / 4) + x];
-            px[y * (pas / 4) + x] = 0xFF000000u | ((c >> 2) & 0x3F3F3Fu);
+        for (x = x0; x < x1 && x < w; x++) {
+            /* Darken rather than paint: the game stays visible underneath,
+               which is a reminder that one is adjusting something that runs. */
+            u32 c = px[y * (pitch / 4) + x];
+            px[y * (pitch / 4) + x] = 0xFF000000u | ((c >> 2) & 0x3F3F3Fu);
         }
 }
 
-void mods_dessiner(u32 *px, int pas, int l, int h)
+void mods_draw(u32 *px, int pitch, int w, int h)
 {
-    char ligne[64], val[24];
+    char line[64], val[24];
     int i, y;
-    extern unsigned long etats_vus[64];
-    if (mod_afficher_etat) {
+    extern unsigned long states_seen[64];
+    if (mod_show_state) {
         extern u8 RAM[];
         u32 e;
         __builtin_memcpy(&e, RAM + 0x1D34F8, 4);
-        sprintf(ligne, "ETAT %u", e);
-        texte(px, pas, l, h, 4, 4, ligne, 0xFF00FF00u);
+        sprintf(line, "STATE %u", e);
+        text(px, pitch, w, h, 4, 4, line, 0xFF00FF00u);
     }
-    if (mod_pad_vu) {
-        /* Le mot est actif a zero, comme sur la console : FFFF veut dire que
-           rien n'est enfonce. C'est le nombre a regarder -- s'il ne bouge pas
-           quand on appuie, le probleme est en amont du jeu. */
-        sprintf(ligne, "PAD %04X TYPE %02X  T%02X I%02X II%02X L%02X",
-                (unsigned)(g_pad_mot & 0xFFFFu), (unsigned)g_pad_type,
-                g_pad_an[0], g_pad_an[1], g_pad_an[2], g_pad_an[3]);
-        texte(px, pas, l, h, 4, h - 12, ligne, 0xFF00FFFFu);
+    if (mod_show_pad) {
+        /* The word is active low, as on the console: FFFF means nothing is
+           pressed. This is the number to watch -- if it does not move when a
+           button goes down, the problem is upstream of the game. */
+        sprintf(line, "PAD %04X TYPE %02X  T%02X I%02X II%02X L%02X",
+                (unsigned)(g_pad_word & 0xFFFFu), (unsigned)g_pad_type,
+                g_pad_analog[0], g_pad_analog[1], g_pad_analog[2], g_pad_analog[3]);
+        text(px, pitch, w, h, 4, h - 12, line, 0xFF00FFFFu);
     }
-    if (!ouvert) return;
+    if (!menu_open) return;
 
-    fond(px, pas, l, h, 8, 20, l - 8, 20 + 14 * NREGLAGES + 24);
-    texte(px, pas, l, h, 16, 26, "REGLAGES", 0xFFFFFF00u);
+    backdrop(px, pitch, w, h, 8, 20, w - 8, 20 + 14 * NSETTINGS + 24);
+    text(px, pitch, w, h, 16, 26, "SETTINGS", 0xFFFFFF00u);
     y = 44;
-    for (i = 0; i < NREGLAGES; i++, y += 14) {
-        u32 c = (i == choix) ? 0xFFFFFF00u : 0xFFB0B0B0u;
-        REGLAGES[i].texte(*REGLAGES[i].valeur, val);
-        sprintf(ligne, "%c %-18s %s", (i == choix) ? '>' : ' ',
-                REGLAGES[i].nom, val);
-        texte(px, pas, l, h, 16, y, ligne, c);
+    for (i = 0; i < NSETTINGS; i++, y += 14) {
+        u32 c = (i == choice) ? 0xFFFFFF00u : 0xFFB0B0B0u;
+        SETTINGS[i].format(*SETTINGS[i].value, val);
+        sprintf(line, "%c %-18s %s", (i == choice) ? '>' : ' ',
+                SETTINGS[i].name, val);
+        text(px, pitch, w, h, 16, y, line, c);
     }
-    texte(px, pas, l, h, 16, y + 6, "F1 FERMER  FLECHES REGLER", 0xFF808080u);
-    (void)etats_vus;
+    text(px, pitch, w, h, 16, y + 6, "F1 CLOSE   ARROWS ADJUST", 0xFF808080u);
+    (void)states_seen;
 }

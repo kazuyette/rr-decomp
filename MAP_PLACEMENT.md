@@ -1,208 +1,205 @@
-# Le placement des sections : résolu
+# Section placement: solved
 
-*Question ouverte depuis le début du projet. `MAP_RRM_FORMAT.md` la listait sous
-« Not found: any per-section coordinate transform », et `TRACK_SPINE_FORMAT.md`
-concluait qu'il n'y avait « rien à placer ». Les deux se trompaient, et la
-réponse était dans un fichier qu'on avait mis de côté.*
+*Open question since the beginning of the project. `MAP_RRM_FORMAT.md`
+listed it under "Not found: any per-section coordinate transform", and
+`TRACK_SPINE_FORMAT.md` concluded that there was "nothing to place". Both
+were wrong, and the answer was in a file that had been set aside.*
 
 ---
 
-## La réponse en une phrase
+## The answer in one sentence
 
-**`IDX.HED` est une grille 32 × 32 de cellules de 2048 unités monde qui associe
-à chaque cellule un numéro de section de `MAP.RRM`.** La section est posée à
-l'origine de sa cellule ; il n'y a pas de rotation, seulement une translation.
+**`IDX.HED` is a 32 × 32 grid of cells of 2048 world units that maps each
+cell to a section number in `MAP.RRM`.** The section is placed at the
+origin of its cell; there is no rotation, only a translation.
 
-## Comment on le sait
+## How we know
 
-Ce n'est pas une inférence sur les données. C'est lu dans `func_800437AC`, le
-corps réel du dessin (celui derrière les enveloppes de mode miroir) :
+This is not an inference over the data. It is read in `func_800437AC`, the
+real drawing body (the one behind the mirror-mode wrappers):
 
 ```
-    lw   $v0, 0xC($a2)          ; index de section
-    bltz $v0, .section_suivante ; -1 = cellule vide
+    lw   $v0, 0xC($a2)          ; section index
+    bltz $v0, .next_section     ; -1 = empty cell
     lw   $t0, 0x0($a2)          ; \
-    lw   $t1, 0x4($a2)          ;  > la translation
+    lw   $t1, 0x4($a2)          ;  > the translation
     lw   $t2, 0x8($a2)          ; /
-    ...  neg $t0 si miroir
+    ...  neg $t0 if mirror
     ctc2 $t0, $5                ; TRX  \
-    ctc2 $t1, $6                ; TRY   > vecteur de translation du GTE
+    ctc2 $t1, $6                ; TRY   > GTE translation vector
     ctc2 $t2, $7                ; TRZ  /
-    lw   $t0, 0x4($a1)          ; table des sections
+    lw   $t0, 0x4($a1)          ; section table
     sll  $v1, $v0, 5            ; index * 32
-    lh   $t3, 0xC($t2)          ; nombre de faces
-    lw   $t1, 0x0($t2)          ; pointeur sur les faces
+    lh   $t3, 0xC($t2)          ; face count
+    lw   $t1, 0x0($t2)          ; face pointer
 ```
 
-Le troisième argument est donc un **tableau de placements de 16 octets** :
-`{s32 x, s32 y, s32 z, s32 index}`. Et son constructeur, `func_80012C14`,
-dit d'où viennent ces quatre champs :
+The third argument is therefore an **array of 16-byte placements**:
+`{s32 x, s32 y, s32 z, s32 index}`. And its builder, `func_80012C14`, says
+where those four fields come from:
 
 ```
-    cellX = (D_801D9068 + 0x400) >> 11      ; caméra -> cellule, pas de 2048
+    cellX = (D_801D9068 + 0x400) >> 11      ; camera -> cell, step of 2048
     cellZ = (D_801D9070 + 0x400) >> 11
-    dir   = (D_801D907C >> 8) & 0xF         ; 16 directions de caméra
-    pour i de 0 à 63 :
-        dx = (s8) D_8005944C[dir*256 + i*2]     ; table d'ordre de parcours
+    dir   = (D_801D907C >> 8) & 0xF         ; 16 camera directions
+    for i from 0 to 63:
+        dx = (s8) D_8005944C[dir*256 + i*2]     ; traversal order table
         dz = (s8) D_8005944D[dir*256 + i*2]
         x = cellX + dx ; z = cellZ + dz
-        si x >= 32 ou z >= 32 (non signé) -> index = -1
-        si func_80015BC4(x, z, ...) == 0   -> index = -1     ; test de visibilité
+        if x >= 32 or z >= 32 (unsigned) -> index = -1
+        if func_80015BC4(x, z, ...) == 0   -> index = -1     ; visibility test
         index = ((s16 *) D_801D82D0)[z*32 + 30 - x]
-        D_801D82D8[z] |= 1 << x                              ; bitmap 32x32 de cellules vues
+        D_801D82D8[z] |= 1 << x                              ; 32x32 bitmap of seen cells
         v = (x << 11 - camX_frac, -camY_frac, z << 11 - camZ_frac)
         ApplyMatrix(D_801E91F0, &v, &out)                    ; func_8004315C
         placement = (out.x << 2, out.y << 2, out.z << 2)
 ```
 
-Soixante-quatre cellules par image, choisies autour de la caméra dans un ordre
-qui dépend de sa direction. `D_801D82D0` pointe sur la table lue depuis
+Sixty-four cells per frame, chosen around the camera in an order that
+depends on its direction. `D_801D82D0` points to the table read from
 `IDX.HED`.
 
-## La vérification
+## The verification
 
-`IDX.HED` fait 2048 octets = **1024 `u16` = exactement 32 × 32**. Il contient
-**258 entrées non-`0xFFFF`**, et `MAP.RRM` contient **258 sections**. La
-correspondance cellule ↔ section est une bijection : chacune des 258 sections a
-exactement une cellule, aucune n'en a zéro ou deux.
+`IDX.HED` is 2048 bytes = **1024 `u16` = exactly 32 × 32**. It holds **258
+non-`0xFFFF` entries**, and `MAP.RRM` holds **258 sections**. The cell ↔
+section correspondence is a bijection: each of the 258 sections has exactly
+one cell, none has zero or two.
 
-Test indépendant : les 256 nœuds de la polyligne du circuit 0, convertis en
-cellules (`monde >> 11`), tombent sur **79 cellules distinctes, et les 79 sont
-occupées**. Zéro exception. Aucune des cinq autres orientations d'indexation
-essayées ne dépasse 46 sur 79.
+Independent test: the 256 nodes of course 0's polyline, converted into
+cells (`world >> 11`), land on **79 distinct cells, and all 79 are
+occupied**. Zero exceptions. None of the five other indexing orientations
+tried gets past 46 out of 79.
 
-Test visuel : en posant chaque section à `cellule × 2048` et en dessinant les
-quads de type B vus de dessus, le ruban de route suit la polyligne du circuit.
-C'est l'image `map_road_placed.png`.
+Visual test: placing each section at `cell × 2048` and drawing the type-B
+quads seen from above, the road ribbon follows the course polyline. That is
+the image `map_road_placed.png`.
 
-## L'échelle
+## The scale
 
-La géométrie locale de `MAP.RRM` est en **unités monde × 4**. Le constructeur
-décale la translation de 2 bits vers la gauche (`sll $v0, $v0, 2`) avant de
-l'écrire, donc le vecteur de translation du GTE — et par conséquent les sommets
-qui s'y ajoutent — vit dans un espace quatre fois plus fin que la polyligne.
-Une cellule mesure donc 8192 unités de géométrie.
+`MAP.RRM`'s local geometry is in **world units × 4**. The builder shifts the
+translation left by 2 bits (`sll $v0, $v0, 2`) before writing it, so the
+GTE's translation vector — and consequently the vertices added to it —
+lives in a space four times finer than the polyline. A cell therefore
+measures 8192 geometry units.
 
-C'est la première tentative de rendu qui l'a montré : à l'échelle 1, les
-sections se recouvraient massivement et le tracé disparaissait sous la masse.
+The first rendering attempt is what showed it: at scale 1, the sections
+overlapped massively and the layout disappeared under the mass.
 
-## Un point de convention resté ouvert
+## A point of convention left open
 
-Le code calcule l'index avec `z*32 + 30 - x`. Empiriquement, ce qui aligne la
-polyligne sur la grille est `z*32 + x`. Les deux se réconcilient si l'axe X de
-la caméra (`D_801D9068`) est stocké dans le sens inverse de celui de la
-polyligne, avec `x_caméra = 30 − x_polyligne`. Ce serait cohérent avec les
-autres inversions de X déjà rencontrées — `negate_rot_row0`, le
-`0x800 − angle` des bords de route, le global `D_801733A0` du mode miroir —
-mais ce n'est pas encore lu dans une fonction, donc ça reste une hypothèse.
+The code computes the index with `z*32 + 30 - x`. Empirically, what aligns
+the polyline with the grid is `z*32 + x`. The two reconcile if the camera's
+X axis (`D_801D9068`) is stored in the opposite direction to the
+polyline's, with `camera_x = 30 − polyline_x`. That would be consistent
+with the other X inversions already met — `negate_rot_row0`, the
+`0x800 − angle` of the road edges, the mirror mode's `D_801733A0` global —
+but it has not yet been read in a function, so it remains a hypothesis.
 
-## Ce que ça corrige dans la documentation existante
+## What this corrects in the existing documentation
 
-`TRACK_SPINE_FORMAT.md` affirme que « MAP.RRM ne contient pas de transformation
-de placement parce qu'il n'y a rien à placer », le circuit étant habillé le long
-de la polyligne. La première moitié est vraie — la transformation n'est pas dans
-`MAP.RRM` —, la seconde est fausse : les sections sont bien placées, par
+`TRACK_SPINE_FORMAT.md` states that "MAP.RRM does not contain a placement
+transform because there is nothing to place", the course being skinned
+along the polyline. The first half is true — the transform is not in
+`MAP.RRM` — the second is false: the sections are indeed placed, by
 `IDX.HED`.
 
-`MAP_RRM_FORMAT.md` posait la question sous « Open items » : « whether a
-per-section world-space transform exists in a file not yet examined ». Oui, et
-c'était `IDX.HED`.
+`MAP_RRM_FORMAT.md` raised the question under "Open items": "whether a
+per-section world-space transform exists in a file not yet examined". Yes,
+and it was `IDX.HED`.
 
-Enfin, l'hypothèse « grille spatiale » avait été écartée dans une session
-antérieure comme « éliminée quantitativement ». Elle était juste. L'élimination
-portait sur une lecture des seules données de `MAP.RRM` ; la grille n'y est pas.
-C'est le troisième cas de ce projet où lire la fonction consommatrice donne en
-dix minutes ce que l'analyse statistique du fichier avait déclaré impossible.
+Finally, the "spatial grid" hypothesis had been discarded in an earlier
+session as "ruled out quantitatively". It was right. The elimination rested
+on a reading of `MAP.RRM`'s data alone; the grid is not in there. This is
+the third case in this project where reading the consumer function gives in
+ten minutes what statistical analysis of the file had declared impossible.
 
 ---
 
-# Les trois types d'enregistrement, et les trous
+# The three record types, and the holes
 
-*Suite directe de ce qui précède : l'image de contrôle laissait des trous noirs
-sous l'axe du circuit, et `MAP_RRM_FORMAT.md` portait les types A et C comme
-« candidat murs de dévers, non confirmé ».*
+*Direct sequel to the above: the check image left black holes under the
+course centreline, and `MAP_RRM_FORMAT.md` carried types A and C as
+"candidate banked wall quads, unconfirmed".*
 
-## Le décalage d'une cellule
+## The one-cell offset
 
-Premier acquis, et il corrige le rendu précédent. Les sommets locaux ne sont pas
-centrés sur l'origine de la section : X va de −8192 à 0, Z de 0 à +8192
-(médianes −4211 et +3827, largeur médiane 9140 pour une cellule de 8192).
-L'origine d'une section est donc le **coin +X/−Z de sa cellule**, pas son
+First result, and it corrects the previous rendering. The local vertices
+are not centred on the section's origin: X runs from −8192 to 0, Z from 0
+to +8192 (medians −4211 and +3827, median width 9140 for a cell of 8192).
+A section's origin is therefore the **+X/−Z corner of its cell**, not its
 centre.
 
-La prédiction est vérifiable : il faut décaler la géométrie d'une cellule
-entière en X pour qu'elle s'aligne sur la polyligne. Mesuré — la couverture de
-l'axe passe de **165/256 à 200/256**, et l'optimum tombe exactement sur
-`+8192`, la valeur prédite. Ce n'est pas un ajustement libre : le décalage
-n'avait qu'une valeur admissible et c'est celle-là.
+The prediction is checkable: the geometry has to be shifted by a whole cell
+in X for it to line up with the polyline. Measured — coverage of the
+centreline goes from **165/256 to 200/256**, and the optimum falls exactly
+on `+8192`, the predicted value. This is not a free fit: the offset had
+only one admissible value and that is the one.
 
-## Ce que sont les trois types
+## What the three types are
 
-| type | n | sections | ΔY médian | empreinte fine en plan | tpages |
+| type | n | sections | median ΔY | thin footprint in plan | tpages |
 |---|---|---|---|---|---|
 | A | 622 | 79 | 475 | 7 % | 8 |
 | B | 5 420 | 207 | 116 | 12 % | 12 |
 | C | 695 | 23 | 24 | 3 | 3 |
 
-**Aucun des trois n'est un mur.** L'hypothèse « murs de dévers » portée par
-`MAP_RRM_FORMAT.md` pour le type A est réfutée : un mur vertical se projette en
-plan comme un trait, et seuls 7 % des quads de type A ont une empreinte fine.
-Ce sont des surfaces inclinées — ΔY médian 475 contre 116 pour le type B —,
-donc des talus et des dévers, pas des parois.
+**None of the three is a wall.** The "banked walls" hypothesis carried by
+`MAP_RRM_FORMAT.md` for type A is refuted: a vertical wall projects in plan
+as a line, and only 7 % of type-A quads have a thin footprint. These are
+sloping surfaces — median ΔY 475 against 116 for type B — hence embankments
+and banking, not partitions.
 
-Le type C est l'élément le plus localisé du fichier : **23 sections sur 258,
-trois pages de texture**, et un ΔY médian de 24 qui en fait la plus plate des
-trois. Sur la carte, il n'apparaît qu'aux sorties de courbe du quart
-nord-ouest. Un élément de circuit particulier à cet endroit — dégagement,
-sable, ou surface du tunnel — reste à trancher en lisant `func_80034050`, la
-seconde passe de dessin, qui prend le même tableau de placements.
+Type C is the most localised element of the file: **23 sections out of 258,
+three texture pages**, and a median ΔY of 24 that makes it the flattest of
+the three. On the map it appears only at the corner exits of the north-west
+quarter. A particular course element at that spot — run-off, sand, or the
+tunnel surface — remains to be settled by reading `func_80034050`, the
+second drawing pass, which takes the same placement array.
 
-## Et les trous
+## And the holes
 
-Ils ne sont pas ce qu'ils avaient l'air d'être. Après correction du décalage,
-**199 des 256 nœuds** de l'axe du circuit 0 tombent sur un quad de type B. Pour
-les 57 restants, le quad le plus proche est à **9 % d'une demi-largeur de route**
-(médiane, mesurée perpendiculairement au cap du nœud).
+They are not what they looked like. After the offset correction, **199 of
+the 256 nodes** of course 0's centreline land on a type-B quad. For the
+remaining 57, the nearest quad is **9 % of a road half-width** away
+(median, measured perpendicular to the node's heading).
 
-C'est décisif dans un sens qui n'était pas celui attendu : si le revêtement
-n'était pas dans `MAP.RRM` — s'il était habillé le long de la polyligne au
-moment du rendu, comme le supposait `TRACK_SPINE_FORMAT.md` — le couloir libre
-autour de l'axe ferait une demi-largeur, pas neuf pour cent. **Les trous sont
-des lacunes ponctuelles, pas un couloir.** Le revêtement est bien dans le
-fichier.
+That is decisive in a direction that was not the expected one: if the road
+surface were not in `MAP.RRM` — if it were skinned along the polyline at
+render time, as `TRACK_SPINE_FORMAT.md` supposed — the free corridor around
+the centreline would be half a width wide, not nine per cent. **The holes
+are point gaps, not a corridor.** The road surface really is in the file.
 
-Ce qui reste à expliquer, c'est ces 57 lacunes elles-mêmes. La piste la plus
-probable est la convention d'axe X restée ouverte plus haut : le code indexe en
-`30 − x`, une **réflexion**, là où l'empirique donne `x`, une translation. Les
-deux coïncident sur une plage de X limitée et divergent ailleurs — ce qui
-produirait exactement une couverture excellente sur une moitié de la carte et
-trouée sur l'autre. Une réflexion globale appliquée aux deux jeux de données à
-la fois est inobservable par ce test ; il faudra la lire dans le code qui écrit
-`D_801D9068`, pas la mesurer.
+What remains to be explained is those 57 gaps themselves. The likeliest
+lead is the X axis convention left open above: the code indexes with
+`30 − x`, a **reflection**, where the empirical result gives `x`, a
+translation. The two coincide over a limited range of X and diverge
+elsewhere — which would produce exactly an excellent coverage over one half
+of the map and a holed one over the other. A global reflection applied to
+both data sets at once is unobservable by this test; it will have to be
+read in the code that writes `D_801D9068`, not measured.
 
-## Une note d'orientation, pour les rendus de contrôle
+## A note on orientation, for the check renders
 
-Les premières images de contrôle de cette page étaient dessinées avec `+Z` vers
-le haut de l'image. C'est faux, et c'est une réflexion, pas un cadrage.
+The first check images on this page were drawn with `+Z` towards the top of
+the image. That is wrong, and it is a reflection, not a framing choice.
 
-Le PSX travaille en **Y descendant** : X à droite, Y vers le bas, Z vers
-l'avant. Une vue de dessus regarde dans la direction `+Y` ; en posant la droite
-de l'écran sur `+X`, le haut de l'écran vaut `Y × X = −Z`, donc **`+Z` descend
-à l'écran**. Dessiner `hauteur − z` donne la carte vue de dessous, soit son
-miroir.
+The PSX works with **Y downwards**: X to the right, Y down, Z forwards. A
+top view looks along the `+Y` direction; putting screen-right on `+X`,
+screen-up equals `Y × X = −Z`, so **`+Z` goes down the screen**. Drawing
+`height − z` gives the map seen from below, i.e. its mirror image.
 
-Ça ne change aucune des mesures de cette page — une réflexion globale préserve
-la bijection, la couverture et les distances — et ça ne résout pas la question
-d'axe restée ouverte, qui porte sur X et non sur Z. Mais toute image de
-contrôle produite ici doit sortir avec `+Z` vers le bas, sans quoi on compare
-une carte à son reflet.
+This changes none of the measurements on this page — a global reflection
+preserves the bijection, the coverage and the distances — and it does not
+settle the axis question left open, which is about X and not Z. But every
+check image produced here must come out with `+Z` downwards, otherwise one
+is comparing a map with its reflection.
 
-## Correction : le type C est un tunnel
+## Correction: type C is a tunnel
 
-Le paragraphe ci-dessus décrivait le type C comme « des surfaces plates, un
-élément de circuit particulier à trancher ». C'était insuffisant, et il a fallu
-lire les quads bruts plutôt que leurs statistiques. La section 156, quatre
-enregistrements :
+The paragraph above described type C as "flat surfaces, a particular course
+element to be settled". That was not enough, and it took reading the raw
+quads rather than their statistics. Section 156, four records:
 
 ```
 (-8195,-655,6763)(-6128,-655,6763)(-8195,-655,8930)(-6128,-655,8930)   Y constant -655
@@ -211,302 +208,306 @@ enregistrements :
 (-8175,-661,6763)(-8175,-661,8930)(-8175,   6,6763)(-8175,   6,8930)   X constant -8175
 ```
 
-Un sol, un plafond 655 unités plus haut, deux parois verticales. **Une boîte.**
-Les 23 sections de type C forment deux couloirs de cellules contiguës —
-`x = 3..6` sur `z = 13..19`, et `x = 11..13` sur `z = 13..16` — et l'axe du
-circuit traverse **16 de ces 23 cellules**. Ce sont les tunnels.
+A floor, a ceiling 655 units higher, two vertical walls. **A box.** The 23
+type-C sections form two corridors of contiguous cells — `x = 3..6` over
+`z = 13..19`, and `x = 11..13` over `z = 13..16` — and the course
+centreline crosses **16 of those 23 cells**. These are the tunnels.
 
-Ce qui invalide aussi la phrase « aucun des trois n'est un mur » écrite plus
-haut : 10,8 % des quads de type C sont verticaux, contre 6,2 % pour B. Le test
-d'empreinte fine en plan était dilué par les 57,7 % de sols et de plafonds, qui
-sont horizontaux par construction. Une proportion agrégée sur un type qui
-mélange trois rôles géométriques ne mesure rien ; c'est en lisant quatre
-enregistrements consécutifs d'une même section que la structure apparaît.
+Which also invalidates the sentence "none of the three is a wall" written
+above: 10.8 % of type-C quads are vertical, against 6.2 % for B. The
+thin-footprint-in-plan test was diluted by the 57.7 % of floors and
+ceilings, which are horizontal by construction. A proportion aggregated
+over a type that mixes three geometric roles measures nothing; it is by
+reading four consecutive records of a single section that the structure
+appears.
 
-Le type A reste sans lecture équivalente : 5,8 % de verticales, 6,1 %
-d'horizontales, donc presque tout est incliné. Talus et dévers restent
-l'hypothèse, cette fois sans réfutation à opposer.
+Type A still has no equivalent reading: 5.8 % vertical, 6.1 % horizontal,
+so nearly everything is sloping. Embankments and banking remain the
+hypothesis, this time with no refutation to set against it.
 
-## Ce que le décalage d'une cellule veut dire exactement
+## What the one-cell offset means exactly
 
-Deux tests semblaient se contredire : la couverture de l'axe préfère un
-décalage de `+8192` en X, tandis que l'appartenance des cellules de tunnel à
-l'axe préfère l'absence de décalage (16 contre 12). Ils ne portent pas sur la
-même chose et ils s'accordent.
+Two tests seemed to contradict each other: coverage of the centreline
+prefers a `+8192` offset in X, while the membership of the tunnel cells in
+the centreline prefers no offset at all (16 against 12). They are not about
+the same thing, and they agree.
 
-L'indexation `z*32 + x` est correcte **sans décalage** : la cellule `(3,13)`
-est bien celle que l'axe traverse. Et l'origine géométrique de la section
-assignée à cette cellule doit être posée à `(x+1) * 2048`, puisque ses sommets
-s'étendent de `−8192` à `0` en X. Les deux énoncés disent la même chose : la
-section couvre sa propre cellule, son origine étant sur le bord `+X` de
-celle-ci.
+The `z*32 + x` indexing is correct **with no offset**: cell `(3,13)` really
+is the one the centreline crosses. And the geometric origin of the section
+assigned to that cell has to be placed at `(x+1) * 2048`, since its
+vertices span `−8192` to `0` in X. The two statements say the same thing:
+the section covers its own cell, its origin sitting on that cell's `+X`
+edge.
 
-## Le placement n'est pas encore exact — et la réflexion est écartée
+## The placement is not exact yet — and the reflection is set aside
 
-Observation extérieure : le tracé est bon, le placement de la géométrie ne
-l'est pas. Elle est juste, et deux mesures la rendent précise.
+Outside observation: the layout is right, the placement of the geometry is
+not. It is correct, and two measurements make it precise.
 
-L'instrument est le tunnel : un tunnel doit être centré sur l'axe. En prenant
-les centroïdes des 695 quads de type C et leur distance à la polyligne, avec
-une demi-largeur effective de route de **503 unités monde** (`hw*2 >> 4`) :
+The instrument is the tunnel: a tunnel must be centred on the centreline.
+Taking the centroids of the 695 type-C quads and their distance to the
+polyline, with an effective road half-width of **503 world units**
+(`hw*2 >> 4`):
 
-| placement | distance médiane à l'axe |
+| placement | median distance to the centreline |
 |---|---|
-| origine à `x_idx * 2048` | 990 |
-| origine à `(x_idx + 1) * 2048` | 556 |
-| meilleur ajustement libre `(+1536, +512)` | 260 |
+| origin at `x_idx * 2048` | 990 |
+| origin at `(x_idx + 1) * 2048` | 556 |
+| best free fit `(+1536, +512)` | 260 |
 
-Donc le décalage d'une cellule en X va dans le bon sens et divise l'erreur par
-presque deux, mais un ajustement libre fait encore deux fois mieux, sur une
-valeur qui n'est un multiple propre de rien. **La convention d'origine n'est
-donc pas encore dérivée ; elle est ajustée.** C'est à corriger dans la section
-précédente, où j'écrivais que le décalage « n'avait qu'une valeur admissible » :
-c'était vrai à la résolution d'une cellule, et faux à la résolution où on peut
-maintenant mesurer.
+So the one-cell offset in X goes in the right direction and cuts the error
+by almost half, but a free fit does twice better still, on a value that is
+a proper multiple of nothing. **The origin convention is therefore not
+derived yet; it is fitted.** That is to be corrected in the previous
+section, where I wrote that the offset "had only one admissible value":
+that was true at the resolution of a cell, and false at the resolution we
+can now measure at.
 
-## La réflexion en X est réfutée
+## The reflection in X is refuted
 
-Même instrument, et cette fois le verdict est net :
+Same instrument, and this time the verdict is clear-cut:
 
-| indexation | tunnels | tous les quads |
+| indexing | tunnels | all quads |
 |---|---|---|
-| `x_monde = x_idx * 2048` | 990 | 1 384 |
-| `x_monde = (30 − x_idx) * 2048` | 15 813 | 3 889 |
-| `x_monde = (31 − x_idx) * 2048` | 17 854 | 4 298 |
-| `x_monde = (29 − x_idx) * 2048` | 13 775 | 3 601 |
+| `world_x = x_idx * 2048` | 990 | 1 384 |
+| `world_x = (30 − x_idx) * 2048` | 15 813 | 3 889 |
+| `world_x = (31 − x_idx) * 2048` | 17 854 | 4 298 |
+| `world_x = (29 − x_idx) * 2048` | 13 775 | 3 601 |
 
-Seize fois pire. L'hypothèse d'une réflexion en X entre la grille et la
-polyligne, ouverte depuis trois sections de cette page, est **fausse** :
-`z*32 + x` est bien la correspondance, sans miroir. Le `30 − x` du code
-s'explique donc par un stockage inversé de la caméra dans `D_801D9068`, la
-réflexion s'appliquant deux fois et s'annulant — ce qui reste à lire, mais
-n'est plus une alternative ouverte sur le placement.
+Sixteen times worse. The hypothesis of a reflection in X between the grid
+and the polyline, open for three sections of this page, is **false**:
+`z*32 + x` really is the correspondence, with no mirror. The code's
+`30 − x` is therefore explained by the camera being stored inverted in
+`D_801D9068`, the reflection applying twice and cancelling out — which
+remains to be read, but is no longer an open alternative for the placement.
 
-## Où chercher la suite
+## Where to look next
 
-Pas dans un ajustement plus fin. Les deux candidats qui restent sont dans le
-code de chargement : `func_800125B4`, qui construit la table de 32 octets par
-section à `D_801D35F0`, et ce qui écrit `D_801D82D0`. Si une origine par
-section existe, elle est posée là — et un décalage constant qui n'est un
-multiple propre de rien ressemble beaucoup plus à un champ lu dans un fichier
-qu'à une convention de grille.
+Not in a finer fit. The two candidates left are in the loading code:
+`func_800125B4`, which builds the 32-bytes-per-section table at
+`D_801D35F0`, and whatever writes `D_801D82D0`. If a per-section origin
+exists, it is set there — and a constant offset that is a proper multiple
+of nothing looks a great deal more like a field read from a file than like
+a grid convention.
 
-## La géométrie est stockée retournée d'un demi-tour
+## The geometry is stored turned by a half-turn
 
-Trois lectures et une mesure, dans cet ordre.
+Three readings and one measurement, in that order.
 
-**`func_800125B4`, le chargeur, ne stocke aucune origine.** Son entrée de 32
-octets par section est `{ptrA(0), ptrB(4), ptrC(8), cntA(0xC), cntB(0xE),
-cntC(0x10)}` et rien d'autre. Le décalage cherché n'est donc pas dans le
-fichier — il est dans la convention. (Au passage : `func_800437AC` lit le
-pointeur en `0x0` et le compteur en `0xC`, donc la passe de dessin lue plus
-haut est celle du **type A**, pas du type B.)
+**`func_800125B4`, the loader, stores no origin.** Its 32-byte entry per
+section is `{ptrA(0), ptrB(4), ptrC(8), cntA(0xC), cntB(0xE), cntC(0x10)}`
+and nothing else. The offset being sought is therefore not in the file — it
+is in the convention. (In passing: `func_800437AC` reads the pointer at
+`0x0` and the count at `0xC`, so the drawing pass read above is the **type
+A** one, not type B.)
 
-**`func_80015CD4` donne la constante.** Cette fonction d'initialisation écrit
-`D_801733A0 = 0xF000` — le global que `TRACK_SPINE_FORMAT.md` désignait comme
-« le mécanisme de cours miroir ». Et `0xF000 = 61440 = 30 × 2048`, soit
-exactement le `30 −` de l'indexation. Le repère de rendu est donc le repère de
-la polyligne réfléchi en X autour de `30 × 2048`.
+**`func_80015CD4` gives the constant.** This init function writes
+`D_801733A0 = 0xF000` — the global that `TRACK_SPINE_FORMAT.md` designated
+as "the mirrored-course mechanism". And `0xF000 = 61440 = 30 × 2048`,
+exactly the `30 −` of the indexing. The render frame is therefore the
+polyline's frame reflected in X about `30 × 2048`.
 
-**La composition s'annule, et elle explique l'arrondi.** En posant
-`X_rendu = 0xF000 − X_poly` et `X_poly = 2048q + r` :
+**The composition cancels out, and it explains the rounding.** Setting
+`X_rendu = 0xF000 − X_poly` and `X_poly = 2048q + r`:
 
 ```
 cellX  = (0xF000 − X_poly + 0x400) >> 11 = 30 − q − [r > 1024]
 index  = 30 − cellX                      = q + [r > 1024]
 ```
 
-soit `index = round(X_poly / 2048)`. La correspondance empirique `z*32 + x` est
-donc **dérivée**, pas constatée, et le `+0x400` n'est pas un détail : il place
-la cellule `k` sur l'intervalle `[2048k − 1024, 2048k + 1024]`, centré sur
-`2048k` et non aligné dessus.
+that is, `index = round(X_poly / 2048)`. The empirical correspondence
+`z*32 + x` is therefore **derived**, not merely observed, and the `+0x400`
+is not a detail: it places cell `k` on the interval
+`[2048k − 1024, 2048k + 1024]`, centred on `2048k` and not aligned to it.
 
-**Reste la mesure.** Puisque le repère de rendu est réfléchi, les coordonnées
-locales doivent être niées pour être dessinées dans le repère de la polyligne.
-Distance médiane des centroïdes de tunnel à l'axe, demi-largeur de route 503 :
+**The measurement remains.** Since the render frame is reflected, the local
+coordinates have to be negated in order to be drawn in the polyline's
+frame. Median distance from the tunnel centroids to the centreline, road
+half-width 503:
 
-| convention | tunnels | tous les quads |
+| convention | tunnels | all quads |
 |---|---|---|
-| `origine + local` (ce que je faisais) | 990 | 1 384 |
-| `origine − local` en X seulement | 650 | 1 129 |
-| `origine − local` en X et Z, origine `+1024` | **300** | **860** |
+| `origin + local` (what I was doing) | 990 | 1 384 |
+| `origin − local` in X only | 650 | 1 129 |
+| `origin − local` in X and Z, origin `+1024` | **300** | **860** |
 
-Nier X **et** Z est un demi-tour autour de Y, pas une double réflexion : le
-sens de parcours des polygones est préservé, ce qui est cohérent avec le fait
-que le jeu ne bascule le winding qu'en mode miroir. Et le `+1024` est
-exactement le demi-pas que l'arrondi ci-dessus impose.
+Negating X **and** Z is a half-turn about Y, not a double reflection: the
+winding order of the polygons is preserved, which is consistent with the
+fact that the game flips the winding only in mirror mode. And the `+1024`
+is exactly the half-step that the rounding above imposes.
 
-L'image de contrôle avec cette convention est la première où le ruban beige
-suit l'axe sur toute sa longueur, où les tunnels verts sont **sur** la route et
-non à côté, et où le quartier de droite se lit comme une ville avec ses
-viaducs.
+The check image with this convention is the first where the beige ribbon
+follows the centreline along its whole length, where the green tunnels are
+**on** the road and not beside it, and where the district on the right
+reads as a city with its viaducts.
 
-Le test de raccord entre sections voisines, essayé avant celui-ci, est nul et
-mérite d'être noté comme tel : moins de 0,4 % des sommets coïncident d'une
-section à l'autre dans toutes les configurations. Les sections sont autonomes
-et pavent leur cellule quel que soit le signe, donc la continuité interne ne
-peut rien arbitrer ici.
+The seam test between neighbouring sections, tried before this one, is
+worthless and deserves to be noted as such: fewer than 0.4 % of the
+vertices coincide from one section to the next in every configuration. The
+sections are self-contained and tile their cell whatever the sign, so
+internal continuity can settle nothing here.
 
-## La polyligne n'est pas l'axe : c'est un bord de route
+## The polyline is not the centreline: it is a road edge
 
-Observation extérieure, sur trois portions différentes : la géométrie est
-toujours du même côté du trait rouge — au-dessus sur les deux droites
-horizontales, à gauche sur la portion verticale. Demande : la basculer de
-l'autre côté.
+Outside observation, on three different stretches: the geometry is always
+on the same side of the red line — above it on the two horizontal
+straights, to the left on the vertical stretch. Request: flip it to the
+other side.
 
-La mesure dit autre chose, et elle est nette. Sur la longue droite sud, les
-**353 sommets de type B proches du trait tombent tous dans `[−800, 0]`** en
-distance signée. Rien, pas un seul, de l'autre côté. La demi-largeur des nœuds
-y vaut 655.
+The measurement says otherwise, and it is clear-cut. On the long southern
+straight, the **353 type-B vertices near the line all fall within
+`[−800, 0]`** in signed distance. Nothing, not one, on the other side. The
+nodes' half-width there is 655.
 
-Une géométrie mal placée serait décalée ; une géométrie coupée net sur le trait
-ne l'est pas. **La polyligne stockée est un bord de la route, pas son axe.**
-C'est moi qui l'appelais l'axe depuis le début, et c'est cette erreur de
-lecture qui donnait l'impression d'un décalage.
+Badly placed geometry would be offset; geometry cut clean on the line is
+not. **The stored polyline is one edge of the road, not its centreline.** I
+am the one who had been calling it the centreline from the start, and it is
+that misreading that gave the impression of an offset.
 
-Ça se confirme en traçant le second bord à `2 × demi-largeur` du premier, du
-côté où se trouve la géométrie : sur les deux droites et dans les tunnels, le
-ruban de route est **encadré** par les deux traits. Le rendu de contrôle
-`map_v4.png` le montre.
+This is confirmed by drawing the second edge at `2 × half-width` from the
+first, on the side where the geometry is: on both straights and in the
+tunnels, the road ribbon is **framed** by the two lines. The check render
+`map_v4.png` shows it.
 
-Ce qui recale au passage plusieurs chiffres de cette page. Toutes les distances
-« à l'axe » mesurées plus haut étaient en fait des distances à un bord, donc
-biaisées d'une demi-largeur — et il faut leur retirer ce biais avant de les
-comparer entre elles.
+Which incidentally resets several figures on this page. All the distances
+"to the centreline" measured above were in fact distances to an edge, hence
+biased by a half-width — and that bias has to be removed from them before
+comparing them with one another.
 
-### Un défaut de mesure à signaler
+### A measurement flaw to flag
 
-La table de la section précédente (990 / 650 / 300) est fausse. La fonction de
-score divisait les coordonnées locales par 16 au lieu de 4, rétrécissant la
-géométrie d'un facteur quatre et réduisant toutes les distances d'autant. Le
-rendu, lui, utilisait le bon facteur — d'où une image qui s'améliorait pendant
-que les chiffres devenaient trop beaux. Table refaite, à l'échelle correcte,
-avec la distance signée qui doit s'annuler :
+The table in the previous section (990 / 650 / 300) is wrong. The scoring
+function divided the local coordinates by 16 instead of 4, shrinking the
+geometry by a factor of four and reducing all the distances by as much. The
+rendering, for its part, used the right factor — hence an image that kept
+improving while the figures grew too good. Table redone, at the correct
+scale, with the signed distance that ought to cancel out:
 
-| convention | signée | absolue |
+| convention | signed | absolute |
 |---|---|---|
-| `origine + local` | +331 | 1901 |
-| `origine + local`, +1 cellule en X | −52 | 813 |
-| demi-tour, origine `(+1024, +1024)` | −562 | 1011 |
-| **demi-tour, origine `(+0, +1024)`** | **−89** | **351** |
-| X nié seul, origine `(+0, +1024)` | +59 | 606 |
-| Z nié seul, origine `(+0, +1024)` | +273 | 1744 |
+| `origin + local` | +331 | 1901 |
+| `origin + local`, +1 cell in X | −52 | 813 |
+| half-turn, origin `(+1024, +1024)` | −562 | 1011 |
+| **half-turn, origin `(+0, +1024)`** | **−89** | **351** |
+| X negated alone, origin `(+0, +1024)` | +59 | 606 |
+| Z negated alone, origin `(+0, +1024)` | +273 | 1744 |
 
-La convention retenue est donc le demi-tour avec l'origine décalée de `+1024`
-en Z seulement — et non `+1024` sur les deux axes comme écrit hier.
+The convention retained is therefore the half-turn with the origin shifted
+by `+1024` in Z only — and not `+1024` on both axes as written yesterday.
 
-C'est la deuxième fois sur cette page qu'un chiffre trop flatteur venait d'un
-facteur d'échelle et non du sujet étudié. Le garde-fou qui manquait est simple :
-quand une image et une métrique divergent sur le même objet, c'est la métrique
-qu'il faut relire.
+This is the second time on this page that a too-flattering figure came from
+a scale factor and not from the subject under study. The safeguard that was
+missing is simple: when an image and a metric diverge on the same object,
+it is the metric that needs re-reading.
 
 ---
 
-# La convention correcte
+# The correct convention
 
 ```
-x_monde = cellule_x * 2048  −  localX / 4
-z_monde = cellule_z * 2048  +  localZ / 4
+world_x = cell_x * 2048  −  localX / 4
+world_z = cell_z * 2048  +  localZ / 4
 ```
 
-**X nié, Z non nié, aucun décalage.** C'est tout.
+**X negated, Z not negated, no offset.** That is all.
 
-Le X nié vient de `D_801733A0 = 0xF000 = 30 × 2048` lu dans `func_80015CD4` :
-le repère de rendu est celui de la polyligne réfléchi en X, et rien ne réfléchit
-Z. La dérivation le disait déjà ; je l'ai perdue en route en niant aussi Z sur
-la foi d'une métrique fausse.
+The negated X comes from `D_801733A0 = 0xF000 = 30 × 2048` read in
+`func_80015CD4`: the render frame is the polyline's reflected in X, and
+nothing reflects Z. The derivation already said so; I lost it along the way
+by negating Z as well, on the strength of a wrong metric.
 
-## La preuve
+## The proof
 
-Intervalle occupé par les sommets de type B autour de la longue droite sud,
-en distance signée à la polyligne, pour une demi-largeur de nœud de 655 :
+Interval occupied by the type-B vertices around the long southern straight,
+in signed distance to the polyline, for a node half-width of 655:
 
-| convention | n | bande | médiane |
+| convention | n | band | median |
 |---|---|---|---|
-| `(−X, −Z)`, décalage `+1024` en Z | 353 | `[−815 .. −65]` | −428 |
-| `(+X, −Z)`, décalage `+1024` en Z | 506 | `[−788 .. +514]` | −262 |
-| `(+X, +Z)`, aucun décalage | 532 | `[−1587 .. +885]` | +4 |
-| **`(−X, +Z)`, aucun décalage** | **352** | **`[−359 .. +392]`** | **+4** |
+| `(−X, −Z)`, `+1024` offset in Z | 353 | `[−815 .. −65]` | −428 |
+| `(+X, −Z)`, `+1024` offset in Z | 506 | `[−788 .. +514]` | −262 |
+| `(+X, +Z)`, no offset | 532 | `[−1587 .. +885]` | +4 |
+| **`(−X, +Z)`, no offset** | **352** | **`[−359 .. +392]`** | **+4** |
 
-La bonne se reconnaît à deux choses ensemble : une médiane nulle **et** une
-bande étroite. `(+X, +Z)` a aussi une médiane nulle, mais sur une bande trois
-fois trop large — c'est du décor réparti symétriquement, pas une route. Seule
-`(−X, +Z)` donne une bande de 750 unités centrée, à comparer aux 1310 de
-largeur de route : le revêtement, centré sur son axe.
+The right one is recognised by two things together: a zero median **and** a
+narrow band. `(+X, +Z)` also has a zero median, but over a band three times
+too wide — that is scenery spread symmetrically, not a road. Only
+`(−X, +Z)` gives a centred band of 750 units, to be compared with the 1310
+of road width: the road surface, centred on its axis.
 
-## Ce que ça retire de cette page
+## What this removes from this page
 
-**La polyligne est bien l'axe de la route**, et non un bord. La section
-précédente concluait l'inverse à partir d'un intervalle `[−800, 0]` — cet
-intervalle était l'artefact du signe de Z. À retirer.
+**The polyline really is the road's centreline**, not an edge. The previous
+section concluded the opposite from an interval of `[−800, 0]` — that
+interval was the artefact of the sign of Z. To be removed.
 
-**Les décalages `+1024` sont des artefacts** de la même erreur. Il n'y a aucun
-décalage.
+**The `+1024` offsets are artefacts** of the same error. There is no offset
+at all.
 
-**Le demi-tour est faux** : c'est une réflexion en X seule.
+**The half-turn is wrong**: it is a reflection in X alone.
 
-Trois conclusions successives invalidées par la même cause, et la cause n'a été
-trouvée qu'en changeant de question — non plus « quelle transformation minimise
-une distance », mais « quel intervalle occupe la route autour de son axe ». La
-première question a un optimum pour n'importe quelle convention ; la seconde
-n'a de réponse étroite que pour la bonne.
+Three successive conclusions invalidated by the same cause, and the cause
+was found only by changing the question — no longer "which transform
+minimises a distance", but "which interval does the road occupy around its
+centreline". The first question has an optimum for any convention whatever;
+the second has a narrow answer only for the right one.
 
-Le signalement extérieur qui a débloqué ça — « la géométrie est du même côté,
-il faut la retourner en miroir » — portait sur trois portions différentes et
-était exact. Aucune de mes métriques agrégées ne le voyait, parce qu'elles
-moyennaient sur un décor réparti des deux côtés.
+The outside report that unblocked this — "the geometry is on the same side,
+it needs mirroring" — covered three different stretches and was accurate.
+None of my aggregate metrics saw it, because they averaged over scenery
+spread on both sides.
 
-## L'amas détaché du nord-est
+## The detached cluster in the north-east
 
-Signalé de l'extérieur comme suspect sur le rendu final : un groupe de quads de
-type A posés à l'écart, sans route ni sol autour. Ce sont huit sections, et
-elles se répartissent en deux groupes nets.
+Flagged from outside as suspicious on the final render: a group of type-A
+quads set apart, with no road or ground around them. These are eight
+sections, and they fall into two clear groups.
 
-| sections | cellules | hauteur (monde) | distance à une piste | biais de profondeur |
+| sections | cells | height (world) | distance to a track | depth bias |
 |---|---|---|---|---|
 | 72, 73, 93 | (19–21, 7–9) | −1221 .. +170 | 1 590 – 3 074 | 50 / 51 |
 | 40, 41, 56, 57, 58 | (21–23, 5–6) | −642 .. +1 | 5 975 – 6 716 | 12 |
 
-Chaque section est bâtie de la même façon : une bande de quads en tpage 23 et,
-juste au-dessus, une bande en tpage 28, les deux partageant exactement leur
-arête en Y. Et les quads sont **verticaux** — celui d'exemple mesure 994 de
-large pour 937 de haut sur une empreinte de 285 de profondeur.
+Each section is built the same way: a band of quads in tpage 23 and, just
+above it, a band in tpage 28, the two sharing their Y edge exactly. And the
+quads are **vertical** — the example one measures 994 wide by 937 high on a
+footprint 285 deep.
 
-Des parois verticales de 300 à 1 200 unités de haut, texturées en deux bandes
-superposées, à une à trois cellules de la piste, avec un biais de profondeur de
-50 là où la valeur courante du fichier est −8 : c'est un **décor de fond**,
-dessiné loin derrière tout le reste. La falaise et le relief qu'on voit par
-dessus la baie depuis la section côtière.
+Vertical walls 300 to 1 200 units high, textured as two stacked bands, one
+to three cells from the track, with a depth bias of 50 where the file's
+usual value is −8: this is **background scenery**, drawn far behind
+everything else. The cliff and the relief seen across the bay from the
+coastal section.
 
-L'absence de sol autour n'est donc pas une lacune : entre la route et ces
-parois, il y a l'eau, et l'eau n'a pas de quads.
+The absence of ground around them is therefore not a gap: between the road
+and those walls there is the water, and water has no quads.
 
-Ce qui corrige une troisième fois la phrase « aucun des trois types n'est un
-mur ». Le type A en contient, et des grands. Le test d'empreinte fine en plan
-les manquait parce qu'ils sont larges autant que hauts — fins seulement dans la
-troisième dimension, celle que la vue de dessus écrase.
+Which corrects for a third time the sentence "none of the three types is a
+wall". Type A contains some, and large ones. The thin-footprint-in-plan
+test missed them because they are as wide as they are tall — thin only in
+the third dimension, the one the top view flattens.
 
 ---
 
-# La visibilité est écrite en ASCII
+# The visibility is written in ASCII
 
-`func_80015BC4`, appelé par le constructeur des placements pour décider si une
-cellule est dessinée, ne fait aucun calcul de frustum. Il lit **un octet** et le
-décode comme un chiffre hexadécimal :
+`func_80015BC4`, called by the placement builder to decide whether a cell
+is drawn, does no frustum computation at all. It reads **one byte** and
+decodes it as a hexadecimal digit:
 
 ```
     index = cellZ * 34 + 31 − cellX
-    c     = table[index]                    ; lbu, un octet
-    si 'a' <= c <= 'z' :  zone = c − 0x57   ; 'a' -> 10
-    sinon si '0' <= c <= '9' : zone = c − 0x30
-    si zone == zone_de_la_camera : visible
+    c     = table[index]                    ; lbu, one byte
+    if 'a' <= c <= 'z' :  zone = c − 0x57   ; 'a' -> 10
+    else if '0' <= c <= '9' : zone = c − 0x30
+    if zone == camera_zone : visible
 ```
 
-Le `31 − cellX` est la troisième apparition indépendante de la réflexion en X.
+The `31 − cellX` is the third independent appearance of the reflection in
+X.
 
-Les tables sont à `0x80071D70`, `0x800721B0` et `0x800725F0`, espacées de
-**1088 octets = 32 lignes de 34** : 32 caractères par ligne plus deux octets
-nuls. Une par circuit. Et leur contenu se lit tel quel :
+The tables are at `0x80071D70`, `0x800721B0` and `0x800725F0`, spaced
+**1088 bytes = 32 rows of 34** apart: 32 characters per row plus two null
+bytes. One per course. And their contents read as they stand:
 
 ```
 zzzzzzzz888888888877777zzzzzzzzz
@@ -519,76 +520,75 @@ aaaaaabbbbbbccbbbbb555555544444z
 aaaaaabbbbccccccbbbbb5554444333z
 ```
 
-**C'est de l'art ASCII.** Un caractère par cellule, un chiffre hexadécimal par
-zone, `z` pour le reste. `D_80072A30` porte le nombre de zones — 14, 14 et 20
-pour les trois circuits — et `D_801E9210` l'index du circuit courant.
+**It is ASCII art.** One character per cell, one hexadecimal digit per
+zone, `z` for the rest. `D_80072A30` carries the zone count — 14, 14 and 20
+for the three courses — and `D_801E9210` the current course index.
 
-Un ensemble de visibilité potentielle écrit à la main dans un éditeur de texte,
-en 1994, et compilé tel quel dans l'exécutable. Il n'y a rien à décoder : le
-format *est* sa propre représentation.
+A potentially-visible set written by hand in a text editor, in 1994, and
+compiled as such into the executable. There is nothing to decode: the
+format *is* its own representation.
 
-### L'alignement, réglé par le code et non par un ajustement
+### The alignment, settled by the code and not by a fit
 
-`func_80015AAC` fait **exactement le même calcul** que `func_80015BC4` — même
-index `z*34 + 31 − cellX`, même décodage — et rend la zone au lieu de la
-comparer. Il n'y a donc aucun décalage libre à chercher : la grille `IDX.HED`
-s'indexe en `z*32 + 30 − cellX`, la carte de zones en `z*34 + 31 − cellX`. Même
-cellule, colonne décalée d'exactement un cran.
+`func_80015AAC` does **exactly the same computation** as `func_80015BC4` —
+same `z*34 + 31 − cellX` index, same decoding — and returns the zone
+instead of comparing it. There is therefore no free offset to look for: the
+`IDX.HED` grid is indexed with `z*32 + 30 − cellX`, the zone map with
+`z*34 + 31 − cellX`. Same cell, column shifted by exactly one notch.
 
-### La vérification qui ne pouvait pas sortir par hasard
+### The check that could not have come out by chance
 
-Avec cette colonne `+1`, en croisant les trois polylignes et les trois cartes —
-cellules de la polyligne ayant une zone, et nombre de zones distinctes :
+With that `+1` column, crossing the three polylines with the three maps —
+polyline cells having a zone, and the number of distinct zones:
 
-| | carte 0 | carte 1 | carte 2 |
+| | map 0 | map 1 | map 2 |
 |---|---|---|---|
-| polyligne 0 | 45/79 (9) | **79/79 (14)** | 79/79 (15) |
-| polyligne 1 | 46/80 (9) | **80/80 (14)** | 80/80 (15) |
-| polyligne 2 | 60/112 (10) | 81/112 (14) | **112/112 (20)** |
+| polyline 0 | 45/79 (9) | **79/79 (14)** | 79/79 (15) |
+| polyline 1 | 46/80 (9) | **80/80 (14)** | 80/80 (15) |
+| polyline 2 | 60/112 (10) | 81/112 (14) | **112/112 (20)** |
 
-`D_80072A30` déclare **14, 14 et 20** zones. Le nombre de zones *distinctes
-effectivement traversées* vaut 14 sur la carte 1 et 20 sur la carte 2 —
-exactement les valeurs déclarées, qu'aucune étape du raisonnement n'imposait.
-Deux compteurs indépendants tombent juste du premier coup : les cartes 1 et 2
-sont établies.
+`D_80072A30` declares **14, 14 and 20** zones. The number of *distinct
+zones actually crossed* is 14 on map 1 and 20 on map 2 — exactly the
+declared values, which no step of the reasoning imposed. Two independent
+counters land right first time: maps 1 and 2 are established.
 
-### La carte 0 est un vestige
+### Map 0 is a leftover
 
-Le point restant se referme par les deux bouts.
+The remaining point closes from both ends.
 
-**Par la mesure.** Une recherche exhaustive — deux réflexions × neuf décalages
-de colonne × vingt-cinq décalages de ligne, soit 450 alignements — ne trouve
-*aucune* position où la carte 0 couvre entièrement les cellules d'une des trois
-polylignes. Zéro sur 450, pour les trois circuits.
+**By measurement.** An exhaustive search — two reflections × nine column
+offsets × twenty-five row offsets, i.e. 450 alignments — finds *no*
+position at all where map 0 entirely covers the cells of any one of the
+three polylines. Zero out of 450, for all three courses.
 
-**Par le code.** `D_801E9210` est écrit six fois dans le jeu :
+**By the code.** `D_801E9210` is written six times in the game:
 
-| valeur | sites | contexte |
+| value | sites | context |
 |---|---|---|
-| 1 | `0x8001362C`, `0x8003C7DC`, `0x8003D234`, et une branche de `0x80015138` | toujours avec `D_801E90E0 = 0x100`, 256 nœuds |
-| 2 | `0x80013754`, et l'autre branche de `0x80015138` | avec `D_801E90E0 = 0x170`, 368 nœuds |
-| 0 | `0x80013900` seulement | écrit *avant* la sélection de la table de nœuds, jamais après |
+| 1 | `0x8001362C`, `0x8003C7DC`, `0x8003D234`, and one branch of `0x80015138` | always with `D_801E90E0 = 0x100`, 256 nodes |
+| 2 | `0x80013754`, and the other branch of `0x80015138` | with `D_801E90E0 = 0x170`, 368 nodes |
+| 0 | `0x80013900` only | written *before* the node table is selected, never after |
 
-Le seul site qui pose 0 le fait en tête d'une fonction qui choisit ensuite,
-selon `D_801733B8` et `D_8007C210`, l'une des trois tables de nœuds — sans
-jamais réécrire l'index. Aucun chemin n'établit donc 0 comme valeur *utilisée*
-en même temps qu'un monde qui lui correspondrait.
+The only site that sets 0 does so at the head of a function that then
+chooses, according to `D_801733B8` and `D_8007C210`, one of the three node
+tables — without ever rewriting the index. No path therefore establishes 0
+as a value *used* at the same time as a world that would correspond to it.
 
-Les deux lectures concordent : **la table à `0x80071D70` est un vestige**, une
-version antérieure de la carte de zones restée dans le binaire. Ce n'est pas
-une lacune de la rétro-ingénierie, c'est une propriété du jeu.
+The two readings agree: **the table at `0x80071D70` is a leftover**, an
+earlier version of the zone map that stayed in the binary. This is not a
+gap in the reverse-engineering, it is a property of the game.
 
-### Au passage, la sélection de circuit
+### In passing, the course selection
 
-La même fonction donne la logique complète :
+The same function gives the complete logic:
 
 ```
-si D_801733B8 == 0        -> g_track_nodes_1, 256 nœuds
-sinon si D_8007C210 < 3   -> g_track_nodes_0, 256 nœuds
-sinon                     -> g_track_nodes_2, 368 nœuds
+if D_801733B8 == 0        -> g_track_nodes_1, 256 nodes
+else if D_8007C210 < 3    -> g_track_nodes_0, 256 nodes
+else                      -> g_track_nodes_2, 368 nodes
 ```
 
-et les longueurs de tour associées, `D_80173368` : `0xC570` pour les 256 nœuds,
-`0x13570` pour les 368. Le test `D_8007C210 < 3` est le même que celui lu dans
-`func_80021BE0` il y a plusieurs sessions, quand rien ne le rattachait encore à
-autre chose.
+and the associated lap lengths, `D_80173368`: `0xC570` for the 256 nodes,
+`0x13570` for the 368. The `D_8007C210 < 3` test is the same one read in
+`func_80021BE0` several sessions ago, when nothing yet connected it to
+anything else.

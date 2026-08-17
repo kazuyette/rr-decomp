@@ -1,20 +1,19 @@
-/* Le GPU du PlayStation, assez complet pour voir l'image.
+/* The PlayStation GPU, complete enough to see the picture.
  *
- * Pourquoi un rasteriseur logiciel plutot qu'OpenGL
- * ------------------------------------------------
- * Ce qu'on cherche a etablir n'est pas la vitesse mais la fidelite : est-ce
- * que le flux de primitives que le jeu produit forme bien l'image du jeu ?
- * Un rasteriseur ecrit ici repond a cette question sans dependre d'un pilote,
- * d'un ecran ni d'un contexte -- et il tourne dans un conteneur sans affichage.
- * Le portage vers le materiel viendra apres, quand l'image sera juste.
+ * Why a software rasteriser rather than OpenGL
+ * -------------------------------------------
+ * What we are trying to establish is not speed but fidelity: does the stream
+ * of primitives the game produces really form the game's picture? A rasteriser
+ * written here answers that question without depending on a driver, a screen
+ * or a context -- and it runs in a container with no display. The port to
+ * hardware will come later, once the picture is right.
  *
- * Ce qui est implemente
- * ---------------------
- * La memoire video telle qu'elle est : 1024 par 512 demi-mots. Les polygones
- * plats, degrades, textures ; les rectangles et les sprites ; les traits ; les
- * transferts vers et depuis la memoire video ; la fenetre de texture, la zone
- * de dessin, le decalage, la page de texture et la palette. La semi-
- * transparence est appliquee dans ses quatre modes.
+ * What is implemented
+ * -------------------
+ * Video memory as it is: 1024 by 512 halfwords. Flat, gouraud and textured
+ * polygons; rectangles and sprites; lines; transfers to and from video memory;
+ * the texture window, the drawing area, the offset, the texture page and the
+ * palette. Semi-transparency is applied in all four of its modes.
  */
 #include <stdio.h>
 #include <string.h>
@@ -23,19 +22,19 @@
 
 u16 VRAM[1024 * 512];
 
-/* --- etat du dessin ----------------------------------------------------- */
+/* --- drawing state ------------------------------------------------------ */
 static int draw_x0, draw_y0, draw_x1 = 1023, draw_y1 = 511;
 static int off_x, off_y;
-static u32 texpage;              /* dernier E1 ou mot de page d'une primitive */
-static int tw_mx, tw_my, tw_ox, tw_oy;   /* masque nul = fenetre entiere */
+static u32 texpage;              /* last E1, or a primitive's page word */
+static int tw_mx, tw_my, tw_ox, tw_oy;   /* null mask = the whole window */
 static int mask_set, mask_test;
 
-/* --- affichage ---------------------------------------------------------- */
+/* --- display ------------------------------------------------------------ */
 static int disp_x, disp_y, disp_w = 320, disp_h = 240;
-unsigned long pixels_avant;
+unsigned long pixels_prev;
 unsigned long long g_pixels;
-int g_teinte;
-unsigned long gpu_frames, copies_nulles, tex_vides, tex_pleins, transferts_tampon, copies_tampon;
+int g_tint;
+unsigned long gpu_frames, null_copies, tex_empty, tex_full, buffer_transfers, buffer_copies;
 
 static inline u16 vram_get(int x, int y)
 {
@@ -46,7 +45,7 @@ static inline void vram_put(int x, int y, u16 c)
     VRAM[((y & 511) << 10) | (x & 1023)] = c;
 }
 
-/* Le melange semi-transparent, dans les quatre proportions du materiel. */
+/* Semi-transparent blending, in the four proportions of the hardware. */
 static u16 blend(u16 back, u16 front, int mode)
 {
     int br = back & 31, bg = (back >> 5) & 31, bb = (back >> 10) & 31;
@@ -83,7 +82,7 @@ static u16 to15(u32 rgb)
                  | ((((rgb >> 16) & 0xFF) >> 3) << 10));
 }
 
-/* --- lecture d'un texel ------------------------------------------------- */
+/* --- reading a texel ---------------------------------------------------- */
 static int tex_lookup(int u, int v, u32 tp, u32 clut, u16 *out)
 {
     int bx = (int)(tp & 0xF) * 64;
@@ -95,26 +94,26 @@ static int tex_lookup(int u, int v, u32 tp, u32 clut, u16 *out)
     u = (u & ~(tw_mx * 8)) | ((tw_ox & tw_mx) * 8);
     v = (v & ~(tw_my * 8)) | ((tw_oy & tw_my) * 8);
     u &= 255; v &= 255;
-    if (depth == 0) {                       /* seize couleurs */
+    if (depth == 0) {                       /* sixteen colours */
         u16 w = vram_get(bx + (u >> 2), by + v);
         int idx = (w >> ((u & 3) * 4)) & 0xF;
         t = vram_get(cx + idx, cy);
-    } else if (depth == 1) {                /* deux cent cinquante-six */
+    } else if (depth == 1) {                /* two hundred and fifty-six */
         u16 w = vram_get(bx + (u >> 1), by + v);
         int idx = (w >> ((u & 1) * 8)) & 0xFF;
         t = vram_get(cx + idx, cy);
-    } else {                                /* couleur directe */
+    } else {                                /* direct colour */
         t = vram_get(bx + u, by + v);
     }
-    /* Le noir absolu est transparent : c'est la convention du materiel, et
-       sans elle les decors se dessinent sur un aplat noir plein. */
-    if (t == 0) { tex_vides++; return 0; }
-    tex_pleins++;
+    /* Absolute black is transparent: that is the hardware's convention, and
+       without it the scenery draws over a solid black field. */
+    if (t == 0) { tex_empty++; return 0; }
+    tex_full++;
     *out = t;
     return 1;
 }
 
-/* --- interpolation d'un triangle ---------------------------------------- */
+/* --- interpolating a triangle -------------------------------------------- */
 struct vtx { int x, y; int r, g, b; int u, v; };
 
 static void tri(struct vtx a, struct vtx b, struct vtx c,
@@ -134,8 +133,8 @@ static void tri(struct vtx a, struct vtx b, struct vtx c,
     if (maxx > draw_x1) maxx = draw_x1;
     if (miny < draw_y0) miny = draw_y0;
     if (maxy > draw_y1) maxy = draw_y1;
-    /* Un triangle demesure vient toujours d'une coordonnee mal lue : le
-       dessiner couterait des minutes sans rien montrer de vrai. */
+    /* An outsized triangle always comes from a coordinate read wrong: drawing
+       it would cost minutes without showing anything true. */
     if (maxx - minx > 1024 || maxy - miny > 512) return;
 
     for (y = miny; y <= maxy; y++) {
@@ -145,14 +144,14 @@ static void tri(struct vtx a, struct vtx b, struct vtx c,
             long w2 = (long)(a.x - c.x) * (y - c.y) - (long)(x - c.x) * (a.y - c.y);
             u16 col;
             if (w0 < 0 || w1 < 0 || w2 < 0) continue;
-            /* w1 pese a, w2 pese b, w0 pese c */
+            /* w1 weights a, w2 weights b, w0 weights c */
             if (textured) {
                 int tu = (int)((w1 * a.u + w2 * b.u + w0 * c.u) / area);
                 int tv = (int)((w1 * a.v + w2 * b.v + w0 * c.v) / area);
                 u16 t;
                 if (!tex_lookup(tu, tv, tp, clut, &t)) continue;
                 if (blended) {
-                    /* La couleur module la texture : 0x80 laisse inchange. */
+                    /* The colour modulates the texture: 0x80 leaves it as is. */
                     int mr = (int)((w1 * a.r + w2 * b.r + w0 * c.r) / area);
                     int mg = (int)((w1 * a.g + w2 * b.g + w0 * c.g) / area);
                     int mb = (int)((w1 * a.b + w2 * b.b + w0 * c.b) / area);
@@ -176,7 +175,7 @@ static void tri(struct vtx a, struct vtx b, struct vtx c,
 
 
 
-/* --- la file de commandes ----------------------------------------------- */
+/* --- the command queue --------------------------------------------------- */
 static u32 fifo[16];
 static int nfifo, want;
 static int img_left, img_x, img_y, img_w, img_h, img_cx, img_cy;
@@ -247,9 +246,9 @@ static void draw_poly(u32 op)
     int semi = (op & 2) ? 1 : 0, blended = (op & 1) ? 0 : 1;
     struct vtx v[4];
     u32 clut = 0, tp = texpage;
-    /* Sans degrade, la couleur unique occupe le premier mot : les sommets
-       commencent apres. Partir de zero faisait lire le mot de commande comme
-       une coordonnee -- tout le polygone atterrissait n'importe ou. */
+    /* Without gouraud shading, the single colour occupies the first word: the
+       vertices begin after it. Starting from zero made the command word be
+       read as a coordinate -- the whole polygon landed anywhere at all. */
     int i, k = sh ? 0 : 1;
     u32 col = fifo[0] & 0xFFFFFF;
     for (i = 0; i < quad; i++) {
@@ -292,7 +291,7 @@ static void execute(void)
     u32 op = fifo[0] >> 24;
     prim_hist[op]++;
     prim_count++;
-    if (op == 0x02) {                          /* remplissage franc */
+    if (op == 0x02) {                          /* plain fill */
         int x = (int)(fifo[1] & 0x3F0), y = (int)((fifo[1] >> 16) & 0x1FF);
         int w = (int)(((fifo[2] & 0x3FF) + 15) & ~15), h = (int)((fifo[2] >> 16) & 0x1FF);
         int i, j;
@@ -305,28 +304,29 @@ static void execute(void)
         draw_line(op);
     } else if (op >= 0x60 && op <= 0x7F) {
         draw_rect(op);
-    } else if (op >= 0x80 && op <= 0x9F) {      /* copie interne */
+    } else if (op >= 0x80 && op <= 0x9F) {      /* internal copy */
 
         int sx = (int)(fifo[1] & 0x3FF), sy = (int)((fifo[1] >> 16) & 0x1FF);
         int dx = (int)(fifo[2] & 0x3FF), dy = (int)((fifo[2] >> 16) & 0x1FF);
         int w = (int)(fifo[3] & 0x3FF), h = (int)((fifo[3] >> 16) & 0x1FF);
         int i, j;
-        /* Une copie de taille nulle n'a pas de sens : la traiter comme « toute
-           la memoire video », ce que dit la lettre de la specification, revient
-           a barbouiller l'ecran a partir d'un mot mal cadre. On l'ignore, et on
-           compte combien de fois -- le compteur dira si le cadrage se repare. */
-        if (!w || !h) { copies_nulles++; return; }
+        /* A copy of zero size makes no sense: treating it as "the whole of
+           video memory", which is what the letter of the specification says,
+           amounts to smearing the screen from a badly framed word. We ignore
+           it, and count how often -- the counter will say if the framing gets
+           repaired. */
+        if (!w || !h) { null_copies++; return; }
         for (j = 0; j < h; j++)
             for (i = 0; i < w; i++)
                 vram_put(dx + i, dy + j, vram_get(sx + i, sy + j));
-    } else if (op >= 0xA0 && op <= 0xBF) {      /* vers la memoire video */
+    } else if (op >= 0xA0 && op <= 0xBF) {      /* to video memory */
         img_x = (int)(fifo[1] & 0x3FF); img_y = (int)((fifo[1] >> 16) & 0x1FF);
         img_w = (int)(fifo[2] & 0x3FF); img_h = (int)((fifo[2] >> 16) & 0x1FF);
         if (!img_w) img_w = 1024;
         if (!img_h) img_h = 512;
         img_cx = img_cy = 0;
         img_left = (img_w * img_h + 1) / 2;
-    } else if (op >= 0xC0 && op <= 0xDF) {   /* memoire video -> memoire principale */
+    } else if (op >= 0xC0 && op <= 0xDF) {   /* video memory -> main memory */
         rd_x = (int)(fifo[1] & 0x3FF); rd_y = (int)((fifo[1] >> 16) & 0x1FF);
         rd_w = (int)(fifo[2] & 0x3FF); rd_h = (int)((fifo[2] >> 16) & 0x1FF);
         if (!rd_w) rd_w = 1024;
@@ -373,11 +373,10 @@ void gpu_gp0(u32 v)
     if (nfifo >= want) { execute(); nfifo = 0; }
 }
 
-/* La lecture de la memoire video. Le canal peut aussi tirer du GPU vers la
-   memoire principale : ignorer le bit de sens revenait a pousser dans le GPU
-   le contenu de la pile, que le materiel lisait ensuite comme des commandes.
-   D'ou des copies internes tirees de nulle part, qui barbouillaient le tampon
-   d'affichage avec de la texture. */
+/* Reading video memory. The channel can also pull from the GPU into main
+   memory: ignoring the direction bit amounted to pushing the contents of the
+   stack into the GPU, which the hardware then read as commands. Hence internal
+   copies drawn from nowhere, which smeared the display buffer with texture. */
 u32 gpu_read_word(void)
 {
     u32 v = 0;
@@ -400,9 +399,9 @@ void gpu_gp1(u32 v)
     gp1_cmds++;
     if (op == 0x00) { nfifo = 0; img_left = 0; }
     else if (op == 0x05) {
-        /* Le jeu designe la zone a afficher : c'est son echange de tampons,
-           donc le moment exact ou une image est finie. C'est la, et pas au
-           bout d'un compteur arbitraire, qu'il faut la montrer. */
+        /* The game designates the area to display: this is its buffer swap,
+           and so the exact moment a frame is finished. That is where the frame
+           has to be shown, not at the end of some arbitrary counter. */
         void video_image(const u16 *, int, int, int, int);
         disp_x = (int)(v & 0x3FF); disp_y = (int)((v >> 10) & 0x1FF);
         video_image(VRAM, disp_x, disp_y, disp_w, disp_h);
@@ -414,7 +413,7 @@ void gpu_gp1(u32 v)
     }
 }
 
-/* --- sortie ------------------------------------------------------------- */
+/* --- output ------------------------------------------------------------- */
 void gpu_write_ppm(const char *path)
 {
     FILE *f = fopen(path, "wb");

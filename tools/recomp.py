@@ -1,39 +1,38 @@
 #!/usr/bin/env python3
-"""Traducteur MIPS R3000 vers C, pour le banc d'essai du portage natif.
+"""MIPS R3000 to C translator, for the test bench of the native port.
 
-Pourquoi celui-ci existe
-------------------------
-Neuf dixièmes du code de jeu sont encore de l'assembleur. Un jalon natif qui
-démarre ne peut donc pas être fait de nos fonctions C plus des bouchons : il
-manquerait la boucle de course, la physique et le renderer. La recompilation
-statique retourne le problème -- on traduit mécaniquement chaque instruction,
-le jeu tourne entier, et chaque fonction décompilée remplace ensuite sa jumelle
-traduite.
+Why this one exists
+-------------------
+Nine tenths of the game code is still assembly. A native milestone that boots
+therefore cannot be made of our C functions plus stubs: it would be missing the
+race loop, the physics and the renderer. Static recompilation turns the problem
+around -- every instruction is translated mechanically, the game runs whole, and
+each decompiled function then replaces its translated twin.
 
-Ce fichier est l'étape zéro de ce chantier : prouver que la traduction est
-fidèle. Pas « ça a l'air de marcher » -- fidèle au bit près, vérifié en
-exécutant le vrai code MIPS sous qemu et en comparant les sorties.
+This file is step zero of that work: proving that the translation is faithful.
+Not "it seems to work" -- faithful down to the bit, verified by running the real
+MIPS code under qemu and comparing the outputs.
 
-La forme choisie
-----------------
-Une fonction MIPS devient une fonction C prenant les registres d'argument et
-rendant $v0, avec la mémoire vue comme un tableau d'octets adressé par des
-accesseurs. Les registres deviennent des variables locales u32 ; les branches
-deviennent des `goto` vers des étiquettes.
+The form chosen
+---------------
+A MIPS function becomes a C function taking the argument registers and
+returning $v0, with memory seen as a byte array addressed through accessors.
+The registers become u32 local variables; the branches become `goto`s to
+labels.
 
-Le point qui décide de tout : le **créneau de retard**. Sur MIPS, l'instruction
-qui suit un branchement s'exécute avant lui, qu'il soit pris ou non. Une
-traduction naïve qui l'émet après le `goto` produit du code qui a l'air juste
-et se trompe partout où le créneau modifie le registre testé. On l'émet donc
-AVANT, systématiquement, et on garde une copie de la condition évaluée avant
-qu'il ne s'exécute.
+The point that decides everything: the **delay slot**. On MIPS, the instruction
+that follows a branch executes before it, whether the branch is taken or not. A
+naive translation that emits it after the `goto` produces code that looks right
+and is wrong everywhere the slot modifies the tested register. So we emit it
+BEFORE, systematically, and keep a copy of the condition evaluated before the
+slot runs.
 
-Ce que ce traducteur ne fait pas
+What this translator does not do
 --------------------------------
-Le COP2 (le GTE) n'est pas traduit : ses quarante opcodes demandent une
-implémentation à part, validée contre la documentation matérielle et non contre
-qemu, qui ne connaît pas ce coprocesseur. Les fonctions qui en contiennent sont
-refusées explicitement plutôt que traduites à moitié.
+The COP2 (the GTE) is not translated: its forty opcodes call for a separate
+implementation, validated against the hardware documentation and not against
+qemu, which does not know this coprocessor. Functions that contain any of them
+are refused explicitly rather than translated halfway.
 """
 import re
 import struct
@@ -46,13 +45,13 @@ REG = ["zero", "at", "v0", "v1", "a0", "a1", "a2", "a3",
 
 
 def r(n):
-    """$zero est la constante 0 ; $sp est un global.
+    """$zero is the constant 0; $sp is a global.
 
-    Le pointeur de pile ne peut pas être une variable locale : un appelé doit
-    voir celui de son appelant, sinon les cadres se recouvrent et les
-    arguments passés sur la pile -- ceux au-delà du quatrième -- se lisent
-    dans le vide. En faire un global rend les deux corrects sans code
-    particulier, parce que c'est exactement ce qu'il est sur la machine."""
+    The stack pointer cannot be a local variable: a callee must see its
+    caller's one, otherwise the frames overlap and the arguments passed on the
+    stack -- those beyond the fourth -- are read out of nowhere. Making it a
+    global makes both correct with no special-case code, because that is
+    exactly what it is on the machine."""
     if n == 0:
         return "0"
     if n == 29:
@@ -64,11 +63,11 @@ class Unsupported(Exception):
     pass
 
 
-SYMS = {}   # adresse -> nom, rempli par load_symbols()
+SYMS = {}   # address -> name, filled in by load_symbols()
 
 
 def load_symbols(*asm_paths):
-    """Toutes les fonctions des unites desassemblees, par adresse."""
+    """All the functions of the disassembled units, by address."""
     for path in asm_paths:
         txt = open(path, encoding="utf-8", errors="replace").read()
         for f in re.split(r"^glabel ", txt, flags=re.M)[1:]:
@@ -80,12 +79,12 @@ def load_symbols(*asm_paths):
 
 
 def decode(w, pc):
-    """Rend (texte C, cible de branchement ou None, a_un_creneau)."""
+    """Returns (C text, branch target or None, has_a_slot)."""
     txt, tgt, dly = _decode(w, pc)
-    # $zero est cable a zero : une ecriture dedans est jetee par le materiel.
-    # Le retail en contient -- les nop encodes autrement, et les resultats
-    # calcules puis abandonnes. Traduites telles quelles, elles donnent une
-    # affectation a une constante, que le C refuse.
+    # $zero is wired to zero: a write into it is discarded by the hardware.
+    # The retail contains some -- nops encoded differently, and results that
+    # are computed then abandoned. Translated as they stand, they give an
+    # assignment to a constant, which C refuses.
     if txt.startswith("0 = "):
         return "", None, False
     return txt, tgt, dly
@@ -110,10 +109,10 @@ def _decode(w, pc):
         if fn == 0x04: return f"{r(rd)} = {r(rt)} << ({r(rs)} & 31);", None, False
         if fn == 0x06: return f"{r(rd)} = {r(rt)} >> ({r(rs)} & 31);", None, False
         if fn == 0x07: return f"{r(rd)} = (u32)((s32){r(rt)} >> ({r(rs)} & 31));", None, False
-        # jr $ra est un retour ; jr sur tout autre registre est un saut
-        # indirect -- une table de branchement, ou un trampoline BIOS. Les
-        # confondre compile et s'execute, et se trompe en silence : 54 sauts
-        # de ce genre etaient traduits en retours avant qu'on les compte.
+        # jr $ra is a return; jr on any other register is an indirect jump --
+        # a branch table, or a BIOS trampoline. Confusing the two compiles and
+        # runs, and is wrong in silence: 54 jumps of this kind were being
+        # translated into returns before anyone counted them.
         if fn == 0x08:
             return ("JR" if rs == 31 else f"JRIND {r(rs)}"), None, True
         if fn == 0x0C:
@@ -140,22 +139,22 @@ def _decode(w, pc):
         if fn == 0x27: return f"{r(rd)} = ~({r(rs)} | {r(rt)});", None, False
         if fn == 0x2A: return f"{r(rd)} = ((s32){r(rs)} < (s32){r(rt)});", None, False
         if fn == 0x2B: return f"{r(rd)} = ({r(rs)} < {r(rt)});", None, False
-        # break : GCC en pose un derriere chaque division, sur le chemin pris
-        # quand le diviseur est nul. Nos divisions sont deja gardees, donc ce
-        # chemin ne s'atteint pas ; on garde la trace plutot que de refuser la
-        # fonction entiere pour une instruction qui ne s'execute jamais.
+        # break: GCC puts one behind every division, on the path taken when
+        # the divisor is zero. Our divisions are already guarded, so that path
+        # is never reached; we keep the trace rather than refuse the whole
+        # function over an instruction that never executes.
         if fn == 0x0D: return "/* break */", None, False
-        raise Unsupported(f"special fn 0x{fn:02X} en {pc:08X}")
+        raise Unsupported(f"special fn 0x{fn:02X} at {pc:08X}")
 
     if op == 1:
         if rt == 0: return f"COND(((s32){r(rs)} < 0))", tgt, True
         if rt == 1: return f"COND(((s32){r(rs)} >= 0))", tgt, True
-        raise Unsupported(f"regimm rt={rt} en {pc:08X}")
+        raise Unsupported(f"regimm rt={rt} at {pc:08X}")
 
-    # La cible d'un saut absolu garde les quatre bits hauts du PC : elle ne
-    # tient que sur 26 bits, decalee de deux. L'oublier envoie tous les sauts
-    # dans le vide -- et le message d'erreur le dit alors si clairement qu'on
-    # ne peut pas se tromper deux fois.
+    # The target of an absolute jump keeps the four high bits of the PC: it
+    # only holds 26 bits, shifted by two. Forgetting this sends every jump into
+    # the void -- and the error message then says so clearly enough that the
+    # mistake cannot be made twice.
     if op == 2: return "J", (pc & 0xF0000000) | ((w & 0x3FFFFFF) << 2), True
     if op == 3: return "JAL", (pc & 0xF0000000) | ((w & 0x3FFFFFF) << 2), True
     if op == 4: return f"COND(({r(rs)} == {r(rt)}))", tgt, True
@@ -169,9 +168,9 @@ def _decode(w, pc):
     if op == 13: return f"{r(rt)} = {r(rs)} | {imm}u;", None, False
     if op == 14: return f"{r(rt)} = {r(rs)} ^ {imm}u;", None, False
     if op == 15: return f"{r(rt)} = {imm}u << 16;", None, False
-    # Chargements et rangements non alignes. Sur MIPS on les ecrit par paires
-    # lwl/lwr et swl/swr, chaque moitie prenant la part du mot qui tombe de son
-    # cote de la frontiere. En petit-boutiste, lwl prend les octets hauts.
+    # Unaligned loads and stores. On MIPS they are written as lwl/lwr and
+    # swl/swr pairs, each half taking the part of the word that falls on its
+    # side of the boundary. In little-endian, lwl takes the high bytes.
     if op == 34:   # lwl
         return (f"{{ u32 a = {r(rs)} + {simm}; int n = (int)(a & 3);"
                 f" u32 w = LW(a & ~3u);"
@@ -201,20 +200,20 @@ def _decode(w, pc):
     if op == 40: return f"SB({r(rs)} + {simm}, {r(rt)});", None, False
     if op == 41: return f"SH({r(rs)} + {simm}, {r(rt)});", None, False
     if op == 43: return f"SW({r(rs)} + {simm}, {r(rt)});", None, False
-    # COP2 : le GTE. Les transferts deviennent des appels aux accesseurs, les
-    # commandes un appel avec leur encodage brut -- c'est l'implementation qui
-    # decode les champs sf, lm, mx, v et cv, pas le traducteur, pour que les
-    # deux restent verifiables separement.
-    # COP0 : le coprocesseur systeme. Le jeu ne s'en sert que pour armer le
-    # GTE dans le registre d'etat et pour les sections critiques. Le modeliser
-    # par un tableau de registres suffit -- et l'ignorer coutait cher : la
-    # fonction qui arme le GTE regle aussi ZSF3 et ZSF4, sans lesquels toute
-    # profondeur vaut zero et le jeu jette chacun de ses polygones.
+    # COP2: the GTE. The transfers become calls to the accessors, the commands
+    # a call carrying their raw encoding -- it is the implementation that
+    # decodes the sf, lm, mx, v and cv fields, not the translator, so that the
+    # two stay separately verifiable.
+    # COP0: the system coprocessor. The game only uses it to arm the GTE in the
+    # status register and for critical sections. Modelling it as an array of
+    # registers is enough -- and ignoring it was expensive: the function that
+    # arms the GTE also sets ZSF3 and ZSF4, without which every depth comes out
+    # zero and the game throws away every one of its polygons.
     if op == 16:
         if rs == 0: return f"{r(rt)} = COP0[{rd}];", None, False
         if rs == 4: return f"COP0[{rd}] = {r(rt)};", None, False
         if rs & 0x10: return "/* rfe */", None, False
-        raise Unsupported(f"COP0 rs={rs} en {pc:08X}")
+        raise Unsupported(f"COP0 rs={rs} at {pc:08X}")
     if op == 18:
         if rs & 0x10:
             return f"gte_command(0x{w & 0x1FFFFFF:07X}u);", None, False
@@ -222,17 +221,17 @@ def _decode(w, pc):
         if rs == 2: return f"{r(rt)} = gte_read_ctrl({rd});", None, False
         if rs == 4: return f"gte_write_data({rd}, {r(rt)});", None, False
         if rs == 6: return f"gte_write_ctrl({rd}, {r(rt)});", None, False
-        raise Unsupported(f"COP2 rs={rs} en {pc:08X}")
+        raise Unsupported(f"COP2 rs={rs} at {pc:08X}")
     if op == 50: return f"gte_write_data({rt}, LW({r(rs)} + {simm}));", None, False
     if op == 58: return f"SW({r(rs)} + {simm}, gte_read_data({rt}));", None, False
-    raise Unsupported(f"opcode {op} en {pc:08X}")
+    raise Unsupported(f"opcode {op} at {pc:08X}")
 
 
 def translate(name, base, words):
-    """Traduit une suite de mots en une fonction C."""
+    """Translates a sequence of words into a C function."""
     n = len(words)
     end = base + 4 * n
-    # première passe : quelles adresses sont des cibles de branchement
+    # first pass: which addresses are branch targets
     labels = set()
     for i, w in enumerate(words):
         try:
@@ -242,13 +241,13 @@ def translate(name, base, words):
         if t is not None and base <= t < end:
             labels.add(t)
 
-    # Un `jr` sur autre chose que $ra vise soit une autre fonction, soit -- et
-    # c'est le cas des switch de gcc -- une adresse a l'interieur de celle-ci,
-    # lue dans une table. Le dispatcher global ne connait que les entrees de
-    # fonction : il ne peut pas servir le second cas, et ce silence coutait
-    # tout ce qui suit le switch, acquittement d'interruption compris. On donne
-    # donc a ces fonctions un aiguillage local vers chacune de leurs adresses,
-    # avec repli sur le dispatcher global pour les cibles externes.
+    # A `jr` on anything other than $ra targets either another function or --
+    # and this is the case of gcc's switches -- an address inside this one,
+    # read out of a table. The global dispatcher only knows function entry
+    # points: it cannot serve the second case, and that silence cost
+    # everything following the switch, interrupt acknowledgement included. So
+    # these functions are given a local switchboard to each of their own
+    # addresses, falling back on the global dispatcher for external targets.
     has_jrind = any(
         decode(w, base + 4 * i)[0].startswith("JRIND ")
         for i, w in enumerate(words))
@@ -271,56 +270,56 @@ def translate(name, base, words):
 
     out.append("    (void)r_hi; (void)r_lo; (void)cond; (void)pc_next;")
 
-    # Le compte des instructions.
+    # The instruction count.
     #
-    # Une recompilation statique perd la seule chose qui donnait son rythme au
-    # jeu : le temps que prenait chaque instruction. On le rend ici, en
-    # facturant a l'avance le cout de chaque bloc de code rectiligne -- entre
-    # deux transferts de controle, on sait exactement combien d'instructions
-    # vont s'executer, et il n'en coute qu'une addition par bloc plutot qu'une
-    # par instruction.
-    bloc_debut = None
-    bloc_taille = 0
+    # A static recompilation loses the one thing that gave the game its pace:
+    # the time each instruction took. It is given back here, by charging in
+    # advance the cost of each block of straight-line code -- between two
+    # control transfers, we know exactly how many instructions are going to
+    # execute, and it costs only one addition per block rather than one per
+    # instruction.
+    block_start = None
+    block_size = 0
 
-    def ouvrir():
-        nonlocal bloc_debut, bloc_taille
-        out.append("")            # place reservee, remplie a la fermeture
-        bloc_debut = len(out) - 1
-        bloc_taille = 0
+    def open_block():
+        nonlocal block_start, block_size
+        out.append("")            # reserved slot, filled in on close
+        block_start = len(out) - 1
+        block_size = 0
 
-    def fermer():
-        nonlocal bloc_debut
-        if bloc_debut is None:
+    def close_block():
+        nonlocal block_start
+        if block_start is None:
             return
-        if bloc_taille:
-            out[bloc_debut] = f"    CYCLES({bloc_taille});"
-        bloc_debut = None
+        if block_size:
+            out[block_start] = f"    CYCLES({block_size});"
+        block_start = None
 
-    ouvrir()
+    open_block()
     i = 0
     while i < n:
         pc = base + 4 * i
         if pc in labels:
-            fermer()
+            close_block()
             out.append(f"L_{pc:08X}:;")
-            ouvrir()
+            open_block()
         w = words[i]
         txt, tgt, delayed = decode(w, pc)
         if not delayed:
-            bloc_taille += 1
+            block_size += 1
             if txt:
                 out.append("    " + txt)
             i += 1
             continue
 
-        # instruction du créneau de retard : elle s'exécute AVANT le saut,
-        # que celui-ci soit pris ou non. On la déplace donc devant, après
-        # avoir figé la condition, qui est évaluée sur les valeurs d'avant.
-        bloc_taille += 2      # le branchement et son creneau de retard
+        # delay slot instruction: it executes BEFORE the jump, whether that
+        # jump is taken or not. So it is moved ahead of it, after freezing the
+        # condition, which is evaluated on the values from before.
+        block_size += 2       # the branch and its delay slot
         ds = words[i + 1] if i + 1 < n else 0
         dtxt, dtgt, ddel = decode(ds, pc + 4)
         if ddel:
-            raise Unsupported(f"branchement dans un creneau de retard en {pc:08X}")
+            raise Unsupported(f"branch inside a delay slot at {pc:08X}")
 
         if txt.startswith("COND("):
             cnd = txt[5:-1]
@@ -330,37 +329,38 @@ def translate(name, base, words):
             if base <= tgt < end:
                 out.append(f"    if (cond) goto L_{tgt:08X};")
             else:
-                raise Unsupported(f"branchement hors fonction vers {tgt:08X}")
+                raise Unsupported(f"branch outside the function to {tgt:08X}")
         elif txt == "J":
             if dtxt:
                 out.append("    " + dtxt)
             if base <= tgt < end:
                 out.append(f"    goto L_{tgt:08X};")
             else:
-                raise Unsupported(f"saut hors fonction vers {tgt:08X}")
+                raise Unsupported(f"jump outside the function to {tgt:08X}")
         elif txt == "JAL":
             callee = SYMS.get(tgt)
             if callee is None:
-                raise Unsupported(f"appel vers {tgt:08X}, sans symbole connu")
+                raise Unsupported(f"call to {tgt:08X}, with no known symbol")
             if dtxt:
                 out.append("    " + dtxt)
-            # L'appele reçoit $a0-$a3 et rend $v0. Les registres temporaires de
-            # l'appelant sont declares detruits par la convention d'appel, donc
-            # les laisser tels quels ne peut pas etre observe par du code qui la
-            # respecte -- et le retail la respecte, il a ete compile avec.
+            # The callee receives $a0-$a3 and returns $v0. The caller's
+            # temporary registers are declared clobbered by the calling
+            # convention, so leaving them as they are cannot be observed by
+            # code that respects it -- and the retail respects it, having been
+            # compiled with it.
             out.append(f"    r_v0 = psx_{callee}(r_a0, r_a1, r_a2, r_a3);")
         elif txt.startswith("JRIND "):
             reg = txt.split()[1]
             if dtxt:
                 out.append("    " + dtxt)
             out.append(f"    pc_next = {reg};")
-            out.append("    goto AIGUILLAGE;")
+            out.append("    goto DISPATCH;")
         elif txt.startswith("JALR "):
             _, reg, link = txt.split()
             if dtxt:
                 out.append("    " + dtxt)
             if link != "0":
-                out.append(f"    {link} = 0;   /* adresse de retour, jamais relue */")
+                out.append(f"    {link} = 0;   /* return address, never read back */")
             out.append(f"    r_v0 = psx_dispatch({reg}, r_a0, r_a1, r_a2, r_a3, r_t1);")
         elif txt.endswith("JR"):
             pre = txt[:-2].strip()
@@ -369,12 +369,12 @@ def translate(name, base, words):
             if dtxt:
                 out.append("    " + dtxt)
             out.append("    return r_v0;")
-        # Un branchement peut viser le creneau de retard d'un autre. Comme le
-        # creneau a ete deplace devant son branchement, l'adresse ne porte plus
-        # d'etiquette et le C refuse le goto. On la remet ici, apres un saut
-        # par-dessus pour ne pas rejouer l'instruction en tombant dedans.
-        fermer()
-        ouvrir()
+        # A branch can target another branch's delay slot. Since the slot has
+        # been moved ahead of its branch, the address no longer carries a label
+        # and C refuses the goto. It is put back here, behind a jump over it so
+        # that the instruction is not replayed by falling into it.
+        close_block()
+        open_block()
         dpc = pc + 4
         if dpc in labels:
             after = f"A_{dpc:08X}"
@@ -385,17 +385,17 @@ def translate(name, base, words):
             out.append(f"{after}:;")
         i += 2
 
-    fermer()
+    close_block()
     if has_jrind:
-        out.append("    goto FIN;")
-        out.append("AIGUILLAGE:;")
+        out.append("    goto END;")
+        out.append("DISPATCH:;")
         out.append("    switch (pc_next) {")
         for k in range(n):
             a = base + 4 * k
             out.append(f"    case 0x{a:08X}u: goto L_{a:08X};")
         out.append("    }")
         out.append("    return psx_dispatch(pc_next, r_a0, r_a1, r_a2, r_a3, r_t1);")
-        out.append("FIN:;")
+        out.append("END:;")
     out.append("    return r_v0;")
     out.append("}")
     return "\n".join(out)
@@ -419,14 +419,14 @@ def func_length(asm_path, name):
 if __name__ == "__main__":
     exe, asm = sys.argv[1], sys.argv[2]
     names = sys.argv[3:]
-    print("/* genere par tools/recomp.py -- ne pas editer */")
+    print("/* generated by tools/recomp.py -- do not edit */")
     print('#include "rt.h"')
     print('#include "gte.h"')
     print("u32 psx_dispatch(u32, u32, u32, u32, u32, u32);")
     for nm in names:
         a, c = func_length(asm, nm)
         if a is None:
-            sys.exit("fonction introuvable : " + nm)
+            sys.exit("function not found: " + nm)
         ws = words_from_exe(exe, a, c)
         print()
         print(f"/* {nm} @ {a:08X}, {c} instructions */")

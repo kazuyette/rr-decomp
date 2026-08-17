@@ -1,25 +1,24 @@
-/* Le SPU : les vingt-quatre voix.
+/* The SPU: the twenty-four voices.
  *
- * La musique venait du disque et ne demandait qu'à être servie. Le reste --
- * le moteur, les crissements, les voix -- vient d'ici : un demi-mégaoctet de
- * mémoire à part, rempli par le canal 4 du DMA, et vingt-quatre lecteurs qui
- * y puisent des échantillons compressés, chacun à sa hauteur et son volume.
+ * The music came from the disc and asked only to be served. The rest -- the
+ * engine, the tyre squeals, the voices -- comes from here: half a megabyte of
+ * separate memory, filled by DMA channel 4, and twenty-four players that draw
+ * compressed samples from it, each at its own pitch and volume.
  *
- * Ce qui est implémenté
- * ---------------------
- * La mémoire et son transfert, la décompression ADPCM avec ses boucles, la
- * hauteur, les volumes gauche et droit, l'allumage et l'extinction des voix,
- * et une enveloppe. Le mélange se fait à 44 100 Hz, la fréquence de sortie du
- * matériel, ce qui évite tout rééchantillonnage en sortie.
+ * What is implemented
+ * -------------------
+ * The memory and its transfer, ADPCM decompression with its loops, pitch, the
+ * left and right volumes, keying voices on and off, and an envelope. Mixing is
+ * done at 44100 Hz, the hardware's output rate, which avoids any resampling on
+ * the way out.
  *
- * Ce qui est simplifié, et il faut le dire
- * ----------------------------------------
- * L'enveloppe du matériel a quatre phases dont les pentes suivent des tables
- * exponentielles précises. Celle-ci en garde la forme -- montée, chute,
- * maintien, extinction -- avec des pentes linéaires par morceaux. Un son tenu
- * sonnera juste ; une attaque très courte le sera moins. La réverbération
- * n'est pas implémentée du tout : le jeu en écrit les registres, on les
- * accepte et on les ignore.
+ * What is simplified, and it should be said
+ * -----------------------------------------
+ * The hardware envelope has four phases whose slopes follow precise
+ * exponential tables. This one keeps its shape -- attack, decay, sustain,
+ * release -- with piecewise linear slopes. A held note will sound right; a
+ * very short attack will sound less so. Reverb is not implemented at all: the
+ * game writes its registers, we accept them and ignore them.
  */
 #include <string.h>
 #include <stdio.h>
@@ -27,299 +26,298 @@
 
 u8 SPURAM[0x80000];
 
-/* --- une voix ------------------------------------------------------------ */
-struct voix {
-    u16 vol_g, vol_d;      /* volumes, format materiel */
-    u16 pas;               /* hauteur : 0x1000 = 44100 Hz */
-    u16 depart, boucle;    /* adresses, en blocs de huit octets */
-    u32 adsr;              /* les deux registres d'enveloppe */
-    /* etat de lecture */
-    u32 addr;              /* octet courant dans la memoire du SPU */
-    u32 phase;             /* position fractionnaire, 12 bits */
-    s16 ech[28];           /* le bloc decode */
-    int n;                 /* combien d'echantillons y restent */
-    s16 p1, p2;            /* les deux precedents, pour le filtre */
-    int actif;
-    int fin;               /* le bloc portait la marque de fin */
-    /* enveloppe */
-    int phase_env;         /* 0 arret, 1 montee, 2 chute, 3 maintien, 4 extinction */
-    int niveau;            /* 0 a 0x7FFF */
-    int env_attente;       /* cycles restants avant le pas suivant */
+/* --- one voice ----------------------------------------------------------- */
+struct voice {
+    u16 vol_l, vol_r;      /* volumes, hardware format */
+    u16 pitch;             /* pitch: 0x1000 = 44100 Hz */
+    u16 start, loop;       /* addresses, in blocks of eight bytes */
+    u32 adsr;              /* the two envelope registers */
+    /* playback state */
+    u32 addr;              /* current byte in the SPU's memory */
+    u32 phase;             /* fractional position, 12 bits */
+    s16 smp[28];           /* the decoded block */
+    int n;                 /* how many samples are left in it */
+    s16 p1, p2;            /* the previous two, for the filter */
+    int active;
+    int ended;             /* the block carried the end marker */
+    /* envelope */
+    int env_phase;         /* 0 off, 1 attack, 2 decay, 3 sustain, 4 release */
+    int level;             /* 0 to 0x7FFF */
+    int env_wait;          /* cycles left before the next step */
 };
 
-static struct voix v[24];
-static u16 ctrl, transfert_ctrl;
-static u32 transfert_addr;
-static u16 vol_principal_g, vol_principal_d;
-unsigned long spu_voix_jouees;
-int spu_crete;          /* la plus forte amplitude produite */
-unsigned long spu_voix_eteint;
-unsigned long spu_balayages, spu_vol_simples;
+static struct voice v[24];
+static u16 ctrl, transfer_ctrl;
+static u32 transfer_addr;
+static u16 master_vol_l, master_vol_r;
+unsigned long spu_voices_played;
+int spu_peak;           /* the loudest amplitude produced */
+unsigned long spu_voices_off;
+unsigned long spu_sweeps, spu_vol_plain;
 
 /* --- decompression ------------------------------------------------------- */
-static const int filtre_pos[5] = { 0, 60, 115, 98, 122 };
-static const int filtre_neg[5] = { 0, 0, -52, -55, -60 };
+static const int filter_pos[5] = { 0, 60, 115, 98, 122 };
+static const int filter_neg[5] = { 0, 0, -52, -55, -60 };
 
-static s16 sature(int x)
+static s16 saturate(int x)
 {
     if (x < -32768) return -32768;
     if (x > 32767) return 32767;
     return (s16)x;
 }
 
-static void bloc_suivant(struct voix *w)
+static void next_block(struct voice *w)
 {
     const u8 *b = SPURAM + (w->addr & 0x7FFF0);
-    int decalage = b[0] & 0x0F;
-    int filtre = (b[0] >> 4) & 0x0F;
-    int drapeaux = b[1];
+    int shift = b[0] & 0x0F;
+    int filter = (b[0] >> 4) & 0x0F;
+    int flags = b[1];
     int i;
-    if (filtre > 4) filtre = 4;
-    if (decalage > 12) decalage = 9;       /* le materiel traite ainsi les
-                                              valeurs interdites */
+    if (filter > 4) filter = 4;
+    if (shift > 12) shift = 9;   /* this is how the hardware handles
+                                    forbidden values */
     for (i = 0; i < 28; i++) {
-        int brut = (b[2 + i / 2] >> ((i & 1) * 4)) & 0x0F;
-        int e = (int)((s16)(brut << 12)) >> decalage;
-        e += (w->p1 * filtre_pos[filtre] + w->p2 * filtre_neg[filtre]) / 64;
-        w->ech[i] = sature(e);
+        int raw = (b[2 + i / 2] >> ((i & 1) * 4)) & 0x0F;
+        int e = (int)((s16)(raw << 12)) >> shift;
+        e += (w->p1 * filter_pos[filter] + w->p2 * filter_neg[filter]) / 64;
+        w->smp[i] = saturate(e);
         w->p2 = w->p1;
-        w->p1 = w->ech[i];
+        w->p1 = w->smp[i];
     }
     w->n = 28;
-    /* Le bit 2 designe le point de retour, le bit 0 la fin du son. Sans le
-       bit 1, la fin arrete la voix ; avec, elle y revient. */
-    if (drapeaux & 4) w->boucle = (u16)((w->addr & 0x7FFF0) >> 3);
-    if (drapeaux & 1) {
-        w->fin = 1;
-        w->addr = (u32)w->boucle << 3;
-        if (!(drapeaux & 2)) { w->phase_env = 4; w->env_attente = 1; }
+    /* Bit 2 marks the return point, bit 0 the end of the sound. Without bit 1,
+       the end stops the voice; with it, the voice goes back there. */
+    if (flags & 4) w->loop = (u16)((w->addr & 0x7FFF0) >> 3);
+    if (flags & 1) {
+        w->ended = 1;
+        w->addr = (u32)w->loop << 3;
+        if (!(flags & 2)) { w->env_phase = 4; w->env_wait = 1; }
     } else {
         w->addr += 16;
     }
 }
 
-/* --- enveloppe ------------------------------------------------------------
+/* --- envelope -------------------------------------------------------------
  *
- * Les quatre phases du materiel, avec leurs vraies pentes.
+ * The four phases of the hardware, with their real slopes.
  *
- * Le principe est le meme partout : un decalage donne la periode, un pas donne
- * l'amplitude, et le couple se lit dans le registre selon la phase. Au-dela de
- * onze, le decalage espace les mises a jour ; en deca, il amplifie le pas. En
- * mode exponentiel, une montee ralentit d'un facteur quatre passe les trois
- * quarts, et une descente se proportionne au niveau atteint -- c'est ce qui
- * donne aux extinctions leur trainee.
+ * The principle is the same everywhere: a shift gives the period, a step gives
+ * the amplitude, and the pair is read from the register according to the
+ * phase. Above eleven, the shift spaces the updates out; below it, the shift
+ * amplifies the step. In exponential mode, a rise slows by a factor of four
+ * past three quarters, and a fall is proportional to the level reached -- that
+ * is what gives releases their tail.
  *
- * La chute a un pas fixe de -8 et est toujours exponentielle ; les autres
- * phases lisent leur mode dans le registre.
+ * Decay has a fixed step of -8 and is always exponential; the other phases
+ * read their mode from the register.
  */
-static void enveloppe(struct voix *w)
+static void envelope(struct voice *w)
 {
-    int decalage, pas, expo, decroit, cible = -1;
-    if (w->phase_env == 0) { w->niveau = 0; return; }
-    if (--w->env_attente > 0) return;
-    switch (w->phase_env) {
-    case 1:                                   /* montee */
-        decalage = (w->adsr >> 10) & 0x1F;
-        pas = 7 - ((w->adsr >> 8) & 3);
+    int shift, step, expo, decaying, target = -1;
+    if (w->env_phase == 0) { w->level = 0; return; }
+    if (--w->env_wait > 0) return;
+    switch (w->env_phase) {
+    case 1:                                   /* attack */
+        shift = (w->adsr >> 10) & 0x1F;
+        step = 7 - ((w->adsr >> 8) & 3);
         expo = (w->adsr >> 15) & 1;
-        decroit = 0;
+        decaying = 0;
         break;
-    case 2:                                   /* chute */
-        decalage = (w->adsr >> 4) & 0x0F;
-        pas = -8; expo = 1; decroit = 1;
-        cible = (int)((w->adsr & 0x0F) + 1) * 0x800;
-        if (cible > 0x7FFF) cible = 0x7FFF;
+    case 2:                                   /* decay */
+        shift = (w->adsr >> 4) & 0x0F;
+        step = -8; expo = 1; decaying = 1;
+        target = (int)((w->adsr & 0x0F) + 1) * 0x800;
+        if (target > 0x7FFF) target = 0x7FFF;
         break;
-    case 3:                                   /* maintien */
-        decalage = (w->adsr >> 24) & 0x1F;
-        decroit = (w->adsr >> 30) & 1;
-        pas = decroit ? (-8 + (int)((w->adsr >> 22) & 3))
-                      : (7 - (int)((w->adsr >> 22) & 3));
+    case 3:                                   /* sustain */
+        shift = (w->adsr >> 24) & 0x1F;
+        decaying = (w->adsr >> 30) & 1;
+        step = decaying ? (-8 + (int)((w->adsr >> 22) & 3))
+                        : (7 - (int)((w->adsr >> 22) & 3));
         expo = (w->adsr >> 31) & 1;
         break;
-    default:                                  /* extinction */
-        decalage = (w->adsr >> 16) & 0x1F;
-        pas = -8; expo = (w->adsr >> 21) & 1; decroit = 1;
+    default:                                  /* release */
+        shift = (w->adsr >> 16) & 0x1F;
+        step = -8; expo = (w->adsr >> 21) & 1; decaying = 1;
         break;
     }
     {
-        int cycles = 1 << (decalage > 11 ? decalage - 11 : 0);
-        int amplitude = pas << (decalage < 11 ? 11 - decalage : 0);
+        int cycles = 1 << (shift > 11 ? shift - 11 : 0);
+        int amplitude = step << (shift < 11 ? 11 - shift : 0);
         if (expo) {
-            if (!decroit && w->niveau > 0x6000) cycles *= 4;
-            if (decroit) amplitude = (int)((long)amplitude * w->niveau / 0x8000);
+            if (!decaying && w->level > 0x6000) cycles *= 4;
+            if (decaying) amplitude = (int)((long)amplitude * w->level / 0x8000);
         }
-        w->niveau += amplitude;
-        if (w->niveau > 0x7FFF) w->niveau = 0x7FFF;
-        if (w->niveau < 0) w->niveau = 0;
-        w->env_attente = cycles;
+        w->level += amplitude;
+        if (w->level > 0x7FFF) w->level = 0x7FFF;
+        if (w->level < 0) w->level = 0;
+        w->env_wait = cycles;
     }
-    if (w->phase_env == 1 && w->niveau >= 0x7FFF) w->phase_env = 2;
-    else if (w->phase_env == 2 && cible >= 0 && w->niveau <= cible) w->phase_env = 3;
-    else if (w->phase_env == 4 && w->niveau <= 0) { w->phase_env = 0; w->actif = 0; }
+    if (w->env_phase == 1 && w->level >= 0x7FFF) w->env_phase = 2;
+    else if (w->env_phase == 2 && target >= 0 && w->level <= target) w->env_phase = 3;
+    else if (w->env_phase == 4 && w->level <= 0) { w->env_phase = 0; w->active = 0; }
 }
 
-/* Les volumes du materiel sont signes sur quinze bits quand le bit de poids
-   fort est a zero ; sinon c'est un balayage, qu'on approche par sa valeur de
-   depart. */
+/* The hardware volumes are fifteen-bit signed when the top bit is zero;
+   otherwise it is a sweep, which we approximate by its starting value. */
 static int volume(u16 r)
 {
     if (r & 0x8000) return 0x3FFF;
     return (int)(s16)(r << 1) / 2;
 }
 
-/* --- melange ------------------------------------------------------------- */
-void spu_melanger(s16 *sortie, int trames)
+/* --- mixing -------------------------------------------------------------- */
+void spu_mix(s16 *out, int frames)
 {
     int i, k;
-    for (i = 0; i < trames; i++) { sortie[2 * i] = 0; sortie[2 * i + 1] = 0; }
-    /* Le bit d'activation est respecte. Il ne l'a pas toujours ete : le jeu
-       allumait ses voix alors que ce registre valait zero, ce qui sur la
-       console ne produirait rien -- donc il ne le faisait pas, et le defaut
-       etait chez nous. Il n'etait pas dans le SPU mais dans la lecture par
-       demi-mot, qui rendait le registre voisin. Le compteur ci-dessous reste
-       en place : il vaut zero, et c'est ce zero qui atteste. */
+    for (i = 0; i < frames; i++) { out[2 * i] = 0; out[2 * i + 1] = 0; }
+    /* The enable bit is respected. It has not always been: the game was keying
+       its voices on while this register read zero, which on the console would
+       produce nothing -- so it was not doing that, and the fault was ours. It
+       was not in the SPU but in the halfword read, which returned the
+       neighbouring register. The counter below stays in place: it reads zero,
+       and it is that zero which attests to the fix. */
     if (!(ctrl & 0x8000)) return;
     for (k = 0; k < 24; k++) {
-        struct voix *w = &v[k];
-        int g, d;
-        if (!w->actif) continue;
-        g = volume(w->vol_g);
-        d = volume(w->vol_d);
-        for (i = 0; i < trames; i++) {
+        struct voice *w = &v[k];
+        int lv, rv;
+        if (!w->active) continue;
+        lv = volume(w->vol_l);
+        rv = volume(w->vol_r);
+        for (i = 0; i < frames; i++) {
             s16 e;
-            if (!w->actif) break;
-            if (w->n <= 0) { bloc_suivant(w); if (!w->actif) break; }
-            e = w->ech[28 - w->n];
+            if (!w->active) break;
+            if (w->n <= 0) { next_block(w); if (!w->active) break; }
+            e = w->smp[28 - w->n];
             {
-                int a = (int)e * w->niveau >> 15;
-                int gg = sortie[2 * i] + (a * g >> 14);
-                int dd = sortie[2 * i + 1] + (a * d >> 14);
-                sortie[2 * i] = sature(gg);
-                sortie[2 * i + 1] = sature(dd);
-                if (gg > spu_crete) spu_crete = gg;
-                if (-gg > spu_crete) spu_crete = -gg;
+                int a = (int)e * w->level >> 15;
+                int nl = out[2 * i] + (a * lv >> 14);
+                int nr = out[2 * i + 1] + (a * rv >> 14);
+                out[2 * i] = saturate(nl);
+                out[2 * i + 1] = saturate(nr);
+                if (nl > spu_peak) spu_peak = nl;
+                if (-nl > spu_peak) spu_peak = -nl;
             }
-            /* L'avance depend de la hauteur : 0x1000 lit un echantillon par
-               trame de sortie, le double en lit deux. */
-            w->phase += (w->pas > 0x3FFF) ? 0x3FFF : w->pas;
+            /* The advance depends on the pitch: 0x1000 reads one sample per
+               output frame, twice that reads two. */
+            w->phase += (w->pitch > 0x3FFF) ? 0x3FFF : w->pitch;
             while (w->phase >= 0x1000) {
                 w->phase -= 0x1000;
-                if (--w->n <= 0) { bloc_suivant(w); if (!w->actif) break; }
+                if (--w->n <= 0) { next_block(w); if (!w->active) break; }
             }
-            enveloppe(w);
+            envelope(w);
         }
     }
 }
 
-int spu_actif(void)
+int spu_active(void)
 {
     int k;
-    for (k = 0; k < 24; k++) if (v[k].actif) return 1;
+    for (k = 0; k < 24; k++) if (v[k].active) return 1;
     return 0;
 }
 
-/* --- registres ----------------------------------------------------------- */
-static void allumer(u32 masque)
+/* --- registers ----------------------------------------------------------- */
+static void key_on(u32 mask)
 {
     int k;
     for (k = 0; k < 24; k++)
-        if (masque & (1u << k)) {
-            struct voix *w = &v[k];
-            w->addr = (u32)w->depart << 3;
-            w->boucle = w->depart;
+        if (mask & (1u << k)) {
+            struct voice *w = &v[k];
+            w->addr = (u32)w->start << 3;
+            w->loop = w->start;
             w->phase = 0; w->n = 0; w->p1 = w->p2 = 0;
-            w->actif = 1; w->fin = 0;
-            w->phase_env = 1; w->niveau = 0; w->env_attente = 1;
-            spu_voix_jouees++;
-            if (!(ctrl & 0x8000)) spu_voix_eteint++;
+            w->active = 1; w->ended = 0;
+            w->env_phase = 1; w->level = 0; w->env_wait = 1;
+            spu_voices_played++;
+            if (!(ctrl & 0x8000)) spu_voices_off++;
         }
 }
 
-static void eteindre(u32 masque)
+static void key_off(u32 mask)
 {
     int k;
     for (k = 0; k < 24; k++)
-        if (masque & (1u << k)) { v[k].phase_env = 4; v[k].env_attente = 1; }
+        if (mask & (1u << k)) { v[k].env_phase = 4; v[k].env_wait = 1; }
 }
 
-void spu_write16(u32 adresse, u16 valeur)
+void spu_write16(u32 addr, u16 value)
 {
-    /* Les registres commencent en 0x1F801C00 : les voix d'abord, seize octets
-       chacune, puis le controle a partir de 0x180. */
-    u32 p = (adresse - 0x1F801C00u) & 0xFFF;
-    if (p < 0x180) {                           /* les vingt-quatre voix */
-        struct voix *w = &v[p >> 4];
+    /* The registers start at 0x1F801C00: the voices first, sixteen bytes each,
+       then the control block from 0x180 on. */
+    u32 p = (addr - 0x1F801C00u) & 0xFFF;
+    if (p < 0x180) {                           /* the twenty-four voices */
+        struct voice *w = &v[p >> 4];
         switch (p & 0x0F) {
-        case 0x0: w->vol_g = valeur; if (valeur & 0x8000) spu_balayages++; else spu_vol_simples++; break;
-        case 0x2: w->vol_d = valeur; break;
-        case 0x4: w->pas = valeur; break;
-        case 0x6: w->depart = valeur; break;
-        case 0x8: w->adsr = (w->adsr & 0xFFFF0000u) | valeur; break;
-        case 0xA: w->adsr = (w->adsr & 0xFFFFu) | ((u32)valeur << 16); break;
-        case 0xC: break;                       /* volume courant, en lecture */
-        case 0xE: w->boucle = valeur; break;
+        case 0x0: w->vol_l = value; if (value & 0x8000) spu_sweeps++; else spu_vol_plain++; break;
+        case 0x2: w->vol_r = value; break;
+        case 0x4: w->pitch = value; break;
+        case 0x6: w->start = value; break;
+        case 0x8: w->adsr = (w->adsr & 0xFFFF0000u) | value; break;
+        case 0xA: w->adsr = (w->adsr & 0xFFFFu) | ((u32)value << 16); break;
+        case 0xC: break;                       /* current volume, read only */
+        case 0xE: w->loop = value; break;
         }
         return;
     }
     switch (p) {
-    case 0x180: vol_principal_g = valeur; break;
-    case 0x182: vol_principal_d = valeur; break;
-    /* Ecrire dans ces registres declenche : chaque bit pose allume ou eteint
-       sa voix sur-le-champ, moitie basse et moitie haute independamment. */
-    case 0x188: allumer(valeur); break;
-    case 0x18A: allumer((u32)valeur << 16); break;
-    case 0x18C: eteindre(valeur); break;
-    case 0x18E: eteindre((u32)valeur << 16); break;
-    case 0x1A6: transfert_addr = (u32)valeur << 3; break;
-    case 0x1A8:                                /* la file de transfert */
-        if (transfert_addr < sizeof SPURAM - 1) {
-            SPURAM[transfert_addr] = (u8)valeur;
-            SPURAM[transfert_addr + 1] = (u8)(valeur >> 8);
-            transfert_addr += 2;
+    case 0x180: master_vol_l = value; break;
+    case 0x182: master_vol_r = value; break;
+    /* Writing to these registers acts at once: each bit set keys its voice on
+       or off immediately, low half and high half independently. */
+    case 0x188: key_on(value); break;
+    case 0x18A: key_on((u32)value << 16); break;
+    case 0x18C: key_off(value); break;
+    case 0x18E: key_off((u32)value << 16); break;
+    case 0x1A6: transfer_addr = (u32)value << 3; break;
+    case 0x1A8:                                /* the transfer queue */
+        if (transfer_addr < sizeof SPURAM - 1) {
+            SPURAM[transfer_addr] = (u8)value;
+            SPURAM[transfer_addr + 1] = (u8)(value >> 8);
+            transfer_addr += 2;
         }
         break;
-    case 0x1AA: ctrl = valeur; break;
-    case 0x1AC: transfert_ctrl = valeur; break;
+    case 0x1AA: ctrl = value; break;
+    case 0x1AC: transfer_ctrl = value; break;
     default: break;
     }
 }
 
-u16 spu_read16(u32 adresse)
+u16 spu_read16(u32 addr)
 {
-    /* Les registres commencent en 0x1F801C00 : les voix d'abord, seize octets
-       chacune, puis le controle a partir de 0x180. */
-    u32 p = (adresse - 0x1F801C00u) & 0xFFF;
+    /* The registers start at 0x1F801C00: the voices first, sixteen bytes each,
+       then the control block from 0x180 on. */
+    u32 p = (addr - 0x1F801C00u) & 0xFFF;
     if (p < 0x180) {
-        struct voix *w = &v[p >> 4];
+        struct voice *w = &v[p >> 4];
         switch (p & 0x0F) {
-        case 0x0: return w->vol_g;
-        case 0x2: return w->vol_d;
-        case 0x4: return w->pas;
-        case 0x6: return w->depart;
+        case 0x0: return w->vol_l;
+        case 0x2: return w->vol_r;
+        case 0x4: return w->pitch;
+        case 0x6: return w->start;
         case 0x8: return (u16)w->adsr;
         case 0xA: return (u16)(w->adsr >> 16);
-        case 0xC: return (u16)w->niveau;
-        case 0xE: return w->boucle;
+        case 0xC: return (u16)w->level;
+        case 0xE: return w->loop;
         }
     }
     switch (p) {
     case 0x1AA: return ctrl;
-    case 0x1AC: return transfert_ctrl;
-    /* L'etat : le bit 10 dit que le transfert est fini, ce qu'il est toujours
-       chez nous, et les bits bas reprennent le controle. */
+    case 0x1AC: return transfer_ctrl;
+    /* The status: bit 10 says the transfer is finished, which here it always
+       is, and the low bits repeat the control register. */
     case 0x1AE: return (u16)((ctrl & 0x3F) | 0x0000);
     case 0x1B8: case 0x1BA: return 0;
     default: return 0;
     }
 }
 
-/* Le canal 4 du DMA verse les echantillons dans la memoire du SPU. */
-void spu_dma(const u8 *ram, u32 adresse, u32 octets)
+/* DMA channel 4 pours the samples into the SPU's memory. */
+void spu_dma(const u8 *ram, u32 addr, u32 bytes)
 {
     u32 i;
-    for (i = 0; i < octets; i++) {
-        if (transfert_addr >= sizeof SPURAM) break;
-        SPURAM[transfert_addr++] = ram[(adresse + i) & 0x1FFFFF];
+    for (i = 0; i < bytes; i++) {
+        if (transfer_addr >= sizeof SPURAM) break;
+        SPURAM[transfer_addr++] = ram[(addr + i) & 0x1FFFFF];
     }
 }

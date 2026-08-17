@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Banc d'essai du traducteur, deuxième version : entrées hors du source.
+"""Test bench for the translator, second version: inputs kept out of the source.
 
-La première version écrivait les vecteurs d'essai en littéraux C. Pour douze
-fonctions cela faisait déjà 276 Ko de source, et la compilation s'écroulait
-bien avant d'atteindre l'échelle voulue -- six minutes quarante pour douze
-fonctions, dont 0,2 seconde de calcul. Le reste était de l'attente.
+The first version wrote the test vectors as C literals. For twelve functions
+that already came to 276 KB of source, and compilation collapsed well before
+reaching the intended scale -- six minutes forty for twelve functions, of which
+0.2 second was computation. The rest was waiting.
 
-La correction ne consiste pas à optimiser la génération mais à supprimer sa
-cause : les entrées vivent dans un fichier binaire que les deux harnais lisent
-à l'exécution. Le source redevient minuscule et constant, quel que soit le
-nombre de vecteurs.
+The fix is not to optimise the generation but to remove its cause: the inputs
+live in a binary file that both harnesses read at run time. The source becomes
+tiny again, and constant, whatever the number of vectors.
 
-Le reste du protocole est inchangé, et c'est lui qui compte : la référence est
-le vrai code du retail exécuté sous qemu-mipsel, pas une lecture de ce code.
+The rest of the protocol is unchanged, and it is the part that matters: the
+reference is the real retail code executed under qemu-mipsel, not a reading of
+that code.
 """
 import random
 import struct
@@ -28,16 +28,16 @@ recomp.load_symbols("/tmp/rrdecomp/asm/psyq.s", "/tmp/rrdecomp/asm/29E8.s")
 EXE = "/tmp/rr/files/PSX.EXE"
 ASMS = ["/tmp/rrdecomp/asm/psyq.s", "/tmp/rrdecomp/asm/29E8.s"]
 D = "/tmp/recomp"
-BUF = 0x00078000   # meme adresse absolue des deux cotes : certaines fonctions
-                   # calculent sur la valeur du pointeur, pas seulement sur ce
-                   # qu'il designe
+BUF = 0x00078000   # same absolute address on both sides: some functions compute
+                   # on the value of the pointer, not only on what it
+                   # designates
 SIZE = 256
 ROUNDS = 16
 BASE = 0x00010000
 
 
 def writes_v0(words):
-    """Vrai si la fonction ecrit $v0 quelque part."""
+    """True if the function writes $v0 anywhere."""
     for w in words:
         op = w >> 26
         if op == 0:
@@ -58,7 +58,7 @@ def find(nm):
         addr, cnt = recomp.func_length(a, nm)
         if addr is not None:
             return addr, cnt
-    raise SystemExit("fonction introuvable : " + nm)
+    raise SystemExit("function not found: " + nm)
 
 
 def make_vectors():
@@ -66,25 +66,25 @@ def make_vectors():
     with open(D + "/vec.bin", "wb") as f:
         for _ in range(ROUNDS):
             f.write(bytes(rnd.randrange(256) for _ in range(SIZE)))
-            # Pointeurs alignés sur 4 : le MIPS lève SIGBUS sur un lw désaligné,
-            # exactement comme la console. Le banc ne doit poser que des
-            # questions que le vrai matériel pouvait entendre.
+            # Pointers aligned on 4: MIPS raises SIGBUS on a misaligned lw,
+            # exactly like the console. The bench must only ask questions the
+            # real hardware could have heard.
             f.write(struct.pack("<4I", 4 * rnd.randrange(16), 4 * rnd.randrange(16),
                                 rnd.randrange(0x100), rnd.randrange(0x100)))
 
 
 HARNESS = r"""
-/* Isolation par processus plutôt que par longjmp.
+/* Isolation by process rather than by longjmp.
 
-   La première version attrapait les fautes avec sigsetjmp/siglongjmp depuis un
-   gestionnaire de signal. Deux choses l'ont mise en échec : glibc refuse un
-   longjmp qui remonte vers un cadre de pile qu'il juge non initialisé
-   (« longjmp causes uninitialized stack frame »), et une fonction partie en
-   boucle sans fin -- func_80045334 sur un tampon quelconque -- n'était pas
-   rattrapée du tout.
+   The first version caught the faults with sigsetjmp/siglongjmp from a
+   signal handler. Two things defeated it: glibc refuses a longjmp that
+   climbs back to a stack frame it judges uninitialised ("longjmp causes
+   uninitialized stack frame"), and a function that had gone into an
+   endless loop -- func_80045334 on some buffer or other -- was not
+   caught at all.
 
-   Un fils par fonction, une alarme dans le fils, le père qui récolte : une
-   fonction qui faute ou qui boucle tue son fils et rien d'autre. */
+   One child per function, an alarm in the child, the parent harvesting: a
+   function that faults or loops kills its own child and nothing else. */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -94,21 +94,21 @@ HARNESS = r"""
 %(bufdecl)s
 struct vec { unsigned char b[%(size)d]; unsigned int a[4]; };
 static struct vec V[%(rounds)d];
-/* Six arguments : certaines fonctions lisent leur cinquieme parametre en
-   0x10($sp), la ou l'appelant l'a depose. Avec quatre, elles lisaient de la
-   pile non initialisee -- differente des deux cotes, et la comparaison
-   echouait pour une raison qui n'a rien a voir avec la traduction. */
-/* Huit arguments. func_80028A0C lit jusqu'a 0x54($sp), soit le huitieme.
-   Chaque argument manquant se lit dans de la pile non initialisee, differente
-   des deux cotes -- et produit une divergence qui n'a rien a voir avec la
-   traduction. */
+/* Six arguments: some functions read their fifth parameter at 0x10($sp),
+   where the caller left it. With four, they were reading uninitialised stack
+   -- different on the two sides, and the comparison failed for a reason that
+   has nothing to do with the translation. */
+/* Eight arguments. func_80028A0C reads as far as 0x54($sp), that is the
+   eighth. Every missing argument is read out of uninitialised stack, different
+   on the two sides -- and produces a divergence that has nothing to do with
+   the translation. */
 typedef unsigned int (*fn_t)(unsigned int, unsigned int, unsigned int, unsigned int,
                              unsigned int, unsigned int, unsigned int, unsigned int);
 static const char *NAMES[] = { %(names)s };
 static const fn_t FNS[] = { %(fns)s };
-/* Une fonction qui n'ecrit jamais $v0 n'a pas de valeur de retour : ce que le
-   contexte y avait laisse n'est pas comparable. On ne l'imprime que pour les
-   fonctions dont le desassemblage montre une ecriture de ce registre. */
+/* A function that never writes $v0 has no return value: whatever the context
+   had left there is not comparable. It is printed only for the functions whose
+   disassembly shows a write to that register. */
 static const int RETS[] = { %(rets)s };
 int main(void)
 {
@@ -128,15 +128,15 @@ int main(void)
                 unsigned int rv;
                 %(setup)s
                 %(extra)s rv = FNS[j](%(a0)s, %(a1)s, V[k].a[2], V[k].a[3], V[k].a[2], V[k].a[3], V[k].a[0], V[k].a[1]);
-                /* Un retour qui pointe dans le tampon est une adresse : elle
-                   ne peut pas coincider entre les deux harnais, dont les
-                   tampons vivent ailleurs. On l'imprime relative a sa base. */
+                /* A return value that points into the buffer is an address: it
+                   cannot coincide between the two harnesses, whose buffers
+                   live elsewhere. It is printed relative to its base. */
                 if (RETS[j]) {
                     unsigned int b = (unsigned int)(%(base)s);
                     if (rv >= b && rv < b + %(size)d) printf("%%s %%d rv=@+%%x", NAMES[j], k, rv - b);
                     else printf("%%s %%d rv=%%08x", NAMES[j], k, rv);
                 }
-                else printf("%%s %%d (sans retour)", NAMES[j], k);
+                else printf("%%s %%d (no return value)", NAMES[j], k);
                 for (i = 0; i < %(size)d; i++) printf(" %%02x", %(peek)s);
                 printf("\n");
             }
@@ -144,7 +144,7 @@ int main(void)
             _exit(0);
         }
         waitpid(pid, &st, 0);
-        if (st != 0) printf("%%s ECARTEE\n", NAMES[j]);
+        if (st != 0) printf("%%s DROPPED\n", NAMES[j]);
         fflush(stdout);
     }
     return 0;
@@ -152,13 +152,13 @@ int main(void)
 """
 
 def build_reference(funcs):
-    """L'image entiere de l'executable, a son adresse masquee sur 28 bits.
+    """The whole image of the executable, at its address masked to 28 bits.
 
-    Recopier chaque fonction une par une marchait tant qu'elles etaient
-    isolees. Des qu'elles s'appellent entre elles et lisent des globals, il
-    faut le programme complet -- et le poser d'un bloc est plus simple que de
-    le decouper : les appels et les adresses absolues retombent alors justes
-    tout seuls, sans une ligne de relocation.
+    Copying each function one by one worked as long as they were isolated. As
+    soon as they call one another and read globals, the complete program is
+    needed -- and laying it down in one block is simpler than cutting it up:
+    the calls and the absolute addresses then fall out right on their own,
+    without a single line of relocation.
     """
     with open(D + "/ref_code.s", "w") as f:
         f.write('    .section .psx,"ax",@progbits\n')
@@ -166,8 +166,8 @@ def build_reference(funcs):
         for nm in funcs:
             a, _ = find(nm)
             f.write(f"    .globl psx_{nm}\n    .set psx_{nm}, 0x{a & 0x0FFFFFFF:08X}\n")
-        # La memoire au-dela de l'image : les variables non initialisees du jeu
-        # y vivent, et la reference doit pouvoir les toucher comme la console.
+        # The memory beyond the image: the game's uninitialised variables live
+        # there, and the reference must be able to touch them like the console.
         f.write('    .section .psxbss,"aw",@nobits\n    .space 0x180000\n')
     src = HARNESS % dict(
         decl="\n".join("unsigned int psx_%s();" % n for n in funcs),
@@ -190,8 +190,8 @@ def build_reference(funcs):
 
 
 def build_translated(funcs):
-    # Toutes les fonctions traduisibles, pas seulement celles qu'on compare :
-    # une fonction testee peut en appeler d'autres, et son appele doit exister.
+    # Every translatable function, not only the ones being compared: a function
+    # under test may call others, and its callee has to exist.
     allf = open(D + "/list2.txt").read().split()
     called = set()
     for nm in allf:
@@ -204,9 +204,9 @@ def build_translated(funcs):
                     called.add(recomp.SYMS[t])
     stubs = sorted(called - set(allf))
     parts = ['#include "rt.h"', "u8 RAM[0x200000];", "u32 g_sp;",
-             "/* Bouchons pour les appeles non traduisibles -- le GTE, pour",
-             "   l'essentiel. Toute fonction qui en atteint un est ecartee de la",
-             "   comparaison : voir clean_set(). */"]
+             "/* Stubs for the untranslatable callees -- the GTE, for the most",
+             "   part. Any function that reaches one is dropped from the",
+             "   comparison: see clean_set(). */"]
     parts += ["u32 psx_%s(u32 a, u32 b, u32 c, u32 d) { (void)a;(void)b;(void)c;(void)d; return 0; }" % n
               for n in stubs]
     for nm in allf:
@@ -234,7 +234,7 @@ def build_translated(funcs):
 
 
 def call_graph():
-    """Qui appelle qui, pour savoir ce qui est verifiable de bout en bout."""
+    """Who calls whom, to know what is verifiable end to end."""
     g = {}
     for a, nm in recomp.SYMS.items():
         _, c = find(nm)
@@ -250,11 +250,11 @@ def call_graph():
 
 
 def clean_set(translatable):
-    """Fonctions traduisibles dont tous les appeles le sont aussi, transitivement.
+    """Translatable functions all of whose callees are too, transitively.
 
-    Une fonction qui atteint un bouchon ne peut pas etre comparee : la
-    reference executerait le vrai appele, la traduction un trou. Les exclure
-    est la seule facon de garder au resultat le sens qu'on lui prete.
+    A function that reaches a stub cannot be compared: the reference would
+    execute the real callee, the translation a hole. Excluding them is the only
+    way to keep the result meaning what it is taken to mean.
     """
     g = call_graph()
     ok = set(translatable)
@@ -273,24 +273,24 @@ _tr = set(open(D + "/list2.txt").read().split())
 _clean = clean_set(_tr)
 _dropped = [f for f in funcs if f not in _clean]
 funcs = [f for f in funcs if f in _clean]
-print("%d fonctions ecartees car elles atteignent un appele non traduisible"
+print("%d functions dropped because they reach an untranslatable callee"
       % len(_dropped), flush=True)
 make_vectors()
 t = time.time(); ref = build_reference(funcs).splitlines()
 print("reference   : %5.1f s" % (time.time() - t), flush=True)
-crashed = {l.split()[0] for l in ref if l.endswith("ECARTEE")}
+crashed = {l.split()[0] for l in ref if l.endswith("DROPPED")}
 surv = [f for f in funcs if f not in crashed]
 ref = [l for l in ref if l.split()[0] in set(surv)]
 t = time.time(); tr = build_translated(surv).splitlines()
-print("traduction  : %5.1f s" % (time.time() - t), flush=True)
+print("translation : %5.1f s" % (time.time() - t), flush=True)
 n = min(len(ref), len(tr))
 bad = [i for i in range(n) if ref[i] != tr[i]]
-print("%d fonctions demandees, %d ecartees (entrees invalides ou boucle sans fin)"
+print("%d functions requested, %d dropped (invalid inputs or endless loop)"
       % (len(funcs), len(crashed)))
-print("%d cas compares sur %d fonctions" % (n, len(surv)))
+print("%d cases compared over %d functions" % (n, len(surv)))
 if bad:
-    print("%d DIVERGENCES. Premiere :" % len(bad))
-    print("  vrai MIPS  :", ref[bad[0]][:120])
-    print("  traduction :", tr[bad[0]][:120])
+    print("%d DIVERGENCES. First one:" % len(bad))
+    print("  real MIPS   :", ref[bad[0]][:120])
+    print("  translation :", tr[bad[0]][:120])
 else:
-    print("AUCUNE DIVERGENCE.")
+    print("NO DIVERGENCE.")

@@ -92,12 +92,12 @@ def c_definitions(text):
 
 def main():
     sizes = asm_sizes()
-    # Le garde-fou porte sur les tailles, pas sur le nombre de fonctions. Sans
-    # les objets reassembles, `sizes` est vide : les deux ensembles se vident
-    # par intersection, le total reste non nul grace aux seules references, et
-    # la division par le nombre d'instructions eclatait. Un depot fraichement
-    # clone tombait ainsi sur une trace d'exception la ou la premiere commande
-    # du README l'envoyait.
+    # The guard is on the sizes, not on the number of functions. Without the
+    # reassembled objects, `sizes` is empty: both sets are emptied by the
+    # intersection, the total stays non-zero thanks to the references alone,
+    # and the division by the instruction count blew up. A freshly cloned
+    # repository landed on an exception trace right where the first command in
+    # the README sent it.
     if not sizes:
         print("nothing to report -- build/asm/*.o missing, run `make all` first")
         return 1

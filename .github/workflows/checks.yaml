@@ -1,18 +1,17 @@
 name: checks
 
-# Ce qui peut réellement tourner en intégration continue.
+# What can actually run in continuous integration.
 #
-# Presque rien dans ce dépôt ne se construit sans une copie du jeu, qui n'a
-# évidemment pas sa place ici : `make all` a besoin de `asm/`, qui a besoin de
-# `PSX.EXE`. La construction complète est donc déclenchée à la main, par
-# quelqu'un qui possède le jeu (voir build.yaml).
+# Almost nothing in this repository builds without a copy of the game, which
+# obviously has no place here: `make all` needs `asm/`, which needs
+# `PSX.EXE`. The full build is therefore triggered by hand, by someone who
+# owns the game (see build.yaml).
 #
-# Deux choses échappent à cette contrainte, et elles ne sont pas les moins
-# utiles : le contrôle du GTE, qui compare deux transcriptions indépendantes
-# d'une documentation matérielle sur 11 600 états, et la simple vérification
-# que les outils s'analysent. Les faire tourner à chaque poussée attrape ce
-# qu'on casse le plus souvent -- une faute de frappe dans une saturation, un
-# décalage inversé, un fichier qui ne compile plus.
+# Two things escape that constraint, and they are not the least useful ones:
+# the GTE check, which compares two independent transcriptions of a hardware
+# document over 11,600 states, and the simple verification that the tools
+# parse. Running them on every push catches what we break most often -- a
+# typo in a saturation, a flipped shift, a file that no longer compiles.
 
 on:
   push:
@@ -22,30 +21,30 @@ on:
 
 jobs:
   gte:
-    name: le GTE contre sa seconde transcription
+    name: the GTE against its second transcription
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: 11 600 comparaisons, 29 encodages
+      - name: 11,600 comparisons, 29 encodings
         run: python3 tools/m0/gte_check.py
 
-  outils:
-    name: les outils s'analysent
+  tools:
+    name: the tools parse
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: compilation des sources Python
+      - name: Python sources compile
         run: python3 -m compileall -q tools/
-      - name: le banc natif compile
-        # game.c et table.c manquent forcement ici -- on ne compile donc que
-        # ce qui ne depend pas du jeu, ce qui suffit a attraper une faute de
-        # frappe dans le modele du materiel.
+      - name: the native bench compiles
+        # game.c and table.c are necessarily missing here -- so we only
+        # compile what does not depend on the game, which is enough to catch a
+        # typo in the hardware model.
         run: |
           for f in tools/m0/hw.c tools/m0/gpu.c tools/m0/gte.c; do
             gcc -c -O1 -w -I tools/m0 -o /dev/null "$f"

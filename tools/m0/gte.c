@@ -1,15 +1,15 @@
-/* Le GTE du PlayStation. Voir gte.h pour la portée et la méthode de contrôle. */
+/* The PlayStation GTE. See gte.h for the scope and the method of checking. */
 #include "gte.h"
 
 GTE gte;
 
-/* ------------------------------------------------------------------ drapeaux
+/* --------------------------------------------------------------------- flags
  *
- * Le registre FLAG accumule les débordements et les saturations. Son bit 31
- * est un résumé : il vaut 1 si l'un des bits 30..23 ou 18..13 est posé. Le
- * code du jeu le lit rarement, mais une saturation mal placée change le
- * résultat visible, donc autant la modéliser complètement plutôt que de la
- * découvrir plus tard sur une image tordue. */
+ * The FLAG register accumulates overflows and saturations. Its bit 31 is a
+ * summary: it is 1 if any of bits 30..23 or 18..13 is set. The game's code
+ * rarely reads it, but a misplaced saturation changes the visible result, so
+ * we may as well model it completely rather than discover it later on a
+ * distorted picture. */
 #define F_MAC1_POS (1u << 30)
 #define F_MAC2_POS (1u << 29)
 #define F_MAC3_POS (1u << 28)
@@ -35,8 +35,8 @@ static void flag_end(void)
     if (gte.FLAG & 0x7F87E000u) gte.FLAG |= 0x80000000u;
 }
 
-/* Les MAC1-3 sont des accumulateurs 44 bits : au-delà, le débordement est
- * signalé mais la valeur conservée est tronquée à 32 bits. */
+/* MAC1-3 are 44-bit accumulators: beyond that, the overflow is signalled but
+ * the value kept is truncated to 32 bits. */
 static s32 mac123(int n, s64 v)
 {
     if (v >= (s64)1 << 43) gte.FLAG |= F_MAC1_POS >> (n - 1);
@@ -89,10 +89,10 @@ static s16 sat_sxy(int y, s32 v)
 
 /* ------------------------------------------------------------------ division
  *
- * La projection divise H par SZ3. Le matériel n'a pas de diviseur : il utilise
- * une table de 257 entrées et deux itérations de Newton-Raphson. Reproduire ce
- * chemin exactement importe -- une division juste au sens mathématique donnerait
- * des coordonnées écran différentes de un ou deux, visibles sur les arêtes. */
+ * Projection divides H by SZ3. The hardware has no divider: it uses a table of
+ * 257 entries and two Newton-Raphson iterations. Reproducing that path exactly
+ * matters -- a division that is correct in the mathematical sense would give
+ * screen coordinates off by one or two, visible along the edges. */
 static u8 unr_table[257];
 static int unr_ready;
 
@@ -121,7 +121,7 @@ static u32 gte_divide(u16 h, u16 sz3)
     return n > 0x1FFFF ? 0x1FFFF : n;
 }
 
-/* -------------------------------------------------------------------- accès */
+/* ------------------------------------------------------------------- access */
 void gte_write_data(int reg, u32 v)
 {
     s16 lo = (s16)(v & 0xFFFF), hi = (s16)(v >> 16);
@@ -141,7 +141,7 @@ void gte_write_data(int reg, u32 v)
     case 12: gte.SX0 = lo; gte.SY0 = hi; break;
     case 13: gte.SX1 = lo; gte.SY1 = hi; break;
     case 14: gte.SX2 = lo; gte.SY2 = hi; break;
-    /* SXYP : écrire pousse la pile des coordonnées écran. */
+    /* SXYP: writing pushes the stack of screen coordinates. */
     case 15: gte.SX0 = gte.SX1; gte.SY0 = gte.SY1;
              gte.SX1 = gte.SX2; gte.SY1 = gte.SY2;
              gte.SX2 = lo;      gte.SY2 = hi; break;
@@ -157,13 +157,13 @@ void gte_write_data(int reg, u32 v)
     case 25: gte.MAC1 = (s32)v; break;
     case 26: gte.MAC2 = (s32)v; break;
     case 27: gte.MAC3 = (s32)v; break;
-    /* IRGB : écrire dépaquette une couleur 5-5-5 dans IR1-3, à l'échelle x16. */
+    /* IRGB: writing unpacks a 5-5-5 colour into IR1-3, at scale x16. */
     case 28: gte.IRGB = v & 0x7FFF;
              gte.IR1 = (s16)((v & 0x1F) << 7);
              gte.IR2 = (s16)(((v >> 5) & 0x1F) << 7);
              gte.IR3 = (s16)(((v >> 10) & 0x1F) << 7);
              break;
-    case 29: break;   /* ORGB est en lecture seule */
+    case 29: break;   /* ORGB is read only */
     case 30: {
         u32 x = (u32)v, m = (v & 0x80000000u) ? ~x : x;
         int c = 0;
@@ -172,7 +172,7 @@ void gte_write_data(int reg, u32 v)
         gte.LZCR = (v == 0 || v == 0xFFFFFFFFu) ? 32 : c;
         break;
     }
-    case 31: break;   /* LZCR est en lecture seule */
+    case 31: break;   /* LZCR is read only */
     default: break;
     }
 }
@@ -210,7 +210,8 @@ u32 gte_read_data(int reg)
     case 27: return (u32)gte.MAC3;
     case 28:
     case 29: {
-        /* ORGB : IR1-3 ramenés à 5 bits, saturés, relus comme une couleur. */
+        /* ORGB: IR1-3 brought down to 5 bits, saturated, read back as one
+           colour. */
         s32 r = gte.IR1 / 128, g = gte.IR2 / 128, b = gte.IR3 / 128;
         r = r < 0 ? 0 : (r > 31 ? 31 : r);
         g = g < 0 ? 0 : (g > 31 ? 31 : g);
@@ -280,7 +281,7 @@ u32 gte_read_ctrl(int reg)
     case 23: return (u32)gte.BFC;
     case 24: return (u32)gte.OFX;
     case 25: return (u32)gte.OFY;
-    case 26: return (u32)(s32)(s16)gte.H;   /* relu signé : bizarrerie du matériel */
+    case 26: return (u32)(s32)(s16)gte.H;   /* read back signed: a hardware quirk */
     case 27: return (u32)(s32)gte.DQA;
     case 28: return (u32)gte.DQB;
     case 29: return (u32)(s32)gte.ZSF3;
@@ -290,7 +291,7 @@ u32 gte_read_ctrl(int reg)
     }
 }
 
-/* ------------------------------------------------------------------ commandes */
+/* ------------------------------------------------------------------ commands */
 static void push_sz(u16 z)
 {
     gte.SZ0 = gte.SZ1; gte.SZ1 = gte.SZ2; gte.SZ2 = gte.SZ3; gte.SZ3 = z;
@@ -321,8 +322,8 @@ static void rtp(s16 vx, s16 vy, s16 vz, int sf, int lm, int last)
     gte.MAC1 = m1; gte.MAC2 = m2; gte.MAC3 = m3;
     gte.IR1 = sat_ir(1, m1, lm);
     gte.IR2 = sat_ir(2, m2, lm);
-    /* IR3 sature sur la valeur non décalée pour le drapeau, sur la décalée pour
-       la valeur -- une irrégularité du matériel, pas une coquille. */
+    /* IR3 saturates on the unshifted value for the flag, and on the shifted
+       one for the value -- an irregularity of the hardware, not a typo. */
     {
         s32 unshifted = (s32)(z >> 12);
         if (unshifted < -0x8000 || unshifted > 0x7FFF) gte.FLAG |= F_IR3;
@@ -342,8 +343,8 @@ static void rtp(s16 vx, s16 vy, s16 vz, int sf, int lm, int last)
     }
 }
 
-/* Produit matrice x vecteur générique, partagé par mvmva et la famille des
-   calculs d'éclairage. */
+/* Generic matrix x vector product, shared by mvmva and the family of lighting
+   calculations. */
 static void mat_vec(const s16 *m, s16 vx, s16 vy, s16 vz,
                     s32 t0, s32 t1, s32 t2, int sf, int lm)
 {
@@ -361,14 +362,14 @@ static void mat_vec(const s16 *m, s16 vx, s16 vy, s16 vz,
 
 static void interp_far(int sf, int lm, s32 r, s32 g, s32 b)
 {
-    /* MAC <- MAC + IR0 * (FC - MAC), a l'echelle du materiel.
+    /* MAC <- MAC + IR0 * (FC - MAC), at the hardware's scale.
      *
-     * La specification dit : IR = ((FC SHL 12) - MAC) SAR (sf*12), puis
-     * MAC = (IR * IR0 + MAC) SAR (sf*12). Le MAC de depart n'est PAS redecale.
-     * Ma premiere version le decalait de sf*12 des deux cotes, ce qui donnait
-     * des couleurs saturees a blanc sur toute la brume -- une erreur qu'aucun
-     * test d'invariant n'aurait vue, et que la seconde transcription en Python
-     * a attrapee au premier etat tire.
+     * The specification says: IR = ((FC SHL 12) - MAC) SAR (sf*12), then
+     * MAC = (IR * IR0 + MAC) SAR (sf*12). The starting MAC is NOT shifted
+     * again. My first version shifted it by sf*12 on both sides, which gave
+     * colours saturated to white across the whole of the fog -- a mistake no
+     * invariant test would have seen, and which the second transcription in
+     * Python caught on the first state drawn.
      */
     int s = sf ? 12 : 0;
     s32 mac[3];
@@ -399,11 +400,10 @@ static void light_color(s16 vx, s16 vy, s16 vz, int sf, int lm, int use_rgb, int
     mat_vec(gte.LCM, gte.IR1, gte.IR2, gte.IR3, gte.RBK, gte.GBK, gte.BBK, sf, lm);
 
     if (!use_rgb) {
-        /* NCS et NCT : le MAC issu de la seconde matrice EST le resultat.
-         * Ma premiere version le recalculait depuis IR, ce qui le divisait par
-         * 256 quand sf valait 1 -- des couleurs presque noires, plausibles a
-         * l'oeil et fausses. Trouve par la seconde transcription, comme la
-         * brume. */
+        /* NCS and NCT: the MAC coming out of the second matrix IS the result.
+         * My first version recomputed it from IR, which divided it by 256 when
+         * sf was 1 -- colours almost black, plausible to the eye and wrong.
+         * Found by the second transcription, like the fog. */
         push_rgb(sat_col(1, gte.MAC1 >> 4), sat_col(2, gte.MAC2 >> 4),
                  sat_col(3, gte.MAC3 >> 4));
         return;
@@ -468,7 +468,7 @@ void gte_command(u32 code)
         mat_vec(m, a, b2, c, t0, t1, t2, sf, lm);
         break;
     }
-    case 0x0C:   /* op : produit vectoriel de (RT11,RT22,RT33) et IR1-3 */
+    case 0x0C:   /* op: cross product of (RT11,RT22,RT33) and IR1-3 */
         gte.MAC1 = mac123(1, ((s64)gte.RT[4] * gte.IR3 - (s64)gte.RT[8] * gte.IR2) >> s);
         gte.MAC2 = mac123(2, ((s64)gte.RT[8] * gte.IR1 - (s64)gte.RT[0] * gte.IR3) >> s);
         gte.MAC3 = mac123(3, ((s64)gte.RT[0] * gte.IR2 - (s64)gte.RT[4] * gte.IR1) >> s);
@@ -484,12 +484,12 @@ void gte_command(u32 code)
         gte.IR2 = sat_ir(2, gte.MAC2, lm);
         gte.IR3 = sat_ir(3, gte.MAC3, lm);
         break;
-    case 0x3D:   /* gpf : IR0 * IR1-3 */
+    case 0x3D:   /* gpf: IR0 * IR1-3 */
         gte.MAC1 = mac123(1, ((s64)gte.IR0 * gte.IR1) >> s);
         gte.MAC2 = mac123(2, ((s64)gte.IR0 * gte.IR2) >> s);
         gte.MAC3 = mac123(3, ((s64)gte.IR0 * gte.IR3) >> s);
         goto store_rgb;
-    case 0x3E:   /* gpl : MAC + IR0 * IR1-3 */
+    case 0x3E:   /* gpl: MAC + IR0 * IR1-3 */
         gte.MAC1 = mac123(1, (((s64)gte.MAC1 << s) + (s64)gte.IR0 * gte.IR1) >> s);
         gte.MAC2 = mac123(2, (((s64)gte.MAC2 << s) + (s64)gte.IR0 * gte.IR2) >> s);
         gte.MAC3 = mac123(3, (((s64)gte.MAC3 << s) + (s64)gte.IR0 * gte.IR3) >> s);
@@ -500,21 +500,21 @@ void gte_command(u32 code)
         gte.IR3 = sat_ir(3, gte.MAC3, lm);
         push_rgb(sat_col(1, gte.MAC1 >> 4), sat_col(2, gte.MAC2 >> 4), sat_col(3, gte.MAC3 >> 4));
         break;
-    case 0x10:   /* dpcs : brume sur RGBC */
+    case 0x10:   /* dpcs: fog on RGBC */
         interp_far(sf, lm, (s32)(gte.RGBC & 0xFF) << 16,
                    (s32)((gte.RGBC >> 8) & 0xFF) << 16,
                    (s32)((gte.RGBC >> 16) & 0xFF) << 16);
         break;
-    case 0x2A:   /* dpct : trois fois, sur la pile de couleurs */
+    case 0x2A:   /* dpct: three times, on the colour stack */
         { int i; for (i = 0; i < 3; i++)
             interp_far(sf, lm, (s32)(gte.RGB0 & 0xFF) << 16,
                        (s32)((gte.RGB0 >> 8) & 0xFF) << 16,
                        (s32)((gte.RGB0 >> 16) & 0xFF) << 16); }
         break;
-    case 0x11:   /* intpl : brume sur IR1-3 */
+    case 0x11:   /* intpl: fog on IR1-3 */
         interp_far(sf, lm, (s32)gte.IR1 << 12, (s32)gte.IR2 << 12, (s32)gte.IR3 << 12);
         break;
-    case 0x29:   /* dcpl : brume sur RGBC * IR */
+    case 0x29:   /* dcpl: fog on RGBC * IR */
         interp_far(sf, lm,
                    (s32)((gte.RGBC & 0xFF) * gte.IR1) << 4,
                    (s32)(((gte.RGBC >> 8) & 0xFF) * gte.IR2) << 4,

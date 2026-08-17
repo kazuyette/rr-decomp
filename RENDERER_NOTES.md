@@ -1,97 +1,95 @@
-# Le renderer : ce qui a été identifié
+# The renderer: what has been identified
 
-*Lecture à la main, août 2026. Chaque point ci-dessous est lu dans les
-instructions, pas déduit d'une ressemblance.*
+*Read by hand, August 2026. Every point below is read out of the
+instructions, not inferred from a resemblance.*
 
-## Quatre fonctions nommées
+## Four named functions
 
-| adresse | nom | preuve |
+| address | name | evidence |
 |---|---|---|
-| `0x8004617C` | `SetDrawMode` | écrit `len = 2` dans l'octet 3 du tag, puis deux mots : `_get_mode(dfe, dtd, tpage)` et `_get_tw(tw)`. Deux commandes GP0, dans cet ordre, juste avant `SetDrawEnv`. |
-| `0x80046430` | `_get_mode` | construit `0xE1……` : base `0xE1000200` ou `0xE1000800` selon `dtd`, masque la tpage à `0x1FF` ou `0x27FF` selon le drapeau global `D_80077378`, pose le bit 10 ou 12 selon `dfe`. |
-| `0x800465DC` | `_get_tw` | construit `0xE2……` : `(x>>3)<<10 | (y>>3)<<15 | ((-w & 0xFF)>>3) | (((-h & 0xFF)>>3)<<5)`, et rend 0 pour un `RECT *` nul. |
-| `0x80043738` | `negate_rot_row0` | `cfc2` des registres de contrôle 0 et 1, négation de R11, R12 et R13 — et **pas** de R21 —, `ctc2` en retour. C'est la première ligne de la matrice de rotation, donc l'axe X du résultat. |
+| `0x8004617C` | `SetDrawMode` | writes `len = 2` into byte 3 of the tag, then two words: `_get_mode(dfe, dtd, tpage)` and `_get_tw(tw)`. Two GP0 commands, in that order, right before `SetDrawEnv`. |
+| `0x80046430` | `_get_mode` | builds `0xE1……`: base `0xE1000200` or `0xE1000800` depending on `dtd`, masks the tpage with `0x1FF` or `0x27FF` depending on the global flag `D_80077378`, sets bit 10 or 12 depending on `dfe`. |
+| `0x800465DC` | `_get_tw` | builds `0xE2……`: `(x>>3)<<10 | (y>>3)<<15 | ((-w & 0xFF)>>3) | (((-h & 0xFF)>>3)<<5)`, and returns 0 for a null `RECT *`. |
+| `0x80043738` | `negate_rot_row0` | `cfc2` of control registers 0 and 1, negation of R11, R12 and R13 — and **not** R21 —, `ctc2` back. That is the first row of the rotation matrix, hence the X axis of the result. |
 
-`SetDrawMode` était déjà convertie et matchée (dans `x_c257_00.c`) : ce qui
-manquait était son nom, et il vaut pour ses 67 sites d'appel.
+`SetDrawMode` had already been converted and matched (in `x_c257_00.c`):
+what was missing was its name, and it holds for its 67 call sites.
 
-## Le drapeau miroir est à l'offset 0x24 du contexte de rendu
+## The mirror flag is at offset 0x24 of the render context
 
-Deux fonctions indépendantes lisent le même champ et en tirent la même
-conséquence :
+Two independent functions read the same field and draw the same
+consequence from it:
 
-`func_80033FBC` (et une quinzaine d'autres bâties sur le même moule) :
+`func_80033FBC` (and some fifteen others built on the same mould):
 
 ```
-    lw   $v0, 0x24($s1)        ; s1 = 2e argument = le contexte
-    beqz $v0, sans_miroir
-    jal  negate_rot_row0       ; X inversé dans la matrice courante
-    jal  func_800437AC         ; le vrai travail
-    jal  negate_rot_row0       ; remise en état
+    lw   $v0, 0x24($s1)        ; s1 = 2nd argument = the context
+    beqz $v0, no_mirror
+    jal  negate_rot_row0       ; X negated in the current matrix
+    jal  func_800437AC         ; the real work
+    jal  negate_rot_row0       ; restore
 ```
 
-`func_8004006C` (`rtpt` + `nclip`, le transform-et-cull) :
+`func_8004006C` (`rtpt` + `nclip`, the transform-and-cull):
 
 ```
     lw   $v0, 0x24($a1)
-    bnez $v0, inverse
-    mfc2 $v0, $24              ; MAC0 = aire signée sortie de nclip
-    bgtz $v0, garder           ; sens normal
-inverse:
+    bnez $v0, flipped
+    mfc2 $v0, $24              ; MAC0 = signed area out of nclip
+    bgtz $v0, keep             ; normal winding
+flipped:
     mfc2 $v0, $24
-    neg  $v0, $v0              ; sens inversé
-    bgtz $v0, garder
+    neg  $v0, $v0              ; reversed winding
+    bgtz $v0, keep
 ```
 
-Une réflexion selon X inverse le sens de parcours des polygones ; il faut donc
-inverser aussi le test de face arrière, sinon tout le décor se retourne. Les
-deux moitiés de cette conséquence sont écrites dans deux fonctions distinctes,
-et elles s'accordent. C'est le **mode miroir** du jeu.
+A reflection along X reverses the winding order of the polygons; the
+backface test therefore has to be reversed as well, or the whole scenery
+turns inside out. The two halves of that consequence are written in two
+separate functions, and they agree. This is the game's **mirror mode**.
 
-Conséquences pratiques :
+Practical consequences:
 
-- le champ `0x24` du contexte de rendu s'appelle `mirror` et rien d'autre ;
-- pour le portage, ce drapeau ne se traduit pas par un `scale(-1,1,1)` naïf :
-  il faut aussi basculer le sens de winding, exactement comme ici ;
-- `func_800437AC` est le corps réel du dessin, appelé dans les deux branches —
-  c'est lui qu'il faut lire ensuite, pas le nid de wrappers.
+- field `0x24` of the render context is called `mirror` and nothing else;
+- for the port, this flag does not translate into a naive `scale(-1,1,1)`:
+  the winding order has to be flipped too, exactly as it is here;
+- `func_800437AC` is the real drawing body, called in both branches — that
+  is the one to read next, not the nest of wrappers.
 
-## Ce que ça ne dit pas
+## What this does not say
 
-Rien sur le placement des sections de `MAP.RRM`. La grappe de quatre fonctions
-contiguës (`0x8003486C`, `0x80034EFC`, `0x80035638`, `0x80035EAC`) reste le
-meilleur candidat, mais le motif miroir traverse toute la région : la moitié
-des appels rencontrés jusqu'ici sont des enveloppes de ce genre, et il faut les
-franchir avant d'atteindre la transformation.
+Nothing about the placement of `MAP.RRM`'s sections. The cluster of four
+contiguous functions (`0x8003486C`, `0x80034EFC`, `0x80035638`,
+`0x80035EAC`) remains the best candidate, but the mirror pattern runs
+through the whole region: half the calls met so far are wrappers of this
+kind, and they have to be crossed before reaching the transform.
 
-## Note d'environnement
+## Environment note
 
-La chaîne de compilation (`/opt/psx-gcc`, `/opt/psx-gcc257`) ne survit pas au
-recyclage du conteneur. La reconstruire depuis les sources sur une Ubuntu
-récente demande deux correctifs que le `Dockerfile` (basé sur focal) n'a pas
-besoin de porter :
+The toolchain (`/opt/psx-gcc`, `/opt/psx-gcc257`) does not survive
+recycling of the container. Rebuilding it from source on a recent Ubuntu
+takes two fixes that the `Dockerfile` (focal-based) has no need to carry:
 
-- **GCC 2.7.2** : `xgcc` ne se lie plus, `sys_nerr` ayant disparu de la glibc.
-  Lier avec un objet supplémentaire contenant `int sys_nerr = 132;`.
-- **GCC 2.5.7** : `cc1` ne se lie plus, le C moderne étant `-fno-common` par
-  défaut (`local_vars_size`, `byte_mode`, `word_mode` doublement définis).
-  Lier avec `-Wl,--allow-multiple-definition`.
+- **GCC 2.7.2**: `xgcc` no longer links, `sys_nerr` having disappeared
+  from glibc. Link with an extra object containing `int sys_nerr = 132;`.
+- **GCC 2.5.7**: `cc1` no longer links, modern C being `-fno-common` by
+  default (`local_vars_size`, `byte_mode`, `word_mode` defined twice).
+  Link with `-Wl,--allow-multiple-definition`.
 
-Les deux correctifs ne touchent que l'édition de liens de l'hôte, jamais la
-génération de code : les 944 matchs sont retombés à l'identique après
-reconstruction.
+Both fixes touch only the host's link step, never code generation: the 944
+matches came back identical after the rebuild.
 
-## Le bloc des initialiseurs de primitives libgpu
+## The block of libgpu primitive initialisers
 
-Vingt-deux fonctions contiguës de `0x80047B48` à `0x80047D1C`, chacune de cinq
-ou huit instructions, toutes bâties sur le même geste : écrire une longueur
-dans l'octet 3 du tag et un code de commande GP0 dans l'octet 7. C'est la
-signature de `setPolyF4` et de toute sa fratrie, et une plage contiguë de
-fonctions faisant exactement la même chose, bornée par du code qui ne la fait
-pas, est une **unité de traduction d'origine** — la troisième identifiée par
-contiguïté après les trampolines BIOS et les enveloppes GTE.
+Twenty-two contiguous functions from `0x80047B48` to `0x80047D1C`, each of
+five or eight instructions, all built on the same gesture: write a length
+into byte 3 of the tag and a GP0 command code into byte 7. That is the
+signature of `setPolyF4` and its whole siblinghood, and a contiguous range
+of functions doing exactly the same thing, bounded by code that does not,
+is an **original translation unit** — the third identified by contiguity,
+after the BIOS trampolines and the GTE wrappers.
 
-| adresse | longueur | code GP0 | nom |
+| address | length | GP0 code | name |
 |---|---|---|---|
 | `0x80047B48` | 4 | `0x20` | `SetPolyF3` |
 | `0x80047B5C` | 7 | `0x24` | `SetPolyFT3` |
@@ -116,87 +114,89 @@ contiguïté après les trampolines BIOS et les enveloppes GTE.
 | `0x80047CE4` | 6 | `0x4C` | `SetLineF4` |
 | `0x80047D04` | 9 | `0x5C` | `SetLineG4` |
 
-Les codes des polygones, des sprites et des tuiles sont ceux du matériel et se
-lisent dans n'importe quelle documentation du GPU. Les quatre lignes demandent
-un pas de plus : `0x4C` et `0x5C` posent le bit `0x04`, **que le GPU ignore**.
-Le matériel ne connaît que `0x48` pour une polyligne plate et `0x58` pour une
-polyligne dégradée ; c'est libgpu qui se sert de ce bit libre comme marqueur
-interne pour distinguer la variante à trois points de celle à quatre. Les
-longueurs le confirment sans ambiguïté : 5 et 6 pour les plates, 7 et 9 pour
-les dégradées, avec le terminateur `0x55555555` écrit au mot correspondant —
-`0x18` pour la longueur 6, `0x1C` pour la 7, `0x24` pour la 9.
+The polygon, sprite and tile codes are the hardware's own and can be read
+in any GPU documentation. The four line rows call for one step more:
+`0x4C` and `0x5C` set bit `0x04`, **which the GPU ignores**. The hardware
+knows only `0x48` for a flat polyline and `0x58` for a gouraud one; it is
+libgpu that uses this free bit as an internal marker to tell the
+three-point variant from the four-point one. The lengths confirm it
+without ambiguity: 5 and 6 for the flat ones, 7 and 9 for the gouraud
+ones, with the `0x55555555` terminator written at the corresponding word —
+`0x18` for length 6, `0x1C` for 7, `0x24` for 9.
 
-Ces vingt-deux noms sont acquis sans SDK, en lisant deux constantes par
-fonction et une table de commandes matérielles.
+These twenty-two names are obtained without an SDK, by reading two
+constants per function and a table of hardware commands.
 
-## Treize accesseurs GTE de plus, lus dans les numéros de registre
+## Thirteen more GTE accessors, read off the register numbers
 
-Le bloc `0x8003FA94`–`0x8003FDEC` — celui qui commence exactement à la frontière
-jeu/bibliothèque — comptait encore quatorze fonctions que `src/gte.c` ne
-couvrait pas. Treize se nomment sans la moindre ambiguïté, parce que le numéro
-de registre COP2 qu'elles touchent *est* leur définition :
+The `0x8003FA94`–`0x8003FDEC` block — the one that starts exactly at the
+game/library boundary — still held fourteen functions that `src/gte.c` did
+not cover. Thirteen name themselves without the slightest ambiguity,
+because the COP2 register number they touch *is* their definition:
 
-| adresse | instructions | registres | rôle |
+| address | instructions | registers | role |
 |---|---|---|---|
 | `0x8003FB68` | `lwc2 $2, $3` | VXY1, VZ1 | `gte_ldv1` |
 | `0x8003FB78` | `lwc2 $4, $5` | VXY2, VZ2 | `gte_ldv2` |
-| `0x8003FB88` | `lwc2 $0..$5` | les trois sommets | `gte_ldv3` |
+| `0x8003FB88` | `lwc2 $0..$5` | the three vertices | `gte_ldv3` |
 | `0x8003FBA8` | `lwc2 $6` | RGB | `gte_ldrgb` |
 | `0x8003FBB4` | `lwc2 $20, $21, $22` | RGB0, RGB1, RGB2 | `gte_ldrgb3` |
 | `0x8003FCF0` | `swc2 $9, $10, $11` | IR1, IR2, IR3 | `gte_st_ir3` |
 | `0x8003FD04` | `swc2 $19` | SZ3 | `gte_stsz` |
 | `0x8003FD10` | `swc2 $17, $18, $19` | SZ1, SZ2, SZ3 | `gte_stsz3` |
-| `0x8003FD24` | `swc2 $16..$19` | SZ0 à SZ3 | `gte_stsz4` |
+| `0x8003FD24` | `swc2 $16..$19` | SZ0 to SZ3 | `gte_stsz4` |
 | `0x8003FD3C` | `swc2 $12, $13, $14` | SXY0, SXY1, SXY2 | `gte_stsxy3` |
 | `0x8003FD50` | `swc2 $20, $21, $22` | RGB0, RGB1, RGB2 | `gte_strgb3` |
 | `0x8003FD70` | `swc2 $25, $26, $27` | MAC1, MAC2, MAC3 | `gte_st_mac3` |
-| `0x8003FD84` | `mfc2 $29` puis trois masques | ORGB | `gte_st_orgb3` |
+| `0x8003FD84` | `mfc2 $29` then three masks | ORGB | `gte_st_orgb3` |
 
-La dernière mérite un mot : elle lit ORGB et le découpe en `& 0x1F`,
-`(& 0x3E0) >> 5`, `(& 0x7C00) >> 10`, écrits en trois mots consécutifs. C'est le
-dépaquetage d'une couleur 5-5-5 en trois composantes 32 bits — la lecture est
-forcée par les masques eux-mêmes.
+The last one deserves a word: it reads ORGB and cuts it into `& 0x1F`,
+`(& 0x3E0) >> 5`, `(& 0x7C00) >> 10`, written to three consecutive words.
+That is the unpacking of a 5-5-5 colour into three 32-bit components — the
+reading is forced by the masks themselves.
 
-La quatorzième, `func_8003FA94`, est un `jr $ra ; nop` — une fonction vide, à
-l'adresse exacte de la frontière. Elle reste sans nom : une fonction vide ne
-porte aucune preuve de ce qu'elle était.
+The fourteenth, `func_8003FA94`, is a `jr $ra ; nop` — an empty function,
+at the exact address of the boundary. It stays unnamed: an empty function
+carries no evidence of what it was.
 
-## Sept de plus, dans les blocs déjà entamés
+## Seven more, in the blocks already begun
 
-Un voisinage nommé contraint fortement ce qui reste. Les cinq fonctions non
-identifiées du bloc libgpu et les deux du bloc des trampolines :
+A named neighbourhood strongly constrains what is left. The five
+unidentified functions of the libgpu block and the two of the trampoline
+block:
 
-**`0x80047AE0` — `TermPrim`.** `p->tag |= 0x00FFFFFF` : le champ d'adresse sur
-24 bits passe à sa valeur de fin de liste. C'est le terminateur d'une table
-d'affichage, et rien d'autre n'écrit cette constante-là à cet endroit-là.
+**`0x80047AE0` — `TermPrim`.** `p->tag |= 0x00FFFFFF`: the 24-bit address
+field goes to its end-of-list value. That is the terminator of a display
+list, and nothing else writes that particular constant in that particular
+place.
 
-**`0x80047AF8` — `SetSemiTrans`** et **`0x80047B20` — `SetShadeTex`.** Deux
-fonctions jumelles : selon leur second argument, elles posent ou effacent un bit
-de l'octet de code en `0x7`. Le bit `0x02` est ABE, la semi-transparence ; le
-bit `0x01` est le drapeau « texture sans ombrage ». Les deux sont des bits de
-commande du GPU, documentés au niveau matériel.
+**`0x80047AF8` — `SetSemiTrans`** and **`0x80047B20` — `SetShadeTex`.**
+Two twin functions: depending on their second argument, they set or clear
+a bit of the code byte at `0x7`. Bit `0x02` is ABE, semi-transparency; bit
+`0x01` is the "texture without shading" flag. Both are GPU command bits,
+documented at the hardware level.
 
-**`0x80047D24` — `MargePrim`.** Additionne les deux longueurs lues en `0x3`,
-ajoute un, refuse au-delà de `0x20` en rendant `-1`, sinon écrit la nouvelle
-longueur et met à zéro le tag du second. C'est mot pour mot le contrat de
-`MargePrim` : fusionner deux primitives contiguës, ou échouer proprement.
+**`0x80047D24` — `MargePrim`.** Adds the two lengths read at `0x3`, adds
+one, refuses anything beyond `0x20` by returning `-1`, otherwise writes the
+new length and zeroes the tag of the second. That is word for word the
+contract of `MargePrim`: merge two contiguous primitives, or fail cleanly.
 
-**`0x80049638` — `EnterCriticalSection`** et **`0x800497D8` —
-`ExitCriticalSection`.** `a0 = 1 ; syscall` et `a0 = 2 ; syscall`. Les numéros
-d'appel système du noyau PSX sont écrits dans l'instruction.
+**`0x80049638` — `EnterCriticalSection`** and **`0x800497D8` —
+`ExitCriticalSection`.** `a0 = 1 ; syscall` and `a0 = 2 ; syscall`. The
+PSX kernel's system call numbers are written into the instruction.
 
-**`0x80043C54` — `gte_dpcl`.** Charge IR1-3 depuis le premier argument, RGB
-depuis le deuxième, IR0 depuis le troisième, lance `dpcl` et range RGB2 dans le
-quatrième. C'est la **seule** fonction du binaire à émettre `dpcl` — l'unicité
-vaut identification.
+**`0x80043C54` — `gte_dpcl`.** Loads IR1-3 from the first argument, RGB
+from the second, IR0 from the third, runs `dpcl` and stores RGB2 into the
+fourth. It is the **only** function in the binary to emit `dpcl` —
+uniqueness amounts to identification.
 
-Le double `swc2 $22, 0x0($a3)` n'est pas une erreur de lecture : l'écriture est
-répétée telle quelle dans le retail. C'est le contournement d'un aléa de lecture
-des registres du coprocesseur, présent dans tout le code GTE de l'époque.
+The doubled `swc2 $22, 0x0($a3)` is not a misreading: the store is
+repeated as such in the retail build. It works around a read hazard on the
+coprocessor registers, present throughout the GTE code of that era.
 
-### Laissée sans nom
+### Left unnamed
 
-`0x80047AB8` copie le champ d'adresse 24 bits d'une primitive vers une autre en
-préservant l'octet de longueur. Le geste est clair, le nom ne l'est pas : c'est
-la première moitié d'`AddPrim` sans sa seconde, et je préfère une adresse à un
-nom plausible.
+`0x80047AB8` copies the 24-bit address field of one primitive into another
+while preserving the length byte. The gesture is clear, the name is not:
+it is the first half of `AddPrim` without its second, and I prefer an
+address to a plausible name.

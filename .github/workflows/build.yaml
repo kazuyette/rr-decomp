@@ -1,16 +1,16 @@
 name: build
 
-# Declenche a la main, et seulement a la main.
+# Triggered by hand, and only by hand.
 #
-# Cette construction a besoin de `asm/`, qui a besoin de PSX.EXE, qui n'a pas
-# sa place dans ce depot. Sur une machine d'integration continue elle echoue
-# donc toujours -- et une CI qui echoue toujours ne dit plus rien a personne.
-# Elle reste ici parce qu'elle documente exactement comment construire, et
-# parce que quelqu'un qui possede le jeu peut la lancer sur son propre fork
-# apres y avoir depose l'executable.
+# This build needs `asm/`, which needs PSX.EXE, which has no place in this
+# repository. On a continuous integration machine it therefore always fails
+# -- and a CI that always fails no longer tells anyone anything. It stays
+# here because it documents exactly how to build, and because someone who
+# owns the game can run it on their own fork after dropping the executable
+# in.
 #
-# Ce qui tourne a chaque poussee est dans checks.yaml : le controle du GTE,
-# qui ne demande rien du jeu.
+# What runs on every push is in checks.yaml: the GTE check, which asks
+# nothing of the game.
 on:
   workflow_dispatch:
 

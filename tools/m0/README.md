@@ -46,13 +46,13 @@ gamepad. On Windows, either build under WSL or cross-compile — see
 missing at once:
 
 ```
-il manque 2 choses avant de pouvoir construire :
+2 things missing before this can build:
 
- * PSX.EXE est introuvable.
-   C'est ta propre copie de l'executable du jeu, extraite de ton
-   disque (SLPS-00001). Rien ici ne la remplace.
+ * PSX.EXE cannot be found.
+   This is your own copy of the game's executable, taken from your
+   own disc (SLPS-00001). Nothing here replaces it.
 
- * le compilateur gcc n'est pas dans le chemin.
+ * the compiler gcc is not on the path.
    sudo apt install build-essential
 ```
 
@@ -74,7 +74,7 @@ python3 tools/m0/ppm2png.py /tmp/images/*.ppm
 ```
 
 By default the output is a few lines: what the game prints itself, then a
-summary at the end. `VERBEUX=1` adds the BIOS call log and the conversation
+summary at the end. `VERBOSE=1` adds the BIOS call log and the conversation
 with the CD drive — a debugging tool, which served to find where booting
 stopped. Now that it no longer stops, it only hides the rest.
 
@@ -141,7 +141,7 @@ restarting.
 
 The picture is presented when the game swaps its buffers, that is, at the exact
 moment it declares a frame finished — not after a counter we chose.
-`SANS_FENETRE=1` returns to the frames-on-disk mode.
+`NO_WINDOW=1` returns to the frames-on-disk mode.
 
 ### A Windows build
 
@@ -171,7 +171,7 @@ way WSL translates them — `/mnt/e/...` becomes `E:\...` — without which the
 `.exe` would open a path Windows does not know, get back sectors of zeros, and
 the game would complain "File not found": an exact complaint about a false
 fact, which sends you looking at the far end of the chain. The program now says
-so itself, once, where it still knows: `disque introuvable: <path>`.
+so itself, once, where it still knows: `disc not found: <path>`.
 
 Three things do not port as they are:
 
@@ -211,8 +211,8 @@ four more bytes is all of it. The left stick gives the twist, the triggers give
 the pedals; the d-pad and face buttons stay connected and push the same values
 to their limits, so nothing is lost.
 
-`MANETTE` in the `F1` menu switches between `NEGCON` and `NUMERIQUE` live —
-the shortest way to hear what the analogue path changes. `MANETTE_NUMERIQUE=1`
+`CONTROLLER` in the `F1` menu switches between `NEGCON` and `DIGITAL` live —
+the shortest way to hear what the analogue path changes. `PAD_DIGITAL=1`
 forces the digital type without going through the menu.
 
 ### Frame rate
@@ -244,8 +244,7 @@ Without SDL2 nothing changes: frames on disk and a scripted controller, and
 `F1` opens a menu drawn over the game: frame rate, audio lead, draw cost,
 music, effects, controller type, and the state display. The arrow keys navigate
 and adjust; while it is open the pad returns "nothing pressed" to the game,
-because one does not want to drive and adjust at the same time. (Its labels are
-in French, like the source comments.)
+because one does not want to drive and adjust at the same time.
 
 Why a menu of our own rather than an entry in the game's: adding a line to
 Ridge Racer's OPTION menu would first require decompiling state 18, which is
@@ -278,7 +277,7 @@ The sound card sets the pace — as long as its queue is full enough we read no
 sector; if our clock had to agree with it, one would drift from the other and
 the sound would crackle.
 
-`SANS_SON=1` turns the sound off.
+`NO_SOUND=1` turns the sound off.
 
 ### The audio queue's lead
 
@@ -292,7 +291,7 @@ triggered sounds, where the ear compares against the picture.
 
 Measuring gives a sharp knee: at 20 ms the queue runs dry 867 times a minute,
 at 40 it runs dry 8 times, and beyond that nothing is gained. **40 ms** is
-therefore the setting, and `LATENCE=60` or `LATENCE=25` lets you judge for
+therefore the setting, and `LATENCY=60` or `LATENCY=25` lets you judge for
 yourself. The summary reports the lead and how many times the queue ran dry.
 
 ### The SPU
@@ -325,25 +324,24 @@ when it likes. We can feed that from a **script** written in advance, so that
 two runs give the same frames:
 
 ```sh
-MANETTE="1200:start 1260: 1600:start 1660: 2200:croix" ./build/m0/m0 90 PSX.EXE
+PAD_SCRIPT="1200:start 1260: 1600:start 1660: 2200:cross" ./build/m0/m0 90 PSX.EXE
 ```
 
 Each term is `moment:keys`, **the moment counted in frames drawn**; a moment
-with no key releases everything. The names recognised: `start`, `select`,
-`haut`, `bas`, `gauche`, `droite`, `croix`, `rond`, `triangle`, `carre`, `l1`,
-`r1`. That script crosses the title screen, opens the menu, starts the race and
+with no key releases everything. The names recognised: `start`, `select`, `up`,
+`down`, `left`, `right`, `cross`, `circle`, `triangle`, `square`, `l1`, `r1`. That script crosses the title screen, opens the menu, starts the race and
 holds the throttle.
 
 The unit is the frame and not the video beat, because it does not depend on the
 time base: retuning the clock shifts every beat, but a frame is still a frame.
 A script written once keeps working.
 
-`MANETTE_VUE=1` prints what the controller actually returns — the sixteen-bit
+`PAD_DEBUG=1` prints what the controller actually returns — the sixteen-bit
 word, the announced type, the four analogue bytes, and the raw device state
 underneath SDL's game-controller layer:
 
 ```
-manette : FFFD  type 23  torsion 80  I 6A  II 00  L 00
+pad: FFFD  type 23  twist 80  I 6A  II 00  L 00
 ```
 
 That line is what found the RAWINPUT defect above. If it changes when you press
@@ -361,11 +359,11 @@ played by hand, and the rest never seen running.
 A defect only shows up in a state you execute. The others are not "probably
 fine" — they are **unknown**.
 
-To explore, `planche.py` assembles frames into a contact sheet:
+To explore, `contact_sheet.py` assembles frames into a contact sheet:
 
 ```sh
-IMAGES=/tmp/images SANS_FENETRE=1 ./build/m0/m0 60 PSX.EXE
-python3 tools/m0/planche.py /tmp/images/*.ppm -o sheet.png -c 6
+IMAGES=/tmp/images NO_WINDOW=1 ./build/m0/m0 60 PSX.EXE
+python3 tools/m0/contact_sheet.py /tmp/images/*.ppm -o sheet.png -c 6
 ```
 
 Thirty frames at once reveal what a single frame does not: a screen that stops

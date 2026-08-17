@@ -1,34 +1,58 @@
-# Avancement Ghidra - reverse de PSX.EXE
+# Ghidra progress - reverse of PSX.EXE
 
-Import : processeur MIPS little-endian, Base Address 0x80010000, File Offset 0x800 (l'en-tete PS-X EXE fait 2048 octets et ne doit pas etre mappe en memoire), Length 0x67800, point d'entree 0x8003FA9C.
+Import: MIPS little-endian processor, Base Address 0x80010000, File Offset
+0x800 (the PS-X EXE header is 2048 bytes long and must not be mapped into
+memory), Length 0x67800, entry point 0x8003FA9C.
 
-## Demarrage / boucle principale
+## Startup / main loop
 
-- `_start` (0x8003fa9c) : crt0 - vide le BSS, appelle une trampoline BIOS A0h, puis `main()`, puis `trap(1)` (jamais atteint normalement)
-- `main` (0x80012360) : inits puis boucle infinie - double buffering via le scratchpad (0x1f800000), dispatch machine a etats (table de pointeurs a 0x80070ea4, index _DAT_801d34f8, pas encore materialisee dans Ghidra), attente VSync, lecture manette, 3 appels de rendu par frame
-- FUN_800121f4 : grosse init systeme - video, reset de globales, ecriture de valeurs 0xff/0x80 en scratchpad (probable calibration manette/analogique)
+- `_start` (0x8003fa9c): crt0 - clears the BSS, calls an A0h BIOS
+  trampoline, then `main()`, then `trap(1)` (never reached in normal
+  operation)
+- `main` (0x80012360): inits, then an infinite loop - double buffering via
+  the scratchpad (0x1f800000), state-machine dispatch (pointer table at
+  0x80070ea4, index _DAT_801d34f8, not yet materialised in Ghidra), VSync
+  wait, pad read, 3 render calls per frame
+- FUN_800121f4: large system init - video, resetting of globals, writing of
+  0xff/0x80 values into the scratchpad (probably pad/analogue calibration)
 
 ## Video / GPU
 
-- `SetVideoMode` (0x80045440) : configuration video via une vtable `g_gpu_device`, envoie une commande GP1(08h) Display Mode (NTSC/PAL)
-- `g_gpu_device` (0x8007736c) : pointeur vers une petite abstraction/vtable pour le GPU (+4 AddPrim, +0x10 envoi de paquet GP0 brut, +0x28 flags, +0x34 reset/mode) - le rendu ne passe pas directement par libgpu
+- `SetVideoMode` (0x80045440): video configuration through a `g_gpu_device`
+  vtable, sends a GP1(08h) Display Mode command (NTSC/PAL)
+- `g_gpu_device` (0x8007736c): pointer to a small abstraction/vtable for the
+  GPU (+4 AddPrim, +0x10 send raw GP0 packet, +0x28 flags, +0x34 reset/mode)
+  - rendering does not go through libgpu directly
 
-## Manette
+## Pad
 
-- `read_pad_input` (0x8002e778) : decode l'entree manette - ID 0x41 = pad digital standard, ID 0x23 = neGcon (le controleur volant/twist de Namco), confirme supporte nativement
+- `read_pad_input` (0x8002e778): decodes the pad input - ID 0x41 = standard
+  digital pad, ID 0x23 = neGcon (Namco's wheel/twist controller), confirmed
+  as natively supported
 
-## Son (SPU, 24 voix materielles)
+## Sound (SPU, 24 hardware voices)
 
-- File d'evenements son sur 24 slots (0x8003aec0) -> dispatch vers un gestionnaire de voix (0x8004c74c) qui compare les parametres a la voix deja active sur le slot (anti-retrigger)
-- `SpuVoiceKeyOn` (0x8004a130) : pose le bit du slot dans un masque KON 24 bits reparti sur deux registres 16 bits - correspond exactement au split materiel des registres KON du SPU PS1
-- Lie aux fichiers disque RR.VH/RR.VB (banque VAB)
+- Sound event queue over 24 slots (0x8003aec0) -> dispatch to a voice
+  handler (0x8004c74c) which compares the parameters against the voice
+  already active on the slot (anti-retrigger)
+- `SpuVoiceKeyOn` (0x8004a130): sets the slot's bit in a 24-bit KON mask
+  spread over two 16-bit registers - matches exactly the hardware split of
+  the PS1 SPU's KON registers
+- Tied to the RR.VH/RR.VB disc files (VAB bank)
 
-## BIOS / interruptions
+## BIOS / interrupts
 
-- Deux idiomes distincts identifies : trampolines table A0h (syscalls classiques type memcpy) et trampoline table B0h (kernel - OpenEvent/EnableEvent, utilisee ici pour armer des interruptions timer, probablement le tick du sequenceur audio)
+- Two distinct idioms identified: A0h table trampolines (classic syscalls of
+  the memcpy kind) and a B0h table trampoline (kernel - OpenEvent/EnableEvent,
+  used here to arm timer interrupts, probably the audio sequencer's tick)
 
-## Bloqueurs / pistes ouvertes
+## Blockers / open leads
 
-- Table d'etats du jeu (0x80070ea4) : contenu illisible via l'outillage MCP actuel (pas d'outil de lecture memoire brute) - necessite de la materialiser manuellement dans Ghidra (creer un tableau de pointeurs a cette adresse)
-- FUN_80039fd4/FUN_80039d00 : mecanisme one-shot request/process dont le role exact reste a determiner
-- Les fonctions SpuVoiceKeyOn/voix restent a confirmer plus finement (noms provisoires bases sur des correspondances fortes avec le hardware SPU, mais pas garantis a 100%)
+- Game state table (0x80070ea4): contents unreadable with the current MCP
+  tooling (no raw memory read tool) - needs to be materialised by hand in
+  Ghidra (create a pointer array at that address)
+- FUN_80039fd4/FUN_80039d00: one-shot request/process mechanism whose exact
+  role remains to be determined
+- The SpuVoiceKeyOn/voice functions still need finer confirmation
+  (provisional names based on strong correspondences with the SPU hardware,
+  but not guaranteed 100%)

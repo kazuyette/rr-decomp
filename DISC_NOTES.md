@@ -1,39 +1,48 @@
-# Notes sur le disque source (Japan)
+# Notes on the source disc (Japan)
 
-Source : image BIN/CUE, 13 pistes (1 piste data MODE2/2352 + 12 pistes audio CDDA - bande son redbook).
+Source: BIN/CUE image, 13 tracks (1 MODE2/2352 data track + 12 CDDA audio
+tracks - redbook soundtrack).
 
-## Volume ISO9660 (piste 1)
+## ISO9660 volume (track 1)
 
 - System id: PLAYSTATION
 - Volume id: RIDGERACER
 - Publisher: NAMCO LIMITED
-- Dates fichiers : 6-10 nov. 1994 (sortie JP le 3 dec. 1994 - build tres proche du master)
-- Pas de SYSTEM.CNF sur le disque -> boot implicite sur PSX.EXE (comportement des tout premiers titres PS1)
+- File dates: 6-10 Nov. 1994 (JP release 3 Dec. 1994 - build very close to
+  the master)
+- No SYSTEM.CNF on the disc -> implicit boot on PSX.EXE (behaviour of the
+  very first PS1 titles)
 
-## Fichiers racine
+## Root files
 
-| Fichier | Taille | Role probable |
+| File | Size | Likely role |
 |---|---|---|
-| PSX.EXE | 425 984 o | Executable principal |
-| IDX.HED | 2 048 o | Table d'index (format maison, non documente) |
-| MAP.RRM | 271 548 o | Donnees de circuit (geometrie de route + UV/texture par quad) - **format documente**, voir [MAP_RRM_FORMAT.md](MAP_RRM_FORMAT.md) |
-| OBJ.RRO | 445 348 o | Modeles 3D des objets |
-| RR.VH | 32 288 o | En-tetes sons (VAB header, format Sony standard) |
-| RR.VB | 491 056 o | Donnees sons (VAB body) |
-| TEX0-TEX4.TMS | 699 908 / 197 128 / 140 704 / 109 948 / 14 996 o | Banques de textures (format probablement maison, pas un .TIM standard) |
+| PSX.EXE | 425 984 bytes | Main executable |
+| IDX.HED | 2 048 bytes | Index table (in-house format, undocumented) |
+| MAP.RRM | 271 548 bytes | Track data (road geometry + UV/texture per quad) - **documented format**, see [MAP_RRM_FORMAT.md](MAP_RRM_FORMAT.md) |
+| OBJ.RRO | 445 348 bytes | 3D models of the objects |
+| RR.VH | 32 288 bytes | Sound headers (VAB header, standard Sony format) |
+| RR.VB | 491 056 bytes | Sound data (VAB body) |
+| TEX0-TEX4.TMS | 699 908 / 197 128 / 140 704 / 109 948 / 14 996 bytes | Texture banks (probably an in-house format, not a standard .TIM) |
 
-## En-tete PSX.EXE
+## PSX.EXE header
 
-- Magic : PS-X EXE
-- Region : "Sony Computer Entertainment Inc. for Japan area"
-- Entry point (pc0) : 0x8003FA9C
-- gp0 : 0xEF7E023F
-- .text : adresse 0x80010000, taille 0x67800
-- Pas de section data/bss declaree dans l'en-tete (le crt0 s'en charge au runtime, voir GHIDRA_PROGRESS.md)
+- Magic: PS-X EXE
+- Region: "Sony Computer Entertainment Inc. for Japan area"
+- Entry point (pc0): 0x8003FA9C
+- gp0: 0xEF7E023F
+- .text: address 0x80010000, size 0x67800
+- No data/bss section declared in the header (the crt0 takes care of it at
+  runtime, see GHIDRA_PROGRESS.md)
 
-## Prochaines etapes
+## Next steps
 
-- Documenter le format IDX.HED (probablement un index de secteurs pointant vers des assets streames depuis le CD)
-- Convertir RR.VH/RR.VB (VAB Sony standard, outils existants dans l'ecosysteme PS1 homebrew)
-- Reverse le format TEXx.TMS pour visualiser les textures
-- MAP.RRM : format documente (voir [MAP_RRM_FORMAT.md](MAP_RRM_FORMAT.md)) - reste ouvert : semantique exacte du champ `flags` (octets 38-39 de chaque enregistrement) et l'existence ou non d'une transformation par section (translation/rotation) stockee dans un autre fichier
+- Document the IDX.HED format (probably a sector index pointing to assets
+  streamed from the CD)
+- Convert RR.VH/RR.VB (standard Sony VAB, tools exist in the PS1 homebrew
+  ecosystem)
+- Reverse the TEXx.TMS format in order to view the textures
+- MAP.RRM: format documented (see [MAP_RRM_FORMAT.md](MAP_RRM_FORMAT.md)) -
+  still open: the exact semantics of the `flags` field (bytes 38-39 of each
+  record) and whether or not a per-section transform (translation/rotation)
+  stored in another file exists

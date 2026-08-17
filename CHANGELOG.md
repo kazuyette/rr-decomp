@@ -59,7 +59,7 @@ positions.
 So there was nothing to write on the game's side: announcing `0x23` and filling
 four more bytes is the whole of it. The left stick becomes the twist, the
 triggers become the pedals, and the d-pad and face buttons still push the same
-values to their limits, so nothing is lost. `MANETTE` in the F1 menu switches
+values to their limits, so nothing is lost. `CONTROLLER` in the F1 menu switches
 between the two types live.
 
 The digital branch, it turns out, *fabricates* a twist value from the
@@ -112,8 +112,8 @@ silent failure that broke somewhere other than where it was.
   on screen: it only ever changed on `FFFD`, the right trigger, read as an
   axis.
 
-The last two are why the runtime now says `disque introuvable: <path>` when the
-image will not open, and why `MANETTE_VUE=1` prints what the controller
+The last two are why the runtime now says `disc not found: <path>` when the
+image will not open, and why `PAD_DEBUG=1` prints what the controller
 actually returns. Putting a number on a deviation gives something to drive to
 zero; prose does not.
 

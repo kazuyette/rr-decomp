@@ -1,27 +1,28 @@
-/* Le GTE (COP2) du PlayStation, pour le banc de recompilation.
+/* The PlayStation GTE (COP2), for the recompilation harness.
  *
- * Pourquoi il est écrit à part
+ * Why it is written separately
  * ----------------------------
- * qemu ne connaît pas ce coprocesseur : la référence qui a validé les 836
- * fonctions entières ne peut rien dire ici. La fidélité du GTE doit donc être
- * établie autrement — contre une seconde implémentation indépendante, écrite
- * à partir de la même documentation matérielle mais dans un autre langage et
- * par un autre chemin. Deux transcriptions d'une même spécification ne se
- * trompent pas au même endroit ; c'est le seul contrôle disponible, et il vaut
- * mieux que rien pourvu qu'on dise ce qu'il vaut.
+ * qemu does not know this coprocessor: the reference that validated the 836
+ * integer functions has nothing to say here. The GTE's fidelity must therefore
+ * be established some other way — against a second, independent
+ * implementation, written from the same hardware documentation but in another
+ * language and by another route. Two transcriptions of the same specification
+ * do not go wrong in the same place; it is the only check available, and it is
+ * better than nothing provided one says what it is worth.
  *
- * Ce qui est implémenté
- * ---------------------
- * Les 22 opérations que le binaire de Ridge Racer utilise réellement, relevées
- * en comptant les encodages dans les 948 fonctions — pas les 40 du catalogue.
- * Le reste lèverait une erreur franche plutôt que de rendre un résultat faux.
+ * What is implemented
+ * -------------------
+ * The 22 operations the Ridge Racer binary actually uses, established by
+ * counting the encodings across the 948 functions — not the 40 in the
+ * catalogue. The rest would raise a plain error rather than return a wrong
+ * result.
  */
 #ifndef GTE_H
 #define GTE_H
 #include "rt.h"
 
 typedef struct {
-    /* Registres de données, cop2r0..cop2r31. Les noms sont ceux du matériel. */
+    /* Data registers, cop2r0..cop2r31. The names are the hardware's. */
     s16 VX0, VY0, VZ0, VX1, VY1, VZ1, VX2, VY2, VZ2;
     u32 RGBC;
     u16 OTZ;
@@ -34,15 +35,15 @@ typedef struct {
     u32 IRGB, ORGB;
     s32 LZCS;
     s32 LZCR;
-    /* Registres de contrôle, cop2c0..cop2c31. */
-    s16 RT[9];          /* matrice de rotation */
+    /* Control registers, cop2c0..cop2c31. */
+    s16 RT[9];          /* rotation matrix */
     s32 TRX, TRY, TRZ;  /* translation */
-    s16 LLM[9];         /* matrice de lumière */
-    s32 RBK, GBK, BBK;  /* couleur de fond */
-    s16 LCM[9];         /* matrice de couleur */
-    s32 RFC, GFC, BFC;  /* couleur lointaine */
-    s32 OFX, OFY;       /* décalage écran */
-    u16 H;              /* distance de projection */
+    s16 LLM[9];         /* light matrix */
+    s32 RBK, GBK, BBK;  /* background colour */
+    s16 LCM[9];         /* colour matrix */
+    s32 RFC, GFC, BFC;  /* far colour */
+    s32 OFX, OFY;       /* screen offset */
+    u16 H;              /* projection distance */
     s16 DQA;
     s32 DQB;
     s16 ZSF3, ZSF4;

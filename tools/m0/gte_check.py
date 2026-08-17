@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""Contrôle du GTE : deux transcriptions de la même spécification.
+"""GTE check: two transcriptions of the same specification.
 
-qemu ne connaît pas le COP2 : la référence par exécution qui a validé les
-fonctions entières ne dit rien ici. Le seul contrôle disponible est donc de
-réécrire les opérations une seconde fois, dans un autre langage et sans
-regarder la première, puis de comparer sur des états de registres tirés au
-hasard.
+qemu does not know COP2: the by-execution reference that validated whole
+functions says nothing here. The only check available is therefore to write the
+operations out a second time, in another language and without looking at the
+first, then to compare on register states drawn at random.
 
-Ce que ça vaut, exactement : deux transcriptions indépendantes d'une même
-documentation ne se trompent pas au même endroit, sauf si la documentation
-elle-même est ambiguë. Ça attrape les fautes de frappe, les décalages
-inversés, les saturations oubliées -- c'est-à-dire l'essentiel de ce qui rate
-dans ce genre de code. Ça n'attrape pas une lecture fausse partagée. Le seul
-contrôle qui le ferait serait la console.
+What that is worth, exactly: two independent transcriptions of the same
+documentation do not go wrong in the same place, unless the documentation
+itself is ambiguous. It catches typos, inverted shifts, forgotten saturations
+-- that is to say the bulk of what fails in this kind of code. It does not
+catch a shared misreading. The only check that would do that is the console.
 """
 import ctypes
 import os
@@ -22,9 +20,9 @@ import subprocess
 import sys
 import tempfile
 
-# Le contrôle ne demande rien du jeu : il compare deux transcriptions d'une
-# documentation matérielle. Il tourne donc partout, y compris en intégration
-# continue, ce qui n'est vrai d'aucune autre étape de ce dépôt.
+# The check asks nothing of the game: it compares two transcriptions of a
+# hardware documentation. It therefore runs anywhere, continuous integration
+# included, which is true of no other step in this repository.
 D = os.path.dirname(os.path.abspath(__file__))
 _tmp = tempfile.mkdtemp(prefix="gte-")
 _lib = os.path.join(_tmp, "libgte.so")
@@ -52,7 +50,7 @@ def s64(v):
 
 
 class Ref:
-    """Le GTE, réécrit depuis la documentation matérielle."""
+    """The GTE, rewritten from the hardware documentation."""
 
     def __init__(self, rnd):
         self.d = [0] * 32
@@ -62,7 +60,7 @@ class Ref:
             self.c[i] = rnd.randrange(1 << 32)
         self.flag = 0
 
-    # --- accès nommés
+    # --- named accessors
     def V(self, i):
         x = s16(self.d[i * 2] & 0xFFFF)
         y = s16(self.d[i * 2] >> 16)
@@ -87,7 +85,7 @@ class Ref:
         return m
 
     def flag_end(self):
-        """Le bit 31 resume : il vaut 1 si l'un des bits 30..23 ou 18..13 l'est."""
+        """Bit 31 sums up: it is 1 if one of bits 30..23 or 18..13 is."""
         if self.flag & 0x7F87E000:
             self.flag |= 0x80000000
         return self.flag & 0xFFFFF000
@@ -111,7 +109,7 @@ class Ref:
             return lo
         return v
 
-    # --- opérations
+    # --- operations
     def mvmva(self, code):
         sf = (code >> 19) & 1
         lm = (code >> 10) & 1
@@ -154,11 +152,11 @@ class Ref:
         return mac0, otz
 
     def sqr(self, sf, lm):
-        """sqr ecrit aussi IR1-3, avec saturation -- donc avec drapeaux.
+        """sqr also writes IR1-3, with saturation -- so with flags.
 
-        Omettre cette etape ne changeait aucun resultat tant qu'on ne comparait
-        que les MAC ; comparer FLAG l'a fait apparaitre aussitot. C'etait un
-        trou dans la reference, pas dans l'implementation.
+        Omitting that step changed no result as long as only the MACs were
+        being compared; comparing FLAG made it show up at once. It was a hole
+        in the reference, not in the implementation.
         """
         sh = 12 if sf else 0
         ir = [s16(self.d[9]), s16(self.d[10]), s16(self.d[11])]
@@ -179,7 +177,7 @@ class Ref:
         return out
 
 
-    # --- couleur et brume
+    # --- colour and fog
     def sz3(self, v):
         if v > 0xFFFF:
             self.flag |= 1 << 18
@@ -224,11 +222,11 @@ class Ref:
         return v
 
     def interp(self, base, sf, lm):
-        """MAC <- MAC + IR0 * (FC - MAC), a l'echelle du materiel.
+        """MAC <- MAC + IR0 * (FC - MAC), at the hardware's scale.
 
-        La specification dit : IR = ((FC SHL 12) - MAC) SAR (sf*12), puis
-        MAC = (IR * IR0 + MAC) SAR (sf*12). Le MAC de depart n'est PAS
-        redecale ; c'est le piege de cette famille.
+        The specification says: IR = ((FC SHL 12) - MAC) SAR (sf*12), then
+        MAC = (IR * IR0 + MAC) SAR (sf*12). The starting MAC is NOT shifted
+        again; that is the trap in this family.
         """
         sh = 12 if sf else 0
         fc = (s32(self.c[21]), s32(self.c[22]), s32(self.c[23]))
@@ -268,7 +266,7 @@ class Ref:
         return self.interp([(rgbc & 0xFF) << 16, ((rgbc >> 8) & 0xFF) << 16,
                             ((rgbc >> 16) & 0xFF) << 16], sf, lm)
 
-    # --- eclairage
+    # --- lighting
     def matvec(self, mk, v, t, sf, lm):
         sh = 12 if sf else 0
         m = self.MX(mk)
@@ -281,11 +279,12 @@ class Ref:
         return out, irs
 
     def nc(self, vi, sf, lm, use_rgb, fog):
-        """La chaine complete : lumiere, couleur, teinte, puis brume.
+        """The complete chain: light, colour, tint, then fog.
 
-        Le point sur lequel les deux transcriptions pouvaient diverger est le
-        sort du MAC entre la seconde matrice et la couleur : sans teinte par
-        RGBC, la specification le laisse tel quel et la FIFO recoit MAC/16.
+        The point on which the two transcriptions could diverge is the fate of
+        the MAC between the second matrix and the colour: without tinting by
+        RGBC, the specification leaves it as it is and the FIFO receives
+        MAC/16.
         """
         sh = 12 if sf else 0
         v = self.V(vi)
@@ -320,11 +319,11 @@ class Ref:
         return out, firs, [self.col(out[i] >> 4, i + 1) for i in range(3)]
 
     def dpct(self, sf, lm):
-        """Trois brumes de suite, chacune prenant le bas de la pile de couleurs.
+        """Three fogs in a row, each taking the bottom of the colour stack.
 
-        La pile avance a chaque tour : la deuxieme iteration lit ce que la
-        premiere y a laisse glisser. C'est ce chainage qui rend l'operation
-        distincte de trois dpcs successifs.
+        The stack advances on every turn: the second iteration reads what the
+        first let slide into it. It is this chaining that makes the operation
+        distinct from three successive dpcs.
         """
         fifo = [self.d[20], self.d[21], self.d[22]]
         out = irs = rgb = None
@@ -343,12 +342,12 @@ class Ref:
 
     # --- projection
     def unr(self, h, sz3):
-        """La division du materiel : table de 257 entrees, deux iterations.
+        """The hardware's division: a 257-entry table, two iterations.
 
-        Reecrite depuis la specification sans regarder l'implementation C. Le
-        point delicat est le decalage de normalisation : il faut amener SZ3 sur
-        son bit de poids fort avant d'indexer la table, sinon l'approximation
-        part sur la mauvaise decade.
+        Rewritten from the specification without looking at the C
+        implementation. The delicate point is the normalisation shift: SZ3 must
+        be brought onto its most significant bit before indexing the table,
+        otherwise the approximation sets off on the wrong decade.
         """
         if h >= sz3 * 2:
             self.flag |= 1 << 17
@@ -422,7 +421,7 @@ class Ref:
             st = self.rtp(0, sf, lm, 1, st)
         return st
 
-# --- pilotage de l'implémentation C
+# --- driving the C implementation
 lib.gte_write_data.argtypes = [ctypes.c_int, ctypes.c_uint32]
 lib.gte_write_ctrl.argtypes = [ctypes.c_int, ctypes.c_uint32]
 lib.gte_read_data.restype = ctypes.c_uint32
@@ -431,20 +430,20 @@ lib.gte_command.argtypes = [ctypes.c_uint32]
 
 
 def load(ref):
-    """L'ordre compte : certains registres en modifient d'autres à l'écriture.
+    """Order matters: some registers modify others when written.
 
-    Écrire IRGB (28) dépaquette une couleur 5-5-5 dans IR1-3 ; écrire SXYP (15)
-    pousse la pile des coordonnées écran ; LZCR (31) et ORGB (29) sont en
-    lecture seule. Un chargeur naïf qui balaie 0 à 31 détruit donc une partie de
-    l'état qu'il croit poser -- et fait échouer la comparaison pour une raison
-    qui n'a rien à voir avec l'implémentation testée.
+    Writing IRGB (28) unpacks a 5-5-5 colour into IR1-3; writing SXYP (15)
+    pushes the screen-coordinate stack; LZCR (31) and ORGB (29) are read-only.
+    A naive loader that sweeps 0 to 31 therefore destroys part of the state it
+    believes it is laying down -- and makes the comparison fail for a reason
+    that has nothing to do with the implementation under test.
     """
     SKIP = (15, 28, 29, 31)
     for i in range(32):
         if i not in SKIP:
             lib.gte_write_data(i, ref.d[i])
         lib.gte_write_ctrl(i, ref.c[i])
-    for i in (9, 10, 11):        # IR1-3, reposés après tout ce qui les touche
+    for i in (9, 10, 11):        # IR1-3, laid down again after all that touches them
         lib.gte_write_data(i, ref.d[i])
 
 
@@ -543,13 +542,13 @@ for k in range(ROUNDS):
             bad.setdefault("_n_" + name, 0)
             bad["_n_" + name] += 1
 
-print("%d etats tires, %d operations chacune" % (ROUNDS, len(CASES)))
+print("%d states drawn, %d operations each" % (ROUNDS, len(CASES)))
 fails = [k for k in bad if not k.startswith("_n_")]
 if not fails:
-    print("AUCUN ECART entre les deux transcriptions.")
+    print("NO DIVERGENCE between the two transcriptions.")
 else:
     for k in fails:
-        print("ECART sur %-12s (%d fois)" % (k, bad["_n_" + k]))
-        print("   reference python :", bad[k][0])
-        print("   implementation C :", bad[k][1])
+        print("DIVERGENCE on %-12s (%d times)" % (k, bad["_n_" + k]))
+        print("   python reference :", bad[k][0])
+        print("   C implementation :", bad[k][1])
     sys.exit(1)

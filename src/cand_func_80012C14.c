@@ -1,27 +1,27 @@
-/* cand_func_80012C14.c -- écrite à la main.
+/* cand_func_80012C14.c -- written by hand.
  *
- * Le constructeur du tableau de placements des sections de MAP.RRM. C'est la
- * fonction qui a livré la grille 32x32 d'IDX.HED ; on en connaît chaque champ,
- * ce qui est la condition où une conversion manuelle a une chance.
+ * The builder of the section placement table for MAP.RRM. This is the function
+ * that yielded the 32x32 grid of IDX.HED; every one of its fields is known,
+ * which is the condition under which a manual conversion has a chance.
  *
- * Trois points de forme, chacun lu dans les instructions plutôt que deviné :
+ * Three points of form, each one read out of the instructions rather than
+ * guessed:
  *
- * 1. Les arrondis sont écrits en DIVISIONS, pas en décalages. Le retail fait
- *    « addiu +0x400 ; bgez ; addiu +0xBFF ; sra 11 » -- c'est la correction de
- *    biais que GCC insère lui-même pour une division signée par 0x800. L'écrire
- *    en >> 11 produirait un sra nu et raterait de trois instructions par site.
- *    Idem pour /256 sur la direction de caméra.
+ * 1. The roundings are written as DIVISIONS, not as shifts. The retail does
+ *    "addiu +0x400 ; bgez ; addiu +0xBFF ; sra 11" -- that is the bias
+ *    correction GCC inserts on its own for a signed division by 0x800. Writing
+ *    it as >> 11 would produce a bare sra and miss by three instructions per
+ *    site. Likewise for /256 on the camera direction.
  *
- * 2. Les fractions de position de caméra sont lues en 16 bits non signés
- *    (lhu) sur les mots 32 bits D_801D9068/6C/70. La carte fait 32 * 2048 =
- *    65536 unités, exactement la plage d'un u16 : la partie basse EST la
- *    position dans le monde, et la soustraire de (cellule << 11) donne le
- *    décalage de la cellule par rapport à la caméra.
+ * 2. The camera position fractions are read as unsigned 16-bit (lhu) out of
+ *    the 32-bit words D_801D9068/6C/70. The map is 32 * 2048 = 65536 units,
+ *    exactly the range of a u16: the low part IS the position in the world,
+ *    and subtracting it from (cell << 11) gives the offset of the cell
+ *    relative to the camera.
  *
- * 3. L'index est écrit dans le placement AVANT d'être testé, et le bit de la
- *    carte des cellules vues est posé dans le même souffle -- les deux
- *    précèdent le « si négatif, passe ». Écrire le test d'abord réordonnerait
- *    deux stores.
+ * 3. The index is written into the placement BEFORE being tested, and the bit
+ *    in the map of seen cells is set in the same breath -- both precede the
+ *    "if negative, skip". Writing the test first would reorder two stores.
  */
 #include "m2c_macros.h"
 
@@ -30,18 +30,18 @@ typedef struct {
     s32 y;
     s32 z;
     s32 index;
-} SectionPlacement;   /* 16 octets, confirmé par le pas de 0x10 des deux boucles */
+} SectionPlacement;   /* 16 bytes, confirmed by the 0x10 stride of both loops */
 
-extern SectionPlacement D_801D7810[];   /* 64 entrées */
-extern s32 D_801D82D8[];                /* bitmap 32 x 32 des cellules retenues */
-extern s32 D_801D8354;                  /* son dernier mot, adressé comme symbole propre */
-extern s16 *D_801D82D0;                 /* la table lue depuis IDX.HED */
-extern s8 D_8005944C[];                 /* ordre de parcours : 16 dir x 64 (dx,dz) */
-extern s32 D_801D9068;                  /* caméra X */
-extern s32 D_801D906C;                  /* caméra Y */
-extern s32 D_801D9070;                  /* caméra Z */
-extern s32 D_801D907C;                  /* cap caméra */
-extern s16 D_801E91F0[];                /* matrice de rotation courante */
+extern SectionPlacement D_801D7810[];   /* 64 entries */
+extern s32 D_801D82D8[];                /* 32 x 32 bitmap of the retained cells */
+extern s32 D_801D8354;                  /* its last word, addressed as a symbol of its own */
+extern s16 *D_801D82D0;                 /* the table read from IDX.HED */
+extern s8 D_8005944C[];                 /* traversal order: 16 dir x 64 (dx,dz) */
+extern s32 D_801D9068;                  /* camera X */
+extern s32 D_801D906C;                  /* camera Y */
+extern s32 D_801D9070;                  /* camera Z */
+extern s32 D_801D907C;                  /* camera heading */
+extern s16 D_801E91F0[];                /* current rotation matrix */
 
 s32 func_80015AAC(s32 x, s32 z);
 s32 func_80015BC4(s32 x, s32 z, s32 zone);
@@ -60,10 +60,10 @@ void func_80012C14(void) {
     s32 idx;
     s32 *q;
 
-    /* Le retail charge D_801D8354 -- le dernier mot du bitmap -- comme symbole
-     * à part entière et descend un pointeur de quatre en quatre. Écrire
-     * D_801D82D8[i] donne la même adresse mais une relocation sur la base plus
-     * un déplacement de 124, ce que le retail n'a pas. */
+    /* The retail loads D_801D8354 -- the last word of the bitmap -- as a
+     * symbol in its own right and walks a pointer down four bytes at a time.
+     * Writing D_801D82D8[i] gives the same address but a relocation on the
+     * base plus a displacement of 124, which the retail does not have. */
     q = &D_801D8354;
     for (i = 0x1F; i >= 0; i--) {
         *q = 0;
@@ -75,10 +75,10 @@ void func_80012C14(void) {
     cz = (D_801D9070 + 0x400) / 0x800;
     zone = func_80015AAC(cx, cz);
 
-    /* Indexé par [i] plutôt que par un pointeur qui avance : le retail fait
-     * marcher deux registres sur le tableau, un sur l'entrée et un sur son
-     * champ index, ce que la réduction de force de GCC produit à partir d'un
-     * indexage et pas à partir d'un seul pointeur incrémenté. */
+    /* Indexed by [i] rather than by an advancing pointer: the retail walks two
+     * registers over the table, one on the entry and one on its index field,
+     * which is what GCC's strength reduction produces from an indexing and not
+     * from a single incremented pointer. */
     for (i = 0; i < 0x40; i++) {
         x = cx + D_8005944C[dir * 256 + i * 2];
         z = cz + D_8005944C[dir * 256 + i * 2 + 1];

@@ -171,6 +171,10 @@ static u32 manette_lire(void)
     const int MORT = 12000;      /* zone morte : un stick au repos n'est jamais
                                     exactement au centre */
     if (!manette) return m;
+    /* Demander la mise a jour plutot que compter sur la boucle d'evenements :
+       elle la fait deja, mais elle n'est pas seule a nous appeler, et un etat
+       vieux d'une image est un defaut qu'on ne verrait pas. */
+    SDL_GameControllerUpdate();
     if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_UP))    m &= ~0x1000u;
     if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) m &= ~0x2000u;
     if (SDL_GameControllerGetButton(manette, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  m &= ~0x4000u;
@@ -256,6 +260,12 @@ static void touches(void)
     u32 m = 0xFFFF;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) ferme = 1;
+        /* Le branchement d'une manette se traite ici et nulle part ailleurs :
+           cette boucle vide la file entiere, et le second passage qui cherchait
+           ces evenements plus bas ne trouvait donc jamais rien. Une manette
+           branchee en cours de partie n'etait vue que par hasard. */
+        if (e.type == SDL_CONTROLLERDEVICEADDED) { manette_ouvrir(e.cdevice.which); continue; }
+        if (e.type == SDL_CONTROLLERDEVICEREMOVED) { manette_fermer(); continue; }
         if (e.type != SDL_KEYDOWN) continue;
         switch (e.key.keysym.sym) {
         case SDLK_ESCAPE: ferme = 1; break;
@@ -267,18 +277,6 @@ static void touches(void)
         case SDLK_LEFT:   if (mods_ouvert()) mods_changer(-1); break;
         case SDLK_RIGHT:  if (mods_ouvert()) mods_changer(+1); break;
         default: break;
-        }
-    }
-    /* Les evenements de branchement sont traites a part : ils n'ont pas de
-       touche associee, et la boucle ci-dessus ne regarde que le clavier. */
-    {
-        SDL_Event f;
-        SDL_PumpEvents();
-        while (SDL_PeepEvents(&f, 1, SDL_GETEVENT,
-                              SDL_CONTROLLERDEVICEADDED,
-                              SDL_CONTROLLERDEVICEREMOVED) > 0) {
-            if (f.type == SDL_CONTROLLERDEVICEADDED) manette_ouvrir(f.cdevice.which);
-            else manette_fermer();
         }
     }
     /* Le menu se pilote aussi a la manette : la croix directionnelle et le

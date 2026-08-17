@@ -136,6 +136,18 @@ u32 g_pad_boutons = 0xFFFF;   /* actifs a zero : rien d'enfonce */
    On l'annonce des qu'une vraie manette est branchee. */
 int mod_negcon = 1;
 
+/* Ce qu'on a effectivement remis au jeu, garde pour l'afficher.
+ *
+ * Une manette qui ne fait rien pose deux questions a la fois : SDL la lit-il,
+ * et le jeu ecoute-t-il ? Tant qu'on n'a que « rien ne bouge », les deux
+ * restent ouvertes. Un mot de seize bits a l'ecran les separe : s'il change
+ * quand on appuie, SDL lit et c'est le jeu qui ignore ; s'il ne change pas,
+ * inutile de chercher du cote du jeu. MANETTE_VUE=1 l'affiche. */
+int mod_pad_vu;
+u32 g_pad_mot = 0xFFFF;
+unsigned char g_pad_an[4] = {0x80, 0, 0, 0};
+int g_pad_type = 0x41;
+
 /* Le scenario. Une liste « instant:touches », l'instant compte en battements
    de retour de balayage. Ecrit plutot qu'interactif, pour que deux executions
    donnent la meme image. */
@@ -163,6 +175,9 @@ void pad_ecrire(unsigned long tick)
         int video_negcon(unsigned char *);
         unsigned char an[4];
         int neg = g_video && mod_negcon && video_negcon(an);
+        g_pad_mot = m;
+        g_pad_type = neg ? 0x23 : 0x41;
+        if (neg) __builtin_memcpy(g_pad_an, an, 4);
         for (i = 0; i < 2; i++) {
             u32 p = g_pad_buf[i] & 0x1FFFFF;
             if (!p) continue;
@@ -758,6 +773,7 @@ int main(int argc, char **argv)
         /* Sans fenetre, on capture d'office : c'est le seul moyen de voir. Avec
            une fenetre, seulement si on l'a demande par IMAGES. */
         { extern int g_capture; g_capture = (!g_video) || getenv("IMAGES") != 0; }
+        if (getenv("MANETTE_VUE")) mod_pad_vu = 1;
         {   /* Le son suit la fenetre : sans elle, personne n'ecoute. */
             extern int cd_audio_dispo_pub(int);
             (void)cd_audio_dispo_pub(g_video && !getenv("SANS_SON"));

@@ -86,6 +86,10 @@ extern double mod_hz;
 extern unsigned g_latence_octets;
 extern int g_cout_dessin;
 extern int mod_muet_musique, mod_muet_spu, mod_afficher_etat, mod_negcon;
+extern int mod_pad_vu;
+extern u32 g_pad_mot;
+extern unsigned char g_pad_an[4];
+extern int g_pad_type;
 
 static int hz_i = 60;
 static int lat_i = 40;
@@ -111,6 +115,7 @@ static struct reglage REGLAGES[] = {
     { "IMAGES PAR SECONDE", &hz_i,               0, 240, 10, t_hz,  a_hz   },
     { "AVANCE DU SON",      &lat_i,              5, 200,  5, t_ms,  a_lat  },
     { "MANETTE",            &mod_negcon,         0,   1,  1, t_pad, a_rien },
+    { "VOIR LA MANETTE",    &mod_pad_vu,         0,   1,  1, t_oui, a_rien },
     { "COUT DU DESSIN",     &g_cout_dessin,      0,   1,  1, t_oui, a_rien },
     { "MUSIQUE",            &mod_muet_musique,   0,   1,  1, t_non, a_rien },
     { "BRUITAGES",          &mod_muet_spu,       0,   1,  1, t_non, a_rien },
@@ -185,6 +190,15 @@ void mods_dessiner(u32 *px, int pas, int l, int h)
         __builtin_memcpy(&e, RAM + 0x1D34F8, 4);
         sprintf(ligne, "ETAT %u", e);
         texte(px, pas, l, h, 4, 4, ligne, 0xFF00FF00u);
+    }
+    if (mod_pad_vu) {
+        /* Le mot est actif a zero, comme sur la console : FFFF veut dire que
+           rien n'est enfonce. C'est le nombre a regarder -- s'il ne bouge pas
+           quand on appuie, le probleme est en amont du jeu. */
+        sprintf(ligne, "PAD %04X TYPE %02X  T%02X I%02X II%02X L%02X",
+                (unsigned)(g_pad_mot & 0xFFFFu), (unsigned)g_pad_type,
+                g_pad_an[0], g_pad_an[1], g_pad_an[2], g_pad_an[3]);
+        texte(px, pas, l, h, 4, h - 12, ligne, 0xFF00FFFFu);
     }
     if (!ouvert) return;
 

@@ -29,6 +29,11 @@ void video_fin(void) {}
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+int mods_ouvert(void);
+void mods_basculer(void);
+void mods_deplacer(int);
+void mods_changer(int);
+void mods_dessiner(u32 *, int, int, int);
 
 static SDL_Window *fenetre;
 static SDL_Renderer *rendu;
@@ -55,7 +60,8 @@ static u32 boutons = 0xFFFF;
  * repart de maintenant plutot que de courir apres : rattraper un retard sur
  * un jeu de course revient a le rendre saccade pour rien.
  */
-static double hz = 60.0;
+double mod_hz = 60.0;
+#define hz mod_hz
 static Uint64 prochaine, freq;
 
 static void cadencer(void)
@@ -112,8 +118,20 @@ static void touches(void)
     u32 m = 0xFFFF;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) ferme = 1;
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) ferme = 1;
+        if (e.type != SDL_KEYDOWN) continue;
+        switch (e.key.keysym.sym) {
+        case SDLK_ESCAPE: ferme = 1; break;
+        case SDLK_F1:     mods_basculer(); break;
+        /* Tant que le menu est ouvert, les fleches lui appartiennent : on ne
+           veut pas piloter et regler en meme temps. */
+        case SDLK_UP:     if (mods_ouvert()) mods_deplacer(-1); break;
+        case SDLK_DOWN:   if (mods_ouvert()) mods_deplacer(+1); break;
+        case SDLK_LEFT:   if (mods_ouvert()) mods_changer(-1); break;
+        case SDLK_RIGHT:  if (mods_ouvert()) mods_changer(+1); break;
+        default: break;
+        }
     }
+    if (mods_ouvert()) { boutons = 0xFFFF; return; }
     k = SDL_GetKeyboardState(NULL);
     /* La disposition suit ce qu'on a sous les doigts, pas la sérigraphie de la
        manette : les flèches dirigent, la barre d'espace accélère. */
@@ -161,6 +179,10 @@ void video_image(const u16 *vram, int x, int y, int l, int h)
                      |  ((b << 3) | (b >> 2));
         }
     }
+    /* Le menu se dessine dans l'image finale, apres la memoire video et non
+       dedans : le jeu ne peut pas l'effacer, et nous ne salissons pas ce qu'il
+       a produit. */
+    mods_dessiner((u32 *)pixels, pas, l, h);
     SDL_UnlockTexture(texture);
     SDL_RenderClear(rendu);
     SDL_RenderCopy(rendu, texture, NULL, NULL);

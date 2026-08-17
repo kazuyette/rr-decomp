@@ -138,6 +138,24 @@ cadence est bonne.
 Sans SDL2, rien ne change : images sur disque et scénario, et `build.py` le dit
 au lieu de le taire.
 
+## Le menu des réglages
+
+`F1` ouvre un menu par-dessus le jeu : cadence, avance du son, coût du dessin,
+musique, bruitages, affichage de l'état courant. Les flèches naviguent et
+règlent ; tant qu'il est ouvert, la manette rend « rien d'enfoncé » au jeu,
+parce qu'on ne veut pas piloter et régler en même temps.
+
+Pourquoi un menu à nous plutôt qu'une entrée dans celui du jeu : ajouter une
+ligne au menu OPTION de Ridge Racer demanderait d'abord de décompiler l'état
+18, qui est encore de l'assembleur traduit mécaniquement — on modifierait du
+code régénéré à chaque construction, et la modification ne survivrait pas. Ce
+menu-ci a de plus le droit de régler des choses que la console n'avait pas.
+
+Il se dessine dans l'image finale, **après** la mémoire vidéo et non dedans :
+le jeu ne peut donc pas l'effacer en redessinant, et nous ne salissons pas ce
+qu'il a produit. Les deux restent séparés, ce qui compte le jour où l'on
+compare une image à une référence.
+
 ## Le son
 
 La bande-son de Ridge Racer n'est pas synthétisée : ce sont douze pistes audio

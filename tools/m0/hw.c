@@ -125,6 +125,7 @@ u32 g_ot_node, g_ot_n;
 unsigned long g_instr_par_image = 376000;
 int g_cout_dessin = 1;
 int g_capture;
+int mod_muet_musique, mod_muet_spu, mod_afficher_etat;
 extern unsigned long long g_pixels, g_cycles, g_echeance;
 void psx_horloge(void);
 static unsigned long long pixels_vus;
@@ -358,6 +359,8 @@ static void cd_audio_alimenter(void)
         }
         if (!lu) memset(secteur, 0, sizeof secteur);
         spu_melanger(voix, 588);
+        if (mod_muet_spu) memset(voix, 0, sizeof voix);
+        if (mod_muet_musique) memset(secteur, 0, sizeof secteur);
         for (i = 0; i < 588 * 2; i++) {
             int somme = (int)cd[i] + (int)voix[i];
             if (somme > 32767) somme = 32767;

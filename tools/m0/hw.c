@@ -53,7 +53,20 @@ static void cd_fetch(u32 lba, u8 *out)
     static FILE *image;
     for (i = 0; i < 2048; i++) out[i] = 0;
     if (lba < CD_META_SECTORS) {
-        if (!image) image = fopen(CD_META, "rb");
+        /* Une image qui ne s'ouvre pas rendait des secteurs de zeros, et le jeu
+           annoncait « File not found » -- une plainte exacte sur un fait faux,
+           qui envoie chercher le defaut a l'autre bout de la chaine. On le dit
+           donc une fois, ici, ou l'on sait encore de quoi on parle. */
+        static int annonce;
+        if (!image) {
+            image = fopen(CD_META, "rb");
+            if (!image && !annonce) {
+                annonce = 1;
+                fprintf(stderr, "disque introuvable : %s\n"
+                                "  le jeu ne trouvera aucun de ses fichiers\n",
+                        CD_META);
+            }
+        }
         f = image;
         if (f) { fseek(f, (long)lba * 2048, SEEK_SET); fread(out, 1, 2048, f);
                  cd_sectors_served++; return; }
@@ -309,7 +322,14 @@ static void cd_audio_ouvrir(int piste)
 trouve:
     if (g_verbeux) { printf("  son: piste %d, a partir du secteur %u\n", cd_piste, depart); fflush(stdout); }
     cd_audio_f = fopen(t->fichier, "rb");
-    if (!cd_audio_f) return;
+    if (!cd_audio_f) {
+        static int annonce;
+        if (!annonce) {
+            annonce = 1;
+            fprintf(stderr, "piste audio introuvable : %s\n", t->fichier);
+        }
+        return;
+    }
     cd_audio_secteur = depart;
     cd_audio_reste = (t->longueur > depart) ? t->longueur - depart : 0;
     fseek(cd_audio_f, (long)depart * 2352, SEEK_SET);

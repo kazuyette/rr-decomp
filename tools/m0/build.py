@@ -182,11 +182,33 @@ def lire_cue(chemin):
     return pistes
 
 
-def ecrire_disque(iso, cue, sortie):
+def chemin_cible(p, windows):
+    """Le chemin tel que le programme construit le verra a l'execution.
+
+    On note les chemins en absolu : le programme se lance de n'importe ou, et
+    un chemin relatif ferait dependre l'ouverture du disque du dossier courant.
+    Mais un `.exe` construit depuis WSL sera lance par Windows, qui ne connait
+    pas `/mnt/e/...` -- il ouvrirait un fichier inexistant, et le jeu se
+    plaindrait de ne pas trouver ses donnees sans qu'on sache pourquoi. La
+    traduction est celle que fait WSL lui-meme : /mnt/e devient E:.
+    """
+    a = os.path.abspath(p)
+    if not windows:
+        return a
+    m = re.match(r"/mnt/([a-z])(/.*)?$", a)
+    if m:
+        return m.group(1).upper() + ":" + (m.group(2) or "/").replace("/", "\\")
+    # Hors des disques montes, on ne sait pas traduire : le chemin relatif est
+    # alors le seul qui ait une chance, a condition de lancer le programme
+    # depuis le meme dossier.
+    return os.path.relpath(a).replace("/", "\\")
+
+
+def ecrire_disque(iso, cue, sortie, windows=False):
     """La description du disque : l'image des donnees, et les pistes audio."""
     if iso:
         secteurs = (os.path.getsize(iso) + 2047) // 2048
-        chemin = os.path.abspath(iso)
+        chemin = chemin_cible(iso, windows)
     else:
         secteurs, chemin = 0, ""
     pistes = lire_cue(cue) if cue else []
@@ -206,7 +228,7 @@ def ecrire_disque(iso, cue, sortie):
         n = os.path.getsize(p["fichier"]) // 2352
         lignes.append('  {%u, %u, %u, "%s"},   /* piste %02d%s */'
                       % (p["debut"], n, p["saut"],
-                         p["fichier"].replace("\\", "\\\\"),
+                         chemin_cible(p["fichier"], windows).replace("\\", "\\\\"),
                          p["n"], "" if p["audio"] else "  donnees"))
     lignes.append("};")
     lignes.append("const int NCDTRACKS = %d;" % len(pistes))
@@ -264,7 +286,9 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     definies, bouchons = ecrire_jeu(a.exe, os.path.join(a.out, "game.c"))
     n = ecrire_table(definies, os.path.join(a.out, "table.c"))
-    secteurs, npistes, naudio = ecrire_disque(a.iso, a.cue, os.path.join(a.out, "cdfiles.c"))
+    secteurs, npistes, naudio = ecrire_disque(a.iso, a.cue,
+                                              os.path.join(a.out, "cdfiles.c"),
+                                              a.windows)
     open(os.path.join(a.out, "ram.c"), "w").write(
         "unsigned char RAM[0x200000];\nunsigned int g_sp;\n")
 

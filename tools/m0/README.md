@@ -132,6 +132,15 @@ python3 tools/m0/build.py PSX.EXE --iso data.iso --cue disque.cue \
         --windows --sdl SDL2-2.30.9/x86_64-w64-mingw32 --compile
 ```
 
+Les chemins du disque et des pistes sont notés en absolu dans le fichier
+généré, pour que le programme se lance de n'importe où. Avec `--windows` ils
+sont traduits comme WSL les traduit — `/mnt/e/...` devient `E:\...` — sans quoi
+le `.exe` ouvrirait un chemin que Windows ne connaît pas, rendrait des secteurs
+de zéros, et le jeu se plaindrait de « File not found » : une plainte exacte
+sur un fait faux, qui envoie chercher le défaut à l'autre bout de la chaîne.
+Le programme le dit maintenant lui-même, une fois, là où il le sait encore :
+`disque introuvable : <chemin>`.
+
 `SDL2.dll` est recopiée à côté du programme : Windows ne cherche pas les
 bibliothèques dans un chemin système, et sans elle le programme ne démarre pas
 du tout. Ensuite, depuis PowerShell et **à la racine du dépôt**, parce que

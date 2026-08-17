@@ -214,8 +214,24 @@ def ecrire_disque(iso, cue, sortie):
     return secteurs, len(pistes), len(audio)
 
 
-def sdl_drapeaux():
-    """Les options de compilation de SDL2, ou None s'il n'est pas installe."""
+def sdl_drapeaux(prefixe=None):
+    """Les options de compilation de SDL2, ou None s'il n'est pas installe.
+
+    Avec un prefixe, on ne demande rien a personne : c'est l'arborescence que
+    SDL livre pour MinGW (`SDL2-x.y.z/x86_64-w64-mingw32`), qui n'a ni
+    pkg-config ni sdl2-config -- elle n'est pas installee, seulement deposee.
+    """
+    if prefixe is False:
+        # Cible Windows sans --sdl : surtout ne pas interroger le pkg-config de
+        # la machine hote, qui repondrait avec les chemins de son propre SDL --
+        # des en-tetes que le compilateur croise ne peut pas lire.
+        return None
+    if prefixe:
+        inc = os.path.join(prefixe, "include")
+        lib = os.path.join(prefixe, "lib")
+        if not os.path.isdir(inc):
+            sys.exit("SDL2 : %s ne contient pas include/" % prefixe)
+        return ["-I" + inc, "-L" + lib, "-lSDL2"]
     for outil in (["pkg-config", "--cflags", "--libs", "sdl2"],
                   ["sdl2-config", "--cflags", "--libs"]):
         try:
@@ -236,8 +252,14 @@ def main():
     p.add_argument("--out", default=os.path.join(RACINE, "build", "m0"),
                    help="dossier de sortie (defaut : build/m0)")
     p.add_argument("--compile", action="store_true", help="compiler ensuite")
-    p.add_argument("--cc", default="gcc")
+    p.add_argument("--cc", default=None)
+    p.add_argument("--windows", action="store_true",
+                   help="produire un .exe Windows (compilateur croise MinGW)")
+    p.add_argument("--sdl", help="racine de SDL2 pour MinGW "
+                                 "(SDL2-x.y.z/x86_64-w64-mingw32)")
     a = p.parse_args()
+    if not a.cc:
+        a.cc = "x86_64-w64-mingw32-gcc" if a.windows else "gcc"
 
     os.makedirs(a.out, exist_ok=True)
     definies, bouchons = ecrire_jeu(a.exe, os.path.join(a.out, "game.c"))
@@ -265,25 +287,42 @@ def main():
     sources = [os.path.join(ICI, f)
                for f in ("main.c", "hw.c", "gpu.c", "gte.c", "video.c", "audio.c", "spu.c", "mods.c")]
     sources += [os.path.join(a.out, f) for f in ("game.c", "table.c", "cdfiles.c", "ram.c")]
-    cmd = [a.cc, "-O1", "-w", "-fcommon", "-I", ICI,
-           "-o", os.path.join(a.out, "m0")] + sources
+    binaire = os.path.join(a.out, "m0.exe" if a.windows else "m0")
+    cmd = [a.cc, "-O1", "-w", "-fcommon", "-I", ICI, "-o", binaire]
+    if a.windows:
+        # Le code traduit fait un seul objet de neuf cent quarante-neuf
+        # fonctions ; le format d'objet de Windows compte ses sections sur
+        # seize bits et deborde bien avant. -mbig-obj leve la limite.
+        cmd += ["-Wa,-mbig-obj"]
+    cmd += sources
 
     # SDL2 est facultatif : sans lui le banc ecrit des images sur disque et
     # lit un scenario, comme avant. Avec lui, une fenetre et un clavier.
-    sdl = sdl_drapeaux()
+    sdl = sdl_drapeaux(a.sdl or (False if a.windows else None))
     if sdl:
         cmd += ["-DAVEC_SDL"] + sdl
         print("SDL2 trouve : le jeu s'ouvrira dans une fenetre")
     else:
         print("SDL2 absent : pas de fenetre (images sur disque et scenario)")
-        print("   sous Debian ou Ubuntu :  sudo apt install libsdl2-dev")
+        if a.windows:
+            print("   --sdl SDL2-x.y.z/x86_64-w64-mingw32  (SDL2-devel-*-mingw.tar.gz)")
+        else:
+            print("   sous Debian ou Ubuntu :  sudo apt install libsdl2-dev")
     if a.compile:
         print("compilation...")
         r = subprocess.run(cmd)
         if r.returncode:
             sys.exit(r.returncode)
-        print("=> %s" % os.path.join(a.out, "m0"))
-        print("   %s 90 %s" % (os.path.join(a.out, "m0"), a.exe))
+        # Windows ne cherche pas les bibliotheques dans un chemin systeme : la
+        # DLL doit etre a cote du programme, sinon il ne demarre pas du tout.
+        if a.windows and a.sdl:
+            import shutil
+            dll = os.path.join(a.sdl, "bin", "SDL2.dll")
+            if os.path.exists(dll):
+                shutil.copy(dll, a.out)
+                print("   SDL2.dll copiee a cote du programme")
+        print("=> %s" % binaire)
+        print("   %s 90 %s" % (binaire, a.exe))
     else:
         print("\n" + " ".join(cmd))
 

@@ -18,6 +18,11 @@
 
 #ifndef AVEC_SDL
 
+/* Le menu des reglages lit cette valeur meme sans fenetre : sans elle, la
+   construction sans SDL ne se lie pas. Elle ne sert alors a rien, ce qui est
+   la bonne facon pour une variable de cadence de ne pas exister. */
+double mod_hz = 60.0;
+
 int video_init(void) { return 0; }
 void video_image(const u16 *v, int x, int y, int w, int h) { (void)v; (void)x; (void)y; (void)w; (void)h; }
 u32 video_manette(void) { return 0xFFFF; }
@@ -27,6 +32,11 @@ void video_fin(void) {}
 
 #else
 
+/* Sous Windows, SDL detourne main() par une macro et reclame sa propre
+   bibliotheque de demarrage. On lui dit plutot que le main est deja ecrit et
+   on le declare pret nous-memes : une dependance de moins, et le meme code
+   des deux cotes. */
+#define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,6 +96,7 @@ static void cadencer(void)
 
 int video_init(void)
 {
+    SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "SDL : %s\n", SDL_GetError());
         return 0;

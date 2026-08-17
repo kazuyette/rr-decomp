@@ -115,6 +115,42 @@ ce qui évite d'écrire une table par modèle. La première venue est prise, et
 elle peut arriver ou repartir en cours de partie — une manette qu'on rebranche
 remarche sans relancer le jeu.
 
+### Une version Windows
+
+Sur WSL, la manette ne traverse pas : le noyau de WSL n'a pas de pilote pour
+elle, et `usbipd` doit d'abord l'arracher à Windows qui la tient. Le plus court
+est alors de ne pas traverser du tout — de produire un `.exe` qui tourne du côté
+où la manette est déjà branchée. Le code ne change pas ; seul le compilateur
+change.
+
+```sh
+sudo apt install gcc-mingw-w64-x86-64
+curl -LO https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-mingw.tar.gz
+tar xzf SDL2-devel-2.30.9-mingw.tar.gz
+
+python3 tools/m0/build.py PSX.EXE --iso data.iso --cue disque.cue \
+        --windows --sdl SDL2-2.30.9/x86_64-w64-mingw32 --compile
+```
+
+`SDL2.dll` est recopiée à côté du programme : Windows ne cherche pas les
+bibliothèques dans un chemin système, et sans elle le programme ne démarre pas
+du tout. Ensuite, depuis PowerShell et **à la racine du dépôt**, parce que
+l'image du disque et les pistes audio sont désignées par des chemins relatifs :
+
+```powershell
+.\build\win\m0.exe 100000 PSX.EXE
+```
+
+Trois différences, toutes dans `main.c`, `video.c` et `audio.c` :
+
+- l'alarme qui limite la durée est un signal sur Unix, un fil qui dort sur
+  Windows — ce qu'est une alarme vue de l'intérieur du système ;
+- SDL détourne `main()` par une macro sous Windows et réclame sa propre
+  bibliothèque de démarrage ; `SDL_MAIN_HANDLED` et `SDL_SetMainReady()`
+  disent que le `main` est déjà écrit, et le même code sert des deux côtés ;
+- le code traduit fait un objet de 949 fonctions, et le format d'objet de
+  Windows compte ses sections sur seize bits ; `-Wa,-mbig-obj` lève la limite.
+
 ### Le neGcon, ou l'analogique qui était déjà là
 
 Ridge Racer a été conçu avec le neGcon de Namco, une manette dont le boîtier se

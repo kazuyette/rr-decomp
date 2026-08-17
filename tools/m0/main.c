@@ -9,7 +9,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 #include "rt.h"
 #include "gte.h"
 
@@ -676,6 +680,15 @@ void report(int sig)
     _exit(0);
 }
 
+#ifdef _WIN32
+static DWORD WINAPI minuteur(LPVOID duree)
+{
+    Sleep((DWORD)(size_t)duree * 1000u);
+    report(1);
+    return 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     /* L'executable PlayStation porte son propre en-tete : le point d'entree,
@@ -751,8 +764,17 @@ int main(int argc, char **argv)
         }
     }
     { void scenario_lire(const char *); const char *s = getenv("MANETTE"); if (s) scenario_lire(s); }
+    /* La limite de duree. Sur Unix c'est une alarme, c'est-a-dire un signal ;
+       Windows n'en a pas d'equivalent, mais un fil qui dort et rend la main
+       fait exactement le meme travail -- et c'est du reste ce qu'est une
+       alarme, vue de l'interieur du systeme. */
+#ifdef _WIN32
+    if (seconds > 0)
+        CreateThread(NULL, 0, minuteur, (LPVOID)(size_t)seconds, 0, NULL);
+#else
     signal(SIGALRM, report);
     alarm(seconds);
+#endif
     printf("%s : entree en %08X, %u octets, %d fonctions dans la table\n",
            exe, ENTRY, taille, PSX_NFUNCS);
     fflush(stdout);

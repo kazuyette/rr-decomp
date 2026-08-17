@@ -24,6 +24,11 @@ void audio_vider(void) {}
 
 #else
 
+/* Sous Windows, SDL detourne main() par une macro et reclame sa propre
+   bibliotheque de demarrage. On lui dit plutot que le main est deja ecrit et
+   on le declare pret nous-memes : une dependance de moins, et le meme code
+   des deux cotes. */
+#define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <stdio.h>
 
@@ -32,6 +37,7 @@ static SDL_AudioDeviceID sortie;
 int audio_init(void)
 {
     SDL_AudioSpec veut, obtenu;
+    SDL_SetMainReady();
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
         fprintf(stderr, "SDL audio : %s\n", SDL_GetError());
         return 0;

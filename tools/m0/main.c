@@ -178,6 +178,19 @@ void pad_ecrire(unsigned long tick)
         g_pad_mot = m;
         g_pad_type = neg ? 0x23 : 0x41;
         if (neg) __builtin_memcpy(g_pad_an, an, 4);
+        /* Le meme etat au journal, et seulement quand il change : un texte de
+           cinq pixels de haut dans une image de 320 par 240 se lit mal, et une
+           ligne par image en noierait le sens. */
+        if (mod_pad_vu) {
+            static u32 vu_mot = 0; static unsigned char vu_an[4];
+            if (vu_mot != m || __builtin_memcmp(vu_an, g_pad_an, 4)) {
+                vu_mot = m; __builtin_memcpy(vu_an, g_pad_an, 4);
+                printf("manette : %04X  type %02X  torsion %02X  I %02X  II %02X  L %02X\n",
+                       (unsigned)(m & 0xFFFF), (unsigned)g_pad_type,
+                       g_pad_an[0], g_pad_an[1], g_pad_an[2], g_pad_an[3]);
+                fflush(stdout);
+            }
+        }
         for (i = 0; i < 2; i++) {
             u32 p = g_pad_buf[i] & 0x1FFFFF;
             if (!p) continue;
@@ -774,6 +787,10 @@ int main(int argc, char **argv)
            une fenetre, seulement si on l'a demande par IMAGES. */
         { extern int g_capture; g_capture = (!g_video) || getenv("IMAGES") != 0; }
         if (getenv("MANETTE_VUE")) mod_pad_vu = 1;
+        /* De quoi forcer le type sans passer par le menu : si le clavier ne
+           repond pas non plus, le menu est hors d'atteinte, et c'est justement
+           dans ce cas qu'on a besoin de comparer les deux. */
+        if (getenv("MANETTE_NUMERIQUE")) mod_negcon = 0;
         {   /* Le son suit la fenetre : sans elle, personne n'ecoute. */
             extern int cd_audio_dispo_pub(int);
             (void)cd_audio_dispo_pub(g_video && !getenv("SANS_SON"));

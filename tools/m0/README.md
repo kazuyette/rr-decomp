@@ -226,6 +226,28 @@ L'unité est l'image et non le battement vidéo, parce qu'elle ne dépend pas de
 la base de temps : régler l'horloge décale tous les battements, mais une image
 reste une image. Un scénario écrit une fois continue de marcher.
 
+## Ce qu'on a réellement éprouvé
+
+Le jeu dispatche sur une table de quarante états (`0x80070EA4`, index en
+`0x801D34F8`). L'état des lieux les liste tous et dit combien d'images chacun a
+tournées — ou qu'il n'a jamais été atteint. C'est la seule façon honnête de
+répondre à « est-ce que ça marche » : **12 états sur 40** avec un scénario qui
+va jusqu'à la course, et vingt-huit qu'on n'a jamais vus tourner.
+
+Un défaut ne se manifeste que dans un état qu'on exécute. Les vingt-huit
+autres ne sont pas « sans doute bons » — ils sont **inconnus**.
+
+Pour explorer, `planche.py` assemble les images en planche-contact :
+
+```sh
+IMAGES=/tmp/images SANS_FENETRE=1 ./build/m0/m0 60 PSX.EXE
+python3 tools/m0/planche.py /tmp/images/*.ppm -o planche.png -c 6
+```
+
+Trente images d'un coup font apparaître ce qu'une image isolée ne dit pas : un
+écran qui ne change plus, une couleur qui dérive, un retour en arrière qu'on
+n'attendait pas.
+
 ## Où en est-on
 
 | jalon | état |

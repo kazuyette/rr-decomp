@@ -548,6 +548,24 @@ void report(int sig)
                              g_pixels / ot_lists);
         printf("\n");
     }
+    {   /* La couverture : quels etats du jeu ont tourne, et combien
+           d'images chacun. Un etat jamais vu n'a jamais ete eprouve. */
+        extern unsigned long etats_vus[64], etats_hors;
+        int e, n = 0;
+        printf("etats du jeu (table de 40 en 0x80070EA4) :\n");
+        for (e = 0; e < 40; e++) {
+            u32 h;
+            __builtin_memcpy(&h, RAM + 0x70EA4 + 4 * e, 4);
+            if (etats_vus[e]) {
+                printf("   %2d  %08X  %8lu images\n", e, h, etats_vus[e]);
+                n++;
+            } else {
+                printf("   %2d  %08X         -  jamais atteint\n", e, h);
+            }
+        }
+        if (etats_hors) printf("   (%lu images hors table)\n", etats_hors);
+        printf("   %d etats sur 40 eprouves\n", n);
+    }
     printf("commandes GP0 les plus frequentes :\n");
     {   /* trier par frequence : montrer les douze plus courantes, pas les
            douze premieres -- l'ordre numerique ne dit rien. */

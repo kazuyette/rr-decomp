@@ -128,6 +128,7 @@ int g_capture;
 extern unsigned long long g_pixels, g_cycles, g_echeance;
 void psx_horloge(void);
 static unsigned long long pixels_vus;
+unsigned long etats_vus[64], etats_hors;
 
 static void dma2_run(void)
 {
@@ -179,6 +180,19 @@ static void dma2_run(void)
        dessinees ne depend pas de la base de temps, alors que les battements
        video changent des qu'on la regle. */
     { void pad_ecrire(unsigned long); pad_ecrire(ot_lists); }
+    /* Quelle partie du jeu tourne.
+     *
+     * Le jeu dispatche sur une table de quarante entrees en 0x80070EA4, dont
+     * l'index vit en 0x801D34F8. Le relever a chaque image transforme « on a
+     * l'impression que ca marche » en une mesure : voici les etats qu'on a
+     * traverses, voici ceux qu'on n'a jamais atteints. C'est la seule facon
+     * honnete de dire ce qu'on a eprouve. */
+    {
+        u32 e;
+        __builtin_memcpy(&e, RAM + 0x1D34F8, 4);
+        if (e < 64) etats_vus[e]++;
+        else etats_hors++;
+    }
     /* Une liste deroulee = une image dessinee. On en garde quelques-unes,
        espacees, plutot que toutes : ce qu'on veut voir est la progression. */
     {

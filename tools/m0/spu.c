@@ -44,6 +44,7 @@ struct voix {
     /* enveloppe */
     int phase_env;         /* 0 arret, 1 montee, 2 chute, 3 maintien, 4 extinction */
     int niveau;            /* 0 a 0x7FFF */
+    int env_attente;       /* cycles restants avant le pas suivant */
 };
 
 static struct voix v[24];
@@ -52,7 +53,8 @@ static u32 transfert_addr;
 static u16 vol_principal_g, vol_principal_d;
 unsigned long spu_voix_jouees;
 int spu_crete;          /* la plus forte amplitude produite */
-unsigned long spu_voix_eteint;   /* voix allumees alors que le SPU se dit eteint */
+unsigned long spu_voix_eteint;
+unsigned long spu_balayages, spu_vol_simples;
 
 /* --- decompression ------------------------------------------------------- */
 static const int filtre_pos[5] = { 0, 60, 115, 98, 122 };
@@ -90,7 +92,7 @@ static void bloc_suivant(struct voix *w)
     if (drapeaux & 1) {
         w->fin = 1;
         w->addr = (u32)w->boucle << 3;
-        if (!(drapeaux & 2)) { w->phase_env = 4; }
+        if (!(drapeaux & 2)) { w->phase_env = 4; w->env_attente = 1; }
     } else {
         w->addr += 16;
     }
@@ -98,38 +100,63 @@ static void bloc_suivant(struct voix *w)
 
 /* --- enveloppe ------------------------------------------------------------
  *
- * La forme est celle du materiel ; les pentes sont approchees. Les champs sont
- * lus tels que le SPU les range : montee et chute dans le premier mot,
- * maintien et extinction dans le second.
+ * Les quatre phases du materiel, avec leurs vraies pentes.
+ *
+ * Le principe est le meme partout : un decalage donne la periode, un pas donne
+ * l'amplitude, et le couple se lit dans le registre selon la phase. Au-dela de
+ * onze, le decalage espace les mises a jour ; en deca, il amplifie le pas. En
+ * mode exponentiel, une montee ralentit d'un facteur quatre passe les trois
+ * quarts, et une descente se proportionne au niveau atteint -- c'est ce qui
+ * donne aux extinctions leur trainee.
+ *
+ * La chute a un pas fixe de -8 et est toujours exponentielle ; les autres
+ * phases lisent leur mode dans le registre.
  */
 static void enveloppe(struct voix *w)
 {
-    int montee = (w->adsr >> 8) & 0x7F;
-    int chute = (w->adsr >> 4) & 0x0F;
-    int maintien = w->adsr & 0x0F;
-    int extinction = (w->adsr >> 16) & 0x1F;
-    int cible;
+    int decalage, pas, expo, decroit, cible = -1;
+    if (w->phase_env == 0) { w->niveau = 0; return; }
+    if (--w->env_attente > 0) return;
     switch (w->phase_env) {
-    case 1:
-        w->niveau += 0x7FFF / (1 + montee * 8);
-        if (w->niveau >= 0x7FFF) { w->niveau = 0x7FFF; w->phase_env = 2; }
+    case 1:                                   /* montee */
+        decalage = (w->adsr >> 10) & 0x1F;
+        pas = 7 - ((w->adsr >> 8) & 3);
+        expo = (w->adsr >> 15) & 1;
+        decroit = 0;
         break;
-    case 2:
-        cible = ((maintien + 1) * 0x800);
+    case 2:                                   /* chute */
+        decalage = (w->adsr >> 4) & 0x0F;
+        pas = -8; expo = 1; decroit = 1;
+        cible = (int)((w->adsr & 0x0F) + 1) * 0x800;
         if (cible > 0x7FFF) cible = 0x7FFF;
-        w->niveau -= (0x7FFF / (1 + chute * 32)) + 1;
-        if (w->niveau <= cible) { w->niveau = cible; w->phase_env = 3; }
         break;
-    case 3:
+    case 3:                                   /* maintien */
+        decalage = (w->adsr >> 24) & 0x1F;
+        decroit = (w->adsr >> 30) & 1;
+        pas = decroit ? (-8 + (int)((w->adsr >> 22) & 3))
+                      : (7 - (int)((w->adsr >> 22) & 3));
+        expo = (w->adsr >> 31) & 1;
         break;
-    case 4:
-        w->niveau -= (0x7FFF / (1 + extinction * 16)) + 1;
-        if (w->niveau <= 0) { w->niveau = 0; w->phase_env = 0; w->actif = 0; }
-        break;
-    default:
-        w->niveau = 0;
+    default:                                  /* extinction */
+        decalage = (w->adsr >> 16) & 0x1F;
+        pas = -8; expo = (w->adsr >> 21) & 1; decroit = 1;
         break;
     }
+    {
+        int cycles = 1 << (decalage > 11 ? decalage - 11 : 0);
+        int amplitude = pas << (decalage < 11 ? 11 - decalage : 0);
+        if (expo) {
+            if (!decroit && w->niveau > 0x6000) cycles *= 4;
+            if (decroit) amplitude = (int)((long)amplitude * w->niveau / 0x8000);
+        }
+        w->niveau += amplitude;
+        if (w->niveau > 0x7FFF) w->niveau = 0x7FFF;
+        if (w->niveau < 0) w->niveau = 0;
+        w->env_attente = cycles;
+    }
+    if (w->phase_env == 1 && w->niveau >= 0x7FFF) w->phase_env = 2;
+    else if (w->phase_env == 2 && cible >= 0 && w->niveau <= cible) w->phase_env = 3;
+    else if (w->phase_env == 4 && w->niveau <= 0) { w->phase_env = 0; w->actif = 0; }
 }
 
 /* Les volumes du materiel sont signes sur quinze bits quand le bit de poids
@@ -203,7 +230,7 @@ static void allumer(u32 masque)
             w->boucle = w->depart;
             w->phase = 0; w->n = 0; w->p1 = w->p2 = 0;
             w->actif = 1; w->fin = 0;
-            w->phase_env = 1; w->niveau = 0;
+            w->phase_env = 1; w->niveau = 0; w->env_attente = 1;
             spu_voix_jouees++;
             if (!(ctrl & 0x8000)) spu_voix_eteint++;
         }
@@ -213,7 +240,7 @@ static void eteindre(u32 masque)
 {
     int k;
     for (k = 0; k < 24; k++)
-        if (masque & (1u << k)) v[k].phase_env = 4;
+        if (masque & (1u << k)) { v[k].phase_env = 4; v[k].env_attente = 1; }
 }
 
 void spu_write16(u32 adresse, u16 valeur)
@@ -224,7 +251,7 @@ void spu_write16(u32 adresse, u16 valeur)
     if (p < 0x180) {                           /* les vingt-quatre voix */
         struct voix *w = &v[p >> 4];
         switch (p & 0x0F) {
-        case 0x0: w->vol_g = valeur; break;
+        case 0x0: w->vol_g = valeur; if (valeur & 0x8000) spu_balayages++; else spu_vol_simples++; break;
         case 0x2: w->vol_d = valeur; break;
         case 0x4: w->pas = valeur; break;
         case 0x6: w->depart = valeur; break;

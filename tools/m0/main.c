@@ -529,6 +529,8 @@ void report(int sig)
             extern unsigned long spu_voix_eteint;
             printf("SPU                : %lu voix, %lu transferts, crete %d\n",
                    spu_voix_jouees, dma4_done, spu_crete);
+            { extern unsigned long spu_balayages, spu_vol_simples;
+              printf("   volumes : %lu simples, %lu balayages\n", spu_vol_simples, spu_balayages); }
             if (spu_voix_eteint)
                 printf("   dont %lu allumees le SPU dit eteint -- notre modele du"
                        " registre d'etat est incomplet\n", spu_voix_eteint); } }

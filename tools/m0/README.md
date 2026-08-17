@@ -169,14 +169,21 @@ chaque voix puise des échantillons compressés à sa hauteur et son volume. Tou
 est mélangé avec la musique avant d'être poussé vers la carte son, comme le
 matériel le faisait.
 
-Un écart connu : **l'enveloppe est approchée**. Le matériel suit des pentes
-exponentielles tabulées ; celle-ci en garde la forme avec des pentes linéaires
-par morceaux. Un son tenu sonne juste, une attaque très courte moins.
+L'enveloppe suit les quatre phases du matériel avec leurs vraies pentes : un
+décalage donne la période, un pas donne l'amplitude, et en mode exponentiel
+une montée ralentit passé les trois quarts tandis qu'une descente se
+proportionne au niveau atteint — c'est ce qui donne aux extinctions leur
+traînée.
 
-L'état des lieux compte les voix allumées alors que le SPU se dit éteint. Ce
-compteur vaut zéro, et c'est ce zéro qui atteste — il a valu 288 le temps
-qu'on comprenne que la faute n'était pas dans le SPU mais dans la lecture par
-demi-mot.
+Ce qui manque : **la réverbération**, dont on accepte les registres sans les
+honorer.
+
+L'état des lieux affiche deux compteurs qui valent leur pesant d'aveu. Les
+voix allumées alors que le SPU se dit éteint : **zéro**, et c'est ce zéro qui
+atteste — il a valu 288 le temps qu'on comprenne que la faute n'était pas dans
+le SPU mais dans la lecture par demi-mot. Et les volumes en balayage, que nous
+approchons par leur valeur de départ : **zéro** aussi, ce jeu ne s'en sert
+jamais, donc l'approximation ne coûte rien ici.
 
 La réverbération n'est pas implémentée : le jeu en écrit les registres, on les
 accepte et on les ignore.

@@ -1041,3 +1041,24 @@ Deux choses valent d'être retenues. La première est que ce défaut vivait dans
 registre par demi-mot à une adresse impaire en mots. La seconde est que le
 compteur a suffi — mettre un nombre sur un écart plutôt que de le décrire
 donne quelque chose à faire tomber à zéro.
+
+### L'enveloppe, pour de vrai
+
+Restait une approximation déclarée : les pentes de l'enveloppe. Elles suivent
+maintenant le matériel. Le principe est le même dans les quatre phases — un
+décalage donne la période, un pas donne l'amplitude — mais le couple se lit à
+un endroit différent du registre selon la phase, et deux règles s'ajoutent en
+mode exponentiel : une montée ralentit d'un facteur quatre passé les trois
+quarts, une descente se proportionne au niveau atteint. C'est cette seconde
+règle qui donne aux extinctions leur traînée, et une pente linéaire ne peut
+pas l'imiter.
+
+Avant de l'écrire, une mesure a écarté l'autre approximation qui traînait. Les
+volumes du matériel peuvent être une valeur fixe ou un balayage ; nous
+approchions les balayages par leur valeur de départ. Le compteur dit **20 343
+volumes simples et zéro balayage** : ce jeu ne s'en sert jamais. L'approximation
+reste, documentée, mais on sait maintenant qu'elle ne coûte rien ici — et le
+compteur le redira si un autre jeu passe par là.
+
+Compter avant de corriger a évité d'écrire du code exact pour un chemin mort,
+juste après avoir compté pour trouver un chemin faux.

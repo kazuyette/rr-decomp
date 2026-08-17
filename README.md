@@ -3,9 +3,15 @@
 Matching decompilation of **Ridge Racer** (PlayStation 1, Namco, 1994 — Japan release,
 `RIDGERACER` volume, SLPS-00001).
 
-No copyrighted game data is committed here. You need your own legally-owned copy of the game
-to build or verify. The `asm/` listings are disassembly (mnemonics + symbol names), not the
-binary — the same practice as every project on [decomp.dev](https://decomp.dev).
+> **No game is distributed here, and none can be.** There is no download that plays
+> Ridge Racer: the runtime is built from `PSX.EXE` and reads its data from the disc.
+> You need **your own legally-owned copy** (SLPS-00001), dumped from your own disc,
+> to build or verify anything. Without it, what is offered is the code and the notes.
+
+No copyrighted game data is committed here — no disc image, no executable, no textures, no
+audio, and no disassembly. The `asm/` listings are regenerated on your machine from your own
+copy by `make setup`; they are mnemonics and symbol names, not the binary — the same practice
+as every project on [decomp.dev](https://decomp.dev).
 
 ## The disassembly is not in this repository
 

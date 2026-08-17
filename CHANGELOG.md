@@ -2,6 +2,24 @@
 
 ## v0.1.0 — the game is playable
 
+> ### This release contains no game
+>
+> **There is no download that plays Ridge Racer.** No executable is published
+> here, and none could be: the runtime is built from `PSX.EXE`, and it reads
+> its data from the disc — the track, the cars, the textures, the music are all
+> on the disc, none of them in this repository.
+>
+> To build and run it you need **your own legally-owned copy of Ridge Racer**
+> (PlayStation, Japan, SLPS-00001), dumped to an image from your own disc.
+> `tools/m0/README.md` explains how. Without it you can read the code and the
+> notes, and that is the whole of what is offered.
+>
+> Nothing owned by Namco is committed here — no disc image, no executable, no
+> textures, no audio, and no disassembly. `asm/` is regenerated on your machine
+> from your own copy by `make setup`. This is the practice of every project on
+> [decomp.dev](https://decomp.dev), and it is not a formality: it is the reason
+> this work can exist in the open.
+
 The native runtime boots from the disc, draws, sounds, and takes a controller.
 This is not a milestone of the decompilation, which stands at 5.6 % of
 instructions; it is a milestone of the second track — the static

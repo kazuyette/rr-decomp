@@ -25,3 +25,10 @@ dist/
 # symbol_addrs.txt and reloc_addrs.txt are tracked and asm/ is not.
 asm/
 __pycache__/
+
+# Sorties de splat et de git qui se regenerent : psx.exe.d est ecrit par
+# `make setup`, et un bundle est un depot entier -- rien de tout cela ne
+# se versionne dans le depot qu il decrit.
+*.d
+*.bundle
+psx.exe.ld
